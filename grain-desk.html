@@ -1,0 +1,801 @@
+<title>Grain Marketing Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: app bar + farm header + tabbed work area; summary strip first, detail tables below */
+:root{
+  --bg:#F1F4EE; --surface:#FFFFFF; --soft:#E4EAE0; --line:#D3DBCF;
+  --ink:#17201A; --muted:#5A675E;
+  --accent:#1D6A4D; --accent-ink:#FFFFFF; --grain:#B5862B;
+  --good:#2C7A4C; --warn:#A86A12; --bad:#AE3D2B;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111612; --surface:#192019; --soft:#232C25; --line:#2E3830;
+  --ink:#E4EBE5; --muted:#99A69C;
+  --accent:#5FBC90; --accent-ink:#0C1810; --grain:#D9AF57;
+  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111612; --surface:#192019; --soft:#232C25; --line:#2E3830;
+  --ink:#E4EBE5; --muted:#99A69C;
+  --accent:#5FBC90; --accent-ink:#0C1810; --grain:#D9AF57;
+  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+h1,h2,h3{font-family:var(--f-display);font-stretch:88%;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:1.75rem;font-weight:780}
+h2{font-size:1.15rem;font-weight:720}
+h3{font-size:.95rem;font-weight:700}
+.num,td.n,.mono{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+
+.bar{display:flex;align-items:center;gap:12px;padding-block:14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-stretch:112%;font-weight:800;font-size:.95rem;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.brand svg{color:var(--grain)}
+.bar .sp{flex:1}
+.who{font-size:.85rem;color:var(--muted)}
+
+.banner{margin-top:14px;padding:10px 14px;border-radius:var(--r);background:var(--soft);font-size:.88rem}
+.farmhead{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-block:22px 6px}
+.farmhead .sp{flex:1}
+.crumb{font-size:.85rem;margin-bottom:4px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;margin-top:10px}
+.tab{appearance:none;border:0;background:none;font:600 .92rem var(--f-body);color:var(--muted);padding:10px 14px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+button,.btn{font:600 .88rem var(--f-body);border-radius:var(--r);padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.link{border:0;background:none;padding:0;color:var(--accent);font-weight:600}
+button.danger{color:var(--bad)}
+button.small{padding:4px 10px;font-size:.8rem}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;width:100%}
+
+section{margin-top:26px}
+.sechead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.sechead .sp{flex:1}
+
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:20px}
+.stat{background:var(--surface);padding:14px 16px;min-width:0}
+.stat .v{font-family:var(--f-data);font-size:1.45rem;font-weight:500;margin-top:2px;font-variant-numeric:tabular-nums}
+.stat .s{font-size:.8rem;color:var(--muted)}
+@media (max-width:720px){.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+th.n,td.n{text-align:right;white-space:nowrap}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--soft)}
+.empty{padding:28px 18px;text-align:center;color:var(--muted)}
+.empty b{color:var(--ink);display:block;font-family:var(--f-display);font-size:1.05rem;margin-bottom:4px}
+
+.pill{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap;border:1px solid currentColor}
+.pill.good{color:var(--good)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.neutral{color:var(--muted)}
+.pill.solid{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* marketing position bars */
+.pos{padding:6px 18px 14px}
+.posrow{display:grid;grid-template-columns:140px minmax(0,1fr) 210px;gap:16px;align-items:center;padding-block:14px;border-bottom:1px solid var(--line)}
+.posrow:last-child{border-bottom:0}
+.posrow .crop{font-family:var(--f-display);font-weight:720;font-size:1.02rem}
+.track{position:relative;height:22px;background:var(--soft);border-radius:3px;display:flex;overflow:visible}
+.seg{height:100%}
+.seg.sold{background:var(--accent);border-radius:3px 0 0 3px}
+.seg.hedged{background:var(--grain)}
+.ins{position:absolute;top:-5px;bottom:-5px;width:0;border-left:2px dashed var(--ink)}
+.ins span{position:absolute;top:-18px;left:-1px;transform:translateX(-50%);font-size:.66rem;white-space:nowrap;color:var(--muted)}
+.posfacts{font-size:.8rem;display:grid;grid-template-columns:auto auto;gap:2px 10px}
+.posfacts dt{color:var(--muted)} .posfacts dd{margin:0;text-align:right;font-family:var(--f-data)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.78rem;color:var(--muted);padding:12px 18px 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+@media (max-width:760px){.posrow{grid-template-columns:minmax(0,1fr)}.posrow .track{margin-top:14px}}
+
+.alerts{list-style:none;margin:0;padding:0}
+.alerts li{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+.alerts li:last-child{border-bottom:0}
+.alerts .dot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:7px}
+.dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)} .dot.neutral{background:var(--muted)}
+
+.binbar{height:8px;background:var(--soft);border-radius:4px;overflow:hidden;min-width:90px}
+.binbar div{height:100%;background:var(--accent)}
+.binbar div.over{background:var(--bad)}
+
+.cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px}
+@media (max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
+
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;background:var(--surface);color:var(--ink);width:min(560px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(10,20,14,.45)}
+dialog form{padding:20px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-top:14px}
+.fgrid .full{grid-column:1/-1}
+.fgrid label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:600;color:var(--muted)}
+.fgrid .hint{font-weight:400;font-size:.74rem}
+@media (max-width:480px){.fgrid{grid-template-columns:1fr}}
+.dlgfoot{display:flex;gap:10px;margin-top:18px;align-items:center}
+.dlgfoot .sp{flex:1}
+
+/* sales & contracts */
+.strip5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:900px){.strip5{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.strip5{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
+.filters input{flex:2 1 220px;width:auto}
+.filters select{flex:1 1 140px;width:auto}
+.sortbtn{border:0;background:none;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer}
+.sortbtn:hover{color:var(--ink)}
+.seg-ctl{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg-ctl button{border:0;border-radius:0;padding:6px 12px;font-size:.82rem;background:var(--surface);color:var(--muted)}
+.seg-ctl button+button{border-left:1px solid var(--line)}
+.seg-ctl button[aria-pressed="true"]{background:var(--soft);color:var(--ink)}
+.prog{height:8px;background:var(--soft);border-radius:4px;overflow:hidden;margin-top:6px}
+.prog div{height:100%;background:var(--accent)}
+.prog.sm{height:4px;width:70px;margin-left:auto}
+.progtext{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-top:4px}
+.cards{display:none;list-style:none;margin:0;padding:0}
+.cards li{padding:12px 14px;border-bottom:1px solid var(--line);display:grid;gap:4px;cursor:pointer}
+.cards li:last-child{border-bottom:0}
+.cl{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:.88rem}
+@media (max-width:640px){.desk{display:none}.cards{display:block}}
+li.click{cursor:pointer} li.click:hover{background:var(--soft)}
+[data-sale]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.callout{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border-radius:var(--r);background:var(--soft);font-size:.86rem}
+.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 16px;margin:14px 0 0}
+.facts dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.facts dd{margin:2px 0 0;font-family:var(--f-data);font-variant-numeric:tabular-nums;font-size:.9rem}
+.dsub{margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
+table.mini{font-size:.82rem;margin-top:10px} table.mini td,table.mini th{padding:6px 8px}
+.hist{list-style:none;margin:8px 0 0;padding:0;font-size:.85rem;display:grid;gap:4px}
+.hist li{display:flex;gap:12px} .hist .mono{color:var(--muted);min-width:96px}
+.fgrid label.check{flex-direction:column;color:var(--ink);font-weight:600;font-size:.86rem}
+.fgrid label.check input{width:auto;margin-right:6px;vertical-align:-2px}
+textarea{resize:vertical;font-family:var(--f-data);font-size:.82rem;margin-top:10px}
+dialog{max-height:calc(100vh - 32px);overflow:auto}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:var(--r);font-size:.86rem;z-index:20;max-width:calc(100vw - 32px)}
+.toast.err{background:var(--bad);color:#fff}
+.onboard{max-width:460px;margin:48px auto 0}
+.onboard p{color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.seg{transition:width .4s ease}}
+</style>
+
+<div class="wrap">
+  <div class="bar">
+    <div class="brand"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22V8"/><path d="M12 8c0-3 2-5 4-6 0 3-1 5-4 6zM12 8C12 5 10 3 8 2c0 3 1 5 4 6zM12 13c0-3 2-5 4-6 0 3-1 5-4 6zM12 13c0-3-2-5-4-6 0 3 1 5 4 6zM12 18c0-3 2-5 4-6 0 3-1 5-4 6zM12 18c0-3-2-5-4-6 0 3 1 5 4 6z"/></svg>Grain Marketing Desk</div>
+    <div class="sp"></div>
+    <div class="who" id="who"></div>
+  </div>
+  <div id="app"><div class="empty" style="margin-top:40px"><b>Loading your farm records…</b>Connecting to saved data.</div></div>
+</div>
+<dialog id="dlg"><form id="dlgform" method="dialog"></form></dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const CONTRACT_TYPES=['Cash sale','Forward contract','HTA','Basis contract'];
+const HEDGE_TYPES=['Futures hedge','Put option'];
+const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
+const DELIVERABLE=['Forward contract','HTA','Basis contract'];
+const INS_TYPES=['RP','RP-HPE','YP','None'];
+const CROPS=['Corn','Soybeans','Wheat','Sorghum','Barley','Oats','Canola','Sunflowers'];
+const TODAY=new Date().toISOString().slice(0,10);
+const THIS_YEAR=new Date().getFullYear();
+
+const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
+  flt:{q:'',crop:'',type:'',buyer:'',status:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>(v===''||v==null||isNaN(+v))?null:+v;
+const n0=v=>num(v)??0;
+const bu=v=>Math.round(v).toLocaleString('en-US');
+const usd=(v,d=2)=>v==null?'—':(v<0?'−$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct=v=>v==null||!isFinite(v)?'—':Math.round(v*100)+'%';
+const uid=()=>Math.random().toString(36).slice(2,10);
+const key=s=>String(s||'').trim().toLowerCase();
+const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
+const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
+const clone=o=>JSON.parse(JSON.stringify(o));
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],updatedAt:d.updatedAt||null}}
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
+
+/* ---------- calculations ---------- */
+function flatPrice(s){const p=num(s.price),b=num(s.basis);
+  if(s.type==='Cash sale'||s.type==='Forward contract')return p;
+  if(s.type==='HTA'||s.type==='Basis contract')return(p!=null&&b!=null)?p+b:null;
+  return null}
+const loadsBu=s=>(s.loads||[]).reduce((a,l)=>a+n0(l.netBu),0);
+function delivered(s){
+  if(s.type==='Cash sale')return n0(s.bu);
+  if(!DELIVERABLE.includes(s.type))return 0;
+  return s.trackLoads?loadsBu(s):(s.status==='Delivered'?n0(s.bu):0)}
+const remaining=s=>DELIVERABLE.includes(s.type)?Math.max(0,n0(s.bu)-delivered(s)):0;
+function openLeg(s){
+  if(s.type==='HTA'&&num(s.basis)==null)return'basis';
+  if(s.type==='Basis contract'&&num(s.price)==null)return'futures';
+  return null}
+const legLabel=(s,leg)=>leg==='basis'?'Basis':s.type==='Put option'?'Strike':(s.type==='Cash sale'||s.type==='Forward contract')?'Flat price':'Futures';
+const fmtBasis=v=>num(v)==null?'—':(num(v)<0?'−':'+')+Math.abs(num(v)).toFixed(2);
+function position(f,year){
+  const rows={};
+  f.crops.filter(c=>+c.year===+year).forEach(c=>{rows[key(c.crop)]={plan:c,crop:c.crop,sales:[]}});
+  f.sales.filter(s=>+s.year===+year).forEach(s=>{const k=key(s.crop);(rows[k]||(rows[k]={plan:null,crop:s.crop,sales:[]})).sales.push(s)});
+  return Object.values(rows).map(r=>{
+    const p=r.plan;
+    const expected=p?n0(p.acres)*n0(p.aph):0;
+    const sold=r.sales.filter(s=>CONTRACT_TYPES.includes(s.type)).reduce((a,s)=>a+n0(s.bu),0);
+    const hedged=r.sales.filter(s=>HEDGE_TYPES.includes(s.type)).reduce((a,s)=>a+n0(s.bu),0);
+    const priced=r.sales.filter(s=>flatPrice(s)!=null);
+    const pricedBu=priced.reduce((a,s)=>a+n0(s.bu),0);
+    const avg=pricedBu?priced.reduce((a,s)=>a+n0(s.bu)*flatPrice(s),0)/pricedBu:null;
+    const be=p&&n0(p.aph)?n0(p.costPerAcre)/n0(p.aph):null;
+    const insured=p&&p.insType&&p.insType!=='None'?expected*n0(p.coverage)/100:0;
+    const revGuar=p?insured*n0(p.projPrice):0;
+    return{crop:r.crop,plan:p,expected,sold,hedged,pricedBu,avg,be,insured,revGuar,
+      unpriced:Math.max(0,expected-sold-hedged)}
+  }).sort((a,b)=>b.expected-a.expected)}
+function deliveries(f){
+  return f.sales.filter(s=>DELIVERABLE.includes(s.type)&&s.deliveryEnd).map(s=>{
+    let st;if(remaining(s)<=0)st={t:'Delivered',c:'neutral'};
+    else{const d=daysUntil(s.deliveryEnd);st=d<0?{t:'Overdue',c:'bad'}:d<=14?{t:'Due in '+d+'d',c:'warn'}:{t:'Open',c:'good'}}
+    return{...s,st}}).sort((a,b)=>(a.deliveryEnd||'').localeCompare(b.deliveryEnd||''))}
+function storage(f){
+  const by={};
+  f.bins.forEach(b=>{if(!b.crop)return;const k=key(b.crop);(by[k]||(by[k]={crop:b.crop,stored:0,open:0})).stored+=n0(b.bu)});
+  f.sales.filter(s=>remaining(s)>0).forEach(s=>{const k=key(s.crop);(by[k]||(by[k]={crop:s.crop,stored:0,open:0})).open+=remaining(s)});
+  const cap=f.bins.reduce((a,b)=>a+n0(b.capacity),0),used=f.bins.reduce((a,b)=>a+n0(b.bu),0);
+  return{rows:Object.values(by).map(r=>({...r,free:Math.max(0,r.stored-r.open),short:Math.max(0,r.open-r.stored)})),cap,used}}
+function alerts(f,year){
+  const out=[];
+  position(f,year).forEach(r=>{
+    if(!r.plan)out.push({c:'neutral',t:`${r.crop}: no ${year} crop plan yet. Add acres and APH yield to see percent sold and break-even.`});
+    if(r.insured>0&&r.sold>r.insured)out.push({c:'bad',t:`${r.crop}: ${bu(r.sold)} bu contracted is above the ${bu(r.insured)} bu insured guarantee. A short crop could leave contracts unfilled.`});
+    if(r.plan&&(!r.plan.insType||r.plan.insType==='None')&&r.sold>0)out.push({c:'warn',t:`${r.crop}: bushels are contracted but no crop insurance is recorded.`});
+    if(r.avg!=null&&r.be!=null&&r.avg<r.be)out.push({c:'warn',t:`${r.crop}: average priced sale ${usd(r.avg)} is ${usd(r.be-r.avg)}/bu below break-even (${usd(r.be)}).`});
+  });
+  deliveries(f).forEach(d=>{if(d.st.c==='bad')out.push({c:'bad',t:`${d.crop} ${d.type.toLowerCase()} to ${d.buyer||'buyer'}: ${bu(remaining(d))} bu still undelivered; window closed ${fmtDate(d.deliveryEnd)}.`});
+    else if(d.st.c==='warn')out.push({c:'warn',t:`${d.crop} delivery to ${d.buyer||'buyer'} (${bu(remaining(d))} bu left) closes ${fmtDate(d.deliveryEnd)}.`})});
+  f.sales.filter(s=>+s.year===+year&&openLeg(s)).forEach(s=>out.push({c:'neutral',t:`${s.crop} ${s.type.toLowerCase()} with ${s.buyer||'buyer'} (${bu(n0(s.bu))} bu): ${openLeg(s)} not set yet.`}));
+  f.bins.forEach(b=>{if(n0(b.bu)>n0(b.capacity)&&n0(b.capacity)>0)out.push({c:'warn',t:`${b.name}: ${bu(n0(b.bu))} bu recorded is over its ${bu(n0(b.capacity))} bu capacity.`})});
+  storage(f).rows.forEach(r=>{if(r.short>0&&r.stored>0)out.push({c:'warn',t:`${r.crop}: open contracts need ${bu(r.short)} bu more than is in storage.`})});
+  const rank={bad:0,warn:1,neutral:2};return out.sort((a,b)=>rank[a.c]-rank[b.c])}
+function years(f){const s=new Set([THIS_YEAR]);f.crops.forEach(c=>s.add(+c.year));f.sales.forEach(x=>s.add(+x.year));return[...s].filter(Boolean).sort((a,b)=>b-a)}
+
+/* ---------- saving ---------- */
+let queue=Promise.resolve();
+function persist(id){
+  const f=S.farms[id];f.updatedAt=new Date().toISOString();render();
+  if(S.mode!=='live'){toast('Preview only — not saved');return}
+  const data=clone(f);
+  queue=queue.then(()=>S.db.doc('farms/'+id).set(data)).then(()=>toast('Saved')).catch(e=>{
+    toast(e&&e.code==='invalid_argument'?"You don't have permission to save. Ask your consultant to share this app with you as an Editor.":e&&e.code==='quota_exceeded'?'Storage is full. Remove old records and try again.':"Couldn't save. Check your connection and try again.",true)})}
+
+/* ---------- forms ---------- */
+const FORMS={
+  crop:{title:'Crop plan',fields:[
+    {k:'year',label:'Crop year',type:'number',req:1},
+    {k:'crop',label:'Crop',type:'text',list:'crops',req:1},
+    {k:'acres',label:'Planted acres',type:'number',step:'any',req:1},
+    {k:'aph',label:'APH yield (bu/ac)',type:'number',step:'any',req:1},
+    {k:'costPerAcre',label:'Total cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, overhead'},
+    {k:'insType',label:'Insurance plan',type:'select',options:INS_TYPES},
+    {k:'coverage',label:'Coverage level (%)',type:'number',step:'5',hint:'e.g. 80',show:v=>v.insType!=='None'},
+    {k:'projPrice',label:'Projected price ($/bu)',type:'number',step:'any',hint:'RMA projected price',show:v=>v.insType!=='None'},
+  ],blank:()=>({year:S.year,crop:'',insType:'RP',coverage:80})},
+  sale:{title:'Sale or contract',fields:[
+    {k:'type',label:'Type',type:'select',options:SALE_TYPES},
+    {k:'date',label:'Date made',type:'date',req:1},
+    {k:'crop',label:'Crop',type:'text',list:'crops',req:1},
+    {k:'year',label:'Crop year',type:'number',req:1},
+    {k:'bu',label:'Bushels',type:'number',step:'any',req:1},
+    {k:'price',label:v=>({'Cash sale':'Flat price ($/bu)','Forward contract':'Flat price ($/bu)','HTA':'Futures price ($/bu)','Basis contract':'Futures price, once set','Futures hedge':'Futures sell price','Put option':'Strike price'}[v.type]),type:'number',step:'any'},
+    {k:'basis',label:v=>v.type==='HTA'?'Basis, once set ($/bu)':'Basis ($/bu)',type:'number',step:'any',hint:'Negative under futures, e.g. -0.30',show:v=>v.type==='HTA'||v.type==='Basis contract'},
+    {k:'premium',label:'Premium paid ($/bu)',type:'number',step:'any',show:v=>v.type==='Put option'},
+    {k:'futuresMonth',label:'Futures month',type:'text',list:'months',hint:'e.g. Dec 26',show:v=>v.type!=='Cash sale'},
+    {k:'buyer',label:v=>HEDGE_TYPES.includes(v.type)?'Broker':'Buyer / elevator',type:'text',list:'buyers'},
+    {k:'contractNo',label:v=>HEDGE_TYPES.includes(v.type)?'Account / ticket #':'Contract #',type:'text'},
+    {k:'location',label:'Delivery location',type:'text',show:v=>DELIVERABLE.includes(v.type)},
+    {k:'deliveryStart',label:'Delivery opens',type:'date',show:v=>DELIVERABLE.includes(v.type)},
+    {k:'deliveryEnd',label:'Delivery closes',type:'date',show:v=>DELIVERABLE.includes(v.type)},
+    {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
+    {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
+    {k:'notes',label:'Notes',type:'text',full:1},
+  ],blank:()=>({type:'Forward contract',date:TODAY,year:S.year,status:'Open',trackLoads:false})},
+  price:{title:'Pricing',fields:[
+    {k:'date',label:'Date priced',type:'date',req:1},
+    {k:'value',label:v=>v.leg==='basis'?'Basis ($/bu)':'Futures price ($/bu)',type:'number',step:'any',req:1,hint:v=>v.leg==='basis'?'Negative under futures, e.g. -0.30':''},
+    {k:'month',label:'Futures month',type:'text',list:'months',hint:'e.g. Dec 26'},
+    {k:'note',label:'Note',type:'text',full:1},
+  ]},
+  load:{title:'Load',fields:[
+    {k:'date',label:'Date delivered',type:'date',req:1},
+    {k:'ticket',label:'Scale ticket #',type:'text'},
+    {k:'netBu',label:'Net bushels',type:'number',step:'any',req:1,hint:'After shrink and dockage'},
+    {k:'moisture',label:'Moisture (%)',type:'number',step:'0.1'},
+    {k:'discount',label:'Discounts & fees ($ total)',type:'number',step:'any',hint:'Drying, shrink, quality, storage'},
+    {k:'notes',label:'Notes',type:'text'},
+  ]},
+  bin:{title:'Storage bin',fields:[
+    {k:'name',label:'Bin or site name',type:'text',req:1},
+    {k:'location',label:'Location',type:'text'},
+    {k:'capacity',label:'Capacity (bu)',type:'number',step:'any',req:1},
+    {k:'crop',label:'Crop in bin',type:'text',list:'crops',hint:'Leave blank if empty'},
+    {k:'bu',label:'Bushels in bin',type:'number',step:'any'},
+    {k:'moisture',label:'Moisture (%)',type:'number',step:'0.1'},
+    {k:'checked',label:'Last checked',type:'date'},
+  ],blank:()=>({checked:TODAY})},
+};
+const LISTS={sale:'sales',crop:'crops',bin:'bins'};
+let dlgCtx=null,detail=null;
+function listSave(kind,id){return rec=>{const f=S.farms[S.current],list=LISTS[kind];
+  f[list]=id?f[list].map(r=>r.id===id?rec:r):[...f[list],rec];if(rec.year)S.year=+rec.year;persist(S.current)}}
+function saleSave(id){return rec=>{
+  rec.loads=rec.loads||[];rec.pricing=rec.pricing||[];
+  if(!id){if(num(rec.price)!=null)rec.pricing.push({id:uid(),date:rec.date,leg:legLabel(rec,'price'),value:rec.price,month:rec.futuresMonth||''});
+    if(num(rec.basis)!=null)rec.pricing.push({id:uid(),date:rec.date,leg:'Basis',value:rec.basis})}
+  if(rec.trackLoads&&DELIVERABLE.includes(rec.type))rec.status=remaining(rec)<=0?'Delivered':'Open';
+  listSave('sale',id)(rec)}}
+function openForm(kind,id,opts={}){
+  const f=S.farms[S.current];const spec=FORMS[kind];
+  const base=id&&LISTS[kind]?f[LISTS[kind]].find(r=>r.id===id):null;
+  detail=opts.back?detail:null;
+  dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,
+    onSave:opts.onSave||(kind==='sale'?saleSave(id):listSave(kind,id)),
+    onDelete:id&&LISTS[kind]?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null};
+  drawForm();if(!$('#dlg').open)$('#dlg').showModal()}
+function drawForm(){
+  const {kind,id,vals}=dlgCtx;const spec=FORMS[kind];
+  const val=(x)=>typeof x==='function'?x(vals):x;
+  const buyers=[...new Set((S.farms[S.current]?.sales||[]).map(s=>s.buyer).filter(Boolean))];
+  const months=['Mar','May','Jul','Sep','Dec','Jan','Nov','Aug'].flatMap(m=>[m+' '+String(S.year).slice(2),m+' '+String(S.year+1).slice(2)]);
+  $('#dlgform').innerHTML=`<h2>${esc(dlgCtx.title||(id?'Edit ':'Add ')+spec.title.toLowerCase())}</h2>
+  <div class="fgrid">${spec.fields.filter(f=>!f.show||f.show(vals)).map(f=>f.type==='check'
+    ?`<label class="full check"><span><input id="f_${f.k}" name="${f.k}" type="checkbox" ${vals[f.k]?'checked':''}> ${esc(val(f.label))}</span>${f.hint?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`
+    :`<label class="${f.full?'full':''}">${esc(val(f.label))}${f.req?' *':''}
+    ${f.type==='select'?`<select id="f_${f.k}" name="${f.k}">${f.options.map(o=>`<option ${o===vals[f.k]?'selected':''}>${esc(o)}</option>`).join('')}</select>`
+    :`<input id="f_${f.k}" name="${f.k}" type="${f.type}" ${f.step?`step="${f.step}"`:''} ${f.list?`list="${f.list}"`:''} ${f.req?'required':''} value="${esc(vals[f.k]??'')}">`}
+    ${val(f.hint)?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`).join('')}</div>
+  <datalist id="crops">${CROPS.map(c=>`<option value="${c}">`).join('')}</datalist>
+  <datalist id="buyers">${buyers.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+  <datalist id="months">${months.map(c=>`<option value="${c}">`).join('')}</datalist>
+  <div class="dlgfoot">${dlgCtx.onDelete?`<button type="button" class="danger" data-act="del">${dlgCtx.confirmDel?'Confirm delete':'Delete'}</button>`:''}<div class="sp"></div>
+  <button type="button" data-act="cancel">Cancel</button><button class="primary" type="submit">Save</button></div>`}
+$('#dlgform').addEventListener('input',e=>{
+  const t=e.target;if(!t.name||!dlgCtx)return;dlgCtx.vals[t.name]=t.type==='checkbox'?t.checked:t.value;
+  if(t.tagName==='SELECT'||t.type==='checkbox'){drawForm();const el=$('#f_'+t.name);el&&el.focus()}});
+$('#dlgform').addEventListener('click',e=>{
+  const a=e.target.closest('[data-act]');if(!a)return;const act=a.dataset.act;
+  if(dlgCtx){
+    if(act==='cancel'){dlgCtx.back?dlgCtx.back():$('#dlg').close()}
+    if(act==='del'){if(!dlgCtx.confirmDel){dlgCtx.confirmDel=true;drawForm();return}
+      const del=dlgCtx.onDelete;$('#dlg').close();del()}
+    return}
+  if(!detail)return;
+  const f=S.farms[S.current],s=f.sales.find(x=>x.id===detail.sid);if(!s)return;
+  const back=()=>showSale(s.id),sid=s.id;
+  const live=fn=>rec=>{const cur=S.farms[S.current]&&S.farms[S.current].sales.find(x=>x.id===sid);if(!cur){toast('That contract was removed.',true);return}fn(cur,rec);persist(S.current)};
+  if(act==='close')$('#dlg').close();
+  if(act==='sale-edit')openForm('sale',s.id,{back});
+  if(act==='sale-del'){if(!detail.confirmDel){detail.confirmDel=true;drawSale();return}
+    f.sales=f.sales.filter(x=>x.id!==s.id);$('#dlg').close();persist(S.current)}
+  if(act==='sale-price'){const leg=a.dataset.leg;
+    openForm('price',null,{title:`Set ${leg} · ${s.crop} ${s.type.toLowerCase()}`,vals:{leg,date:TODAY,month:s.futuresMonth||''},back,
+      onSave:live((s,rec)=>{if(leg==='basis')s.basis=rec.value;else s.price=rec.value;if(rec.month)s.futuresMonth=rec.month;
+        s.pricing=[...(s.pricing||[]),{id:rec.id,date:rec.date,leg:leg==='basis'?'Basis':'Futures',value:rec.value,month:rec.month,note:rec.note}]})})}
+  if(act==='sale-load')openForm('load',null,{title:`Add load · ${s.crop} to ${s.buyer||'buyer'}`,vals:{date:TODAY},back,
+    onSave:live((s,rec)=>{s.loads=[...(s.loads||[]),rec];s.status=remaining(s)<=0?'Delivered':'Open'})});
+  if(act==='load-del'){const id=a.dataset.id;if(detail.confirmLoad!==id){detail.confirmLoad=id;drawSale();return}
+    s.loads=s.loads.filter(l=>l.id!==id);s.status=remaining(s)<=0?'Delivered':'Open';detail.confirmLoad=null;persist(S.current);drawSale()}
+  if(act==='sale-toggle'){s.status=s.status==='Delivered'?'Open':'Delivered';persist(S.current);drawSale()}
+  if(act==='sale-track'){s.trackLoads=true;s.loads=s.loads||[];s.status=remaining(s)<=0?'Delivered':'Open';persist(S.current);drawSale()}
+});
+$('#dlgform').addEventListener('submit',e=>{
+  e.preventDefault();if(!dlgCtx)return;const{kind,vals}=dlgCtx;const spec=FORMS[kind];
+  const rec=dlgCtx.base?clone(dlgCtx.base):{id:uid()};
+  spec.fields.forEach(f=>{if(f.show&&!f.show(vals)){delete rec[f.k];return}
+    let v=vals[f.k];if(f.type==='number')v=num(v);else if(f.type==='check')v=!!v;else v=(v??'').toString().trim();rec[f.k]=v});
+  if(typeof rec.crop==='string'&&rec.crop)rec.crop=rec.crop.charAt(0).toUpperCase()+rec.crop.slice(1);
+  const{onSave,back}=dlgCtx;dlgCtx=null;onSave(rec);back?back():$('#dlg').close()});
+
+/* ---------- contract detail ---------- */
+function showSale(sid){dlgCtx=null;detail={sid,confirmLoad:null,confirmDel:false};drawSale();if(!$('#dlg').open)$('#dlg').showModal()}
+function drawSale(){
+  const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===detail.sid);if(!s){$('#dlg').close();return}
+  const fp=flatPrice(s),leg=openLeg(s),isDel=DELIVERABLE.includes(s.type),isHedge=HEDGE_TYPES.includes(s.type);
+  const dv=delivered(s),rem=remaining(s),st=isDel&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
+  const loads=(s.loads||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const disc=loads.reduce((a,l)=>a+n0(l.discount),0),gross=fp!=null?loadsBu(s)*fp:null;
+  const fact=(k,v)=>`<div><dt>${k}</dt><dd>${v}</dd></div>`;
+  $('#dlgform').innerHTML=`<div class="label">${esc(s.year)} crop · ${esc(s.type)}${s.contractNo?' · #'+esc(s.contractNo):''}</div>
+  <h2 style="margin-top:2px">${bu(n0(s.bu))} bu ${esc(s.crop)} ${isHedge?'via':'to'} ${esc(s.buyer||'—')}</h2>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${st?`<span class="pill ${st.c}">${st.t}</span>`:''}${leg?`<span class="pill warn">${leg==='basis'?'Basis':'Futures'} not set</span>`:''}${isHedge?'<span class="pill warn">Hedge, not a sale</span>':''}${fp!=null?'<span class="pill good">Fully priced</span>':''}</div>
+  ${leg?`<div class="callout"><span>${leg==='basis'?'The futures price is locked; the basis is still open.':'The basis is locked; the futures price is still open.'}</span><button type="button" class="primary small" data-act="sale-price" data-leg="${leg}">Set ${leg}</button></div>`:''}
+  <dl class="facts">
+    ${fact(legLabel(s,'price'),usd(num(s.price)))}
+    ${s.type==='HTA'||s.type==='Basis contract'?fact('Basis',fmtBasis(s.basis)):''}
+    ${!isHedge?fact('Flat price',`<b>${usd(fp)}</b>`):''}
+    ${!isHedge?fact('Contract value',fp!=null?usd(fp*n0(s.bu),0):'—'):''}
+    ${s.type==='Put option'?fact('Premium',usd(num(s.premium))):''}
+    ${s.futuresMonth?fact('Futures month',esc(s.futuresMonth)):''}
+    ${fact('Date made',fmtDate(s.date))}
+    ${isDel?fact('Delivery window',`${fmtDate(s.deliveryStart)} – ${fmtDate(s.deliveryEnd)}`):''}
+    ${s.location?fact('Location',esc(s.location)):''}
+  </dl>
+  ${s.notes?`<p class="muted" style="font-size:.85rem;margin:10px 0 0">${esc(s.notes)}</p>`:''}
+  ${isDel?`<h3 class="dsub">Delivery</h3>
+    <div class="prog"><div style="width:${n0(s.bu)?Math.min(100,dv/n0(s.bu)*100):0}%"></div></div>
+    <div class="progtext mono"><span>${bu(dv)} delivered</span><span>${bu(rem)} left of ${bu(n0(s.bu))}</span></div>
+    ${s.trackLoads?(loads.length?`<div class="tablewrap"><table class="mini"><thead><tr><th>Date</th><th>Ticket</th><th class="n">Net bu</th><th class="n">Moist.</th><th class="n">Discounts</th><th></th></tr></thead><tbody>
+      ${loads.map(l=>`<tr><td>${fmtDate(l.date)}</td><td>${esc(l.ticket||'—')}</td><td class="n">${bu(n0(l.netBu))}</td><td class="n">${num(l.moisture)==null?'—':n0(l.moisture).toFixed(1)+'%'}</td><td class="n">${num(l.discount)?usd(n0(l.discount)):'—'}</td>
+        <td class="n"><button type="button" class="small danger" data-act="load-del" data-id="${l.id}">${detail.confirmLoad===l.id?'Confirm':'Remove'}</button></td></tr>`).join('')}</tbody></table></div>
+      <dl class="facts" style="margin-top:10px">${fact('Gross for delivered',gross!=null?usd(gross):'Set price first')}${fact('Discounts & fees',disc?'−'+usd(disc):'—')}${fact('Est. settlement',gross!=null?`<b>${usd(gross-disc)}</b>`:'—')}</dl>`
+      :`<p class="muted" style="font-size:.85rem">No loads logged yet.</p>`)+`<div style="margin-top:10px"><button type="button" class="small" data-act="sale-load">Add load</button></div>`
+    :`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px"><button type="button" class="small" data-act="sale-toggle">${s.status==='Delivered'?'Reopen contract':'Mark delivered'}</button>
+      <button type="button" class="link" data-act="sale-track" style="font-size:.85rem">Track loads instead</button></div>`}`:''}
+  ${(s.pricing||[]).length?`<h3 class="dsub">Pricing history</h3><ul class="hist">${s.pricing.map(p=>`<li><span class="mono">${fmtDate(p.date)}</span><span>${esc(p.leg)} ${p.leg==='Basis'?fmtBasis(p.value):usd(num(p.value))}${p.month?' · '+esc(p.month):''}${p.note?` <span class="muted">· ${esc(p.note)}</span>`:''}</span></li>`).join('')}</ul>`:''}
+  <div class="dlgfoot"><button type="button" class="danger" data-act="sale-del">${detail.confirmDel?'Confirm delete':'Delete'}</button><div class="sp"></div>
+    <button type="button" data-act="close">Close</button><button type="button" class="primary" data-act="sale-edit">Edit</button></div>`}
+
+/* ---------- rendering ---------- */
+function render(){
+  const app=$('#app');
+  if(S.mode==='loading')return;
+  if(S.mode==='noid'){app.innerHTML=`<div class="onboard"><h1>Sign in to keep your records</h1><p>Your farm records are saved to your claude.ai account. Sign in, then reopen this link.</p></div>`;return}
+  const note=S.note?`<div class="banner">${esc(S.note)}</div>`:'';
+  if(S.owner&&!S.current){app.innerHTML=note+renderClients();return}
+  const f=S.farms[S.current];
+  if(!f){app.innerHTML=note+renderOnboard();return}
+  app.innerHTML=note+renderFarm(f)}
+
+function renderOnboard(){return`<form class="onboard" id="onboard"><h1>Set up your farm</h1>
+  <p>Track sales, contracts, storage, break-even and crop insurance in one place. Your consultant can see your records to help plan your marketing.</p>
+  <div class="fgrid"><label class="full">Farm or operation name<input id="ob_name" required placeholder="e.g. Miller Family Farms"></label></div>
+  <div class="dlgfoot"><button class="primary" type="submit">Start tracking</button></div></form>`}
+
+function renderClients(){
+  const ids=Object.keys(S.farms).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
+  const rows=ids.map(id=>{const f=S.farms[id];const p=position(f,S.year);
+    const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0);
+    const al=alerts(f,S.year);const bad=al.filter(a=>a.c==='bad').length,warn=al.filter(a=>a.c==='warn').length;
+    const next=deliveries(f).find(d=>d.st.t!=='Delivered');
+    return`<tr class="click" data-open="${esc(id)}"><td><b>${esc(f.name)}</b>${f.sample?' <span class="pill neutral">Sample</span>':''}<div class="muted" style="font-size:.78rem">${esc(p.map(r=>r.crop).join(', ')||'No crops yet')}</div></td>
+      <td class="n">${exp?bu(exp):'—'}</td><td class="n">${exp?pct(sold/exp):'—'}</td><td class="n">${exp?pct((sold+hed)/exp):'—'}</td>
+      <td>${next?`${fmtDate(next.deliveryEnd)} <span class="pill ${next.st.c}">${next.st.t}</span>`:'<span class="muted">None open</span>'}</td>
+      <td>${bad?`<span class="pill bad">${bad} critical</span> `:''}${warn?`<span class="pill warn">${warn} watch</span>`:''}${!bad&&!warn?'<span class="pill good">Clear</span>':''}</td>
+      <td class="muted" style="font-size:.8rem;white-space:nowrap">${f.updatedAt?fmtDate(f.updatedAt.slice(0,10)):'—'}</td></tr>`}).join('');
+  const yrs=[...new Set([THIS_YEAR,THIS_YEAR+1,THIS_YEAR-1,...ids.flatMap(id=>years(S.farms[id]))])].sort((a,b)=>b-a);
+  return`<div class="farmhead"><div><div class="label">Consultant view</div><h1>Client farms</h1></div><div class="sp"></div>
+    <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
+    ${S.downloads&&ids.length?'<button data-act="sfexport">Export for Snowflake</button>':''}<button class="primary" data-act="addclient">Add a client farm</button></div>
+  <p class="muted" style="margin:4px 0 0;max-width:70ch">Farmers you share this app with appear here once they set up their farm. You can also add a client yourself and enter their records for them.</p>
+  <section class="panel"><div class="tablewrap">${ids.length?`<table><thead><tr><th>Farm</th><th class="n">Expected bu</th><th class="n">Sold</th><th class="n">Sold + hedged</th><th>Next delivery</th><th>Flags</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>`
+    :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</div></section>`}
+
+function renderFarm(f){
+  const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
+  const tabs=[['overview','Overview'],['sales','Sales & contracts'],['storage','Storage'],['crops','Crops, costs & insurance']];
+  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,crops:tabCrops}[S.tab](f);
+  return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
+    <h1>${esc(f.name)} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
+    <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
+    <button class="small" data-act="rename">Rename</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
+  <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>${body}`}
+
+function tabOverview(f){
+  const p=position(f,S.year);const st=storage(f);const al=alerts(f,S.year);
+  const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0),rev=p.reduce((a,r)=>a+r.revGuar,0);
+  const strip=`<div class="strip">
+    <div class="stat"><div class="label">Expected production</div><div class="v">${exp?bu(exp):'—'}</div><div class="s">bushels, ${S.year} crop</div></div>
+    <div class="stat"><div class="label">Sold / contracted</div><div class="v">${exp?pct(sold/exp):'—'}</div><div class="s">${bu(sold)} bu · ${exp?pct((sold+hed)/exp):'—'} incl. hedges</div></div>
+    <div class="stat"><div class="label">Insured revenue</div><div class="v">${rev?usd(rev,0):'—'}</div><div class="s">minimum guarantee at projected price</div></div>
+    <div class="stat"><div class="label">Storage in use</div><div class="v">${st.cap?pct(st.used/st.cap):'—'}</div><div class="s">${bu(st.used)} of ${bu(st.cap)} bu</div></div></div>`;
+  const bars=p.length?p.map(r=>{
+    const total=Math.max(r.expected,r.sold+r.hedged)||1;
+    const w=v=>(v/total*100).toFixed(2)+'%';
+    return`<div class="posrow"><div><div class="crop">${esc(r.crop)}</div><div class="muted mono" style="font-size:.78rem">${r.expected?bu(r.expected)+' bu exp.':'No crop plan'}</div></div>
+      <div class="track" role="img" aria-label="${esc(r.crop)}: ${bu(r.sold)} sold, ${bu(r.hedged)} hedged of ${bu(r.expected)} expected">
+        <div class="seg sold" style="width:${w(r.sold)}"></div><div class="seg hedged" style="width:${w(r.hedged)}"></div>
+        ${r.insured?`<div class="ins" style="left:${w(r.insured)}"><span>insured ${bu(r.insured)}</span></div>`:''}</div>
+      <dl class="posfacts"><dt>Sold</dt><dd>${r.expected?pct(r.sold/r.expected):bu(r.sold)+' bu'}</dd>
+        <dt>Avg priced</dt><dd>${usd(r.avg)}</dd><dt>Break-even</dt><dd>${usd(r.be)}</dd>
+        <dt>Margin/bu</dt><dd style="color:${r.avg!=null&&r.be!=null?(r.avg>=r.be?'var(--good)':'var(--bad)'):'inherit'}">${r.avg!=null&&r.be!=null?usd(r.avg-r.be):'—'}</dd></dl></div>`}).join('')
+    :`<div class="empty"><b>No ${S.year} crops yet</b>Add a crop plan with acres and APH yield to see your marketing position.<div style="margin-top:12px"><button class="primary" data-add="crop">Add crop plan</button></div></div>`;
+  const ups=deliveries(f).filter(d=>d.st.t!=='Delivered').slice(0,5);
+  return strip+`<section><div class="sechead"><h2>Marketing position</h2><div class="sp"></div><button class="small" data-add="sale">Add sale</button></div>
+    <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures, puts)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span><span><i style="border-left:2px dashed var(--ink);border-radius:0;width:2px"></i>Insured bushels</span></div>`:''}<div class="pos">${bars}</div></div></section>
+  <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, storage and insurance line up for ${S.year}.</div>`}</div></section>
+  <section><div class="sechead"><h2>Upcoming deliveries</h2></div><div class="panel">${ups.length?`<ul class="alerts">${ups.map(d=>`<li class="click" data-sale="${d.id}" tabindex="0"><span style="flex:1"><b>${esc(d.crop)}</b> · ${bu(remaining(d))} bu to ${esc(d.buyer||'buyer')}<div class="muted" style="font-size:.8rem">${esc(d.type)} · window ${fmtDate(d.deliveryStart)} – ${fmtDate(d.deliveryEnd)}</div></span><span class="pill ${d.st.c}">${d.st.t}</span></li>`).join('')}</ul>`:`<div class="empty"><b>No open deliveries</b>Forward, HTA and basis contracts with delivery dates show here.</div>`}</div></section></div>`}
+
+const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',unpriced:'Needs pricing',hedges:'Hedges only'};
+function filteredSales(f){
+  const F=S.flt,q=key(F.q);
+  const list=f.sales.filter(s=>+s.year===+S.year).filter(s=>(!F.crop||key(s.crop)===F.crop)&&(!F.type||s.type===F.type)&&(!F.buyer||key(s.buyer)===F.buyer)
+    &&(!F.status||(F.status==='open'&&remaining(s)>0)||(F.status==='delivered'&&CONTRACT_TYPES.includes(s.type)&&remaining(s)<=0)
+      ||(F.status==='unpriced'&&!!openLeg(s))||(F.status==='hedges'&&HEDGE_TYPES.includes(s.type)))
+    &&(!q||[s.crop,s.type,s.buyer,s.contractNo,s.notes,s.location,s.futuresMonth].some(v=>key(v).includes(q))));
+  const val={date:s=>s.date||'',crop:s=>key(s.crop),bu:s=>n0(s.bu),flat:s=>flatPrice(s),delivery:s=>s.deliveryEnd||null,left:s=>DELIVERABLE.includes(s.type)?remaining(s):null,buyer:s=>key(s.buyer)}[S.sort.k];
+  return list.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return-1;return(x<y?-1:x>y?1:0)*S.sort.dir})}
+function summarize(list,by){
+  const g={};
+  list.forEach(s=>{const k=by==='crop'?s.crop:by==='buyer'?(s.buyer||'—'):s.type;const r=g[key(k)]||(g[key(k)]={label:k,n:0,contracted:0,priced:0,value:0,hedged:0,left:0,crop:s.crop,crops:new Set()});
+    r.n++;r.crops.add(key(s.crop));
+    if(HEDGE_TYPES.includes(s.type)){r.hedged+=n0(s.bu);return}
+    r.contracted+=n0(s.bu);r.left+=remaining(s);const fp=flatPrice(s);if(fp!=null){r.priced+=n0(s.bu);r.value+=n0(s.bu)*fp}});
+  return Object.values(g).sort((a,b)=>b.contracted+b.hedged-a.contracted-a.hedged)}
+function saleStatus(s){
+  if(HEDGE_TYPES.includes(s.type))return`<span class="pill neutral">Hedge</span>`;
+  const leg=openLeg(s);const d=DELIVERABLE.includes(s.type)&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
+  return(leg?`<span class="pill warn">Set ${leg}</span> `:'')+(d?`<span class="pill ${d.c}">${d.t}</span>`:s.type==='Cash sale'?'<span class="pill neutral">Delivered</span>':'')}
+function tabSales(f){
+  const all=f.sales.filter(s=>+s.year===+S.year),list=filteredSales(f);
+  const opts=(arr,cur,lbl)=>`<option value="">${lbl}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`).join('');
+  const crops=[...new Map(all.map(s=>[key(s.crop),s.crop]))],buyers=[...new Map(all.filter(s=>s.buyer).map(s=>[key(s.buyer),s.buyer]))];
+  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status;
+  const sum=summarize(list,'all'),tot=sum.reduce((a,r)=>({c:a.c+r.contracted,p:a.p+r.priced,v:a.v+r.value,h:a.h+r.hedged,l:a.l+r.left}),{c:0,p:0,v:0,h:0,l:0});
+  const needs=list.filter(s=>openLeg(s)).length;
+  const by=summarize(list,S.by);
+  const sh=(k,l,n)=>`<th class="${n?'n':''}"><button class="sortbtn" data-sort="${k}" aria-label="Sort by ${l}">${l}${S.sort.k===k?(S.sort.dir<0?' ↓':' ↑'):''}</button></th>`;
+  return`<section><div class="sechead"><h2>${S.year} sales, contracts & hedges</h2><div class="sp"></div>
+    <button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
+    <button class="primary" data-add="sale">Add sale or contract</button></div>
+  ${all.length?`<div class="filters">
+    <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
+    <select id="flt_crop" aria-label="Crop">${opts(crops,F.crop,'All crops')}</select>
+    <select id="flt_type" aria-label="Type">${opts(SALE_TYPES.map(t=>[t,t]),F.type,'All types')}</select>
+    <select id="flt_buyer" aria-label="Buyer">${opts(buyers,F.buyer,'All buyers')}</select>
+    <select id="flt_status" aria-label="Status">${Object.entries(STATUS_F).map(([v,l])=>`<option value="${v}" ${v===F.status?'selected':''}>${l}</option>`).join('')}</select>
+    ${filtered?'<button class="link" data-act="clearflt">Clear filters</button>':''}</div>
+  <div class="strip strip5">
+    <div class="stat"><div class="label">Contracted</div><div class="v">${bu(tot.c)}</div><div class="s">bu${filtered?', filtered':''}</div></div>
+    <div class="stat"><div class="label">Priced</div><div class="v">${tot.c?pct(tot.p/tot.c):'—'}</div><div class="s">${bu(tot.p)} bu with a flat price</div></div>
+    <div class="stat"><div class="label">Priced value</div><div class="v">${usd(tot.v,0)}</div><div class="s">flat price × bushels</div></div>
+    <div class="stat"><div class="label">Left to deliver</div><div class="v">${bu(tot.l)}</div><div class="s">bu on open contracts</div></div>
+    <div class="stat"><div class="label">Needs pricing</div><div class="v" style="color:${needs?'var(--warn)':'inherit'}">${needs}</div><div class="s">${needs?'<button class="link" data-act="showunpriced">Show them</button>':'contracts with an open leg'}</div></div></div>`:''}
+  <div class="panel" style="margin-top:16px">${list.length?`<div class="tablewrap desk"><table><thead><tr>${sh('date','Date')}${sh('crop','Crop')}<th>Type</th>${sh('buyer','Buyer')}${sh('bu','Bushels',1)}${sh('flat','Flat price',1)}${sh('delivery','Delivery')}${sh('left','Left',1)}<th>Status</th></tr></thead><tbody>
+    ${list.map(s=>{const fp=flatPrice(s),isDel=DELIVERABLE.includes(s.type);
+      return`<tr class="click" data-sale="${s.id}" tabindex="0"><td style="white-space:nowrap">${fmtDate(s.date)}</td><td>${esc(s.crop)}</td><td>${esc(s.type)}${s.contractNo?`<div class="muted mono" style="font-size:.74rem">#${esc(s.contractNo)}</div>`:''}</td><td>${esc(s.buyer||'—')}</td>
+      <td class="n">${bu(n0(s.bu))}</td><td class="n"><b>${usd(fp)}</b><div class="muted" style="font-size:.74rem">${s.type==='HTA'||s.type==='Basis contract'?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:HEDGE_TYPES.includes(s.type)?`${legLabel(s,'price').toLowerCase()} ${usd(num(s.price))}`:''}</div></td>
+      <td style="white-space:nowrap">${isDel&&s.deliveryEnd?`${fmtDate(s.deliveryStart)} –<br>${fmtDate(s.deliveryEnd)}`:'<span class="muted">—</span>'}</td>
+      <td class="n">${isDel?(s.trackLoads?`${bu(remaining(s))}<div class="prog sm"><div style="width:${n0(s.bu)?Math.min(100,delivered(s)/n0(s.bu)*100):0}%"></div></div>`:bu(remaining(s))):'<span class="muted">—</span>'}</td>
+      <td>${saleStatus(s)}</td></tr>`}).join('')}</tbody></table></div>
+    <ul class="cards">${list.map(s=>{const fp=flatPrice(s);return`<li data-sale="${s.id}" tabindex="0"><div class="cl"><b>${esc(s.crop)} · ${esc(s.type)}</b><span class="mono">${bu(n0(s.bu))} bu</span></div>
+      <div class="cl muted"><span>${esc(s.buyer||'—')} · ${fmtDate(s.date)}</span><span class="mono">${fp!=null?usd(fp):''}</span></div>
+      <div class="cl"><span>${saleStatus(s)}</span>${DELIVERABLE.includes(s.type)&&remaining(s)>0?`<span class="muted mono" style="font-size:.8rem">${bu(remaining(s))} left</span>`:''}</div></li>`}).join('')}</ul>`
+    :all.length?`<div class="empty"><b>No contracts match these filters</b><button class="link" data-act="clearflt">Clear filters</button></div>`
+    :`<div class="empty"><b>No ${S.year} sales recorded</b>Add cash sales, forward contracts, HTAs, basis contracts, futures hedges and puts.</div>`}</div>
+  ${list.length?`<section><div class="sechead"><h2>Summary</h2><div class="seg-ctl" role="group" aria-label="Group summary by">${[['crop','By crop'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div></div>
+    <div class="panel tablewrap"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':'Type'}</th><th class="n">Contracts</th><th class="n">Contracted bu</th><th class="n">Priced bu</th><th class="n">Avg flat price</th><th class="n">Priced value</th><th class="n">Hedged bu</th><th class="n">Left to deliver</th></tr></thead><tbody>
+    ${by.map(r=>`<tr><td><b>${esc(r.label)}</b></td><td class="n">${r.n}</td><td class="n">${bu(r.contracted)}</td><td class="n">${bu(r.priced)}</td><td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted" title="Mixed crops">mixed</span>':'—'}</td><td class="n">${r.value?usd(r.value,0):'—'}</td><td class="n">${r.hedged?bu(r.hedged):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
+  <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Hedges and puts protect price but aren't sales, so they're left out of contracted and priced totals. Averages are weighted by bushels.</p></section>`}
+
+function csvSales(f){
+  const cols=[['Date','date'],['Crop year','year'],['Crop','crop'],['Type','type'],['Contract #','contractNo'],['Buyer/broker','buyer'],['Location','location'],['Bushels',s=>n0(s.bu)],['Delivered bu',s=>delivered(s)],['Left to deliver',s=>remaining(s)],
+    ['Futures month','futuresMonth'],['Futures/price','price'],['Basis','basis'],['Flat price',s=>flatPrice(s)??''],['Priced value',s=>{const fp=flatPrice(s);return fp==null?'':(fp*n0(s.bu)).toFixed(2)}],['Delivery opens','deliveryStart'],['Delivery closes','deliveryEnd'],['Status',s=>HEDGE_TYPES.includes(s.type)?'Hedge':remaining(s)>0?'Open':'Delivered'],['Notes','notes']];
+  const cell=v=>{v=v==null?'':String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  return[cols.map(c=>c[0]).join(','),...filteredSales(f).map(s=>cols.map(([,k])=>cell(typeof k==='function'?k(s):s[k])).join(','))].join('\r\n')}
+function textSummary(f){
+  const pos=position(f,S.year);const by=summarize(f.sales.filter(s=>+s.year===+S.year),'crop');
+  const lines=[`${f.name}: ${S.year} marketing summary (${fmtDate(TODAY)})`,''];
+  by.forEach(r=>{const p=pos.find(x=>key(x.crop)===key(r.label));
+    lines.push(`${r.label}: ${bu(r.contracted)} bu contracted${p&&p.expected?` (${pct(r.contracted/p.expected)} of ${bu(p.expected)} bu expected)`:''}; ${bu(r.priced)} bu priced${r.priced?` at ${usd(r.value/r.priced)} avg`:''}${p&&p.be!=null?` vs. ${usd(p.be)} break-even`:''}${r.hedged?`; ${bu(r.hedged)} bu hedged`:''}; ${bu(r.left)} bu left to deliver.`)});
+  const un=f.sales.filter(s=>+s.year===+S.year&&openLeg(s));
+  if(un.length){lines.push('','Still to price:');un.forEach(s=>lines.push(`- ${s.crop} ${s.type} with ${s.buyer||'buyer'}, ${bu(n0(s.bu))} bu: ${openLeg(s)} open`))}
+  const up=deliveries(f).filter(d=>d.st.t!=='Delivered').slice(0,5);
+  if(up.length){lines.push('','Upcoming deliveries:');up.forEach(d=>lines.push(`- ${d.crop} to ${d.buyer||'buyer'}, ${bu(remaining(d))} bu, by ${fmtDate(d.deliveryEnd)}`))}
+  return lines.join('\n')}
+
+/* ---------- Snowflake export (consultant only) ---------- */
+const csvCell=v=>{if(v==null)return'';if(typeof v==='boolean')return v?'TRUE':'FALSE';v=String(v);return/[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+const nz=v=>num(v);
+const SF_TABLES=[
+  {name:'FARMS',file:'farms.csv',rows:(id,f)=>[{id,f}],cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['FARM_NAME','VARCHAR',r=>r.f.name],['IS_SAMPLE','BOOLEAN',r=>r.f.sample],['UPDATED_AT','TIMESTAMP_TZ',r=>r.f.updatedAt?r.f.updatedAt.replace('Z','+00:00'):null]]},
+  {name:'CROP_PLANS',file:'crop_plans.csv',rows:(id,f)=>f.crops.map(c=>{const exp=n0(c.acres)*n0(c.aph),ins=c.insType&&c.insType!=='None'?exp*n0(c.coverage)/100:0;
+      return{id,c,exp,be:n0(c.aph)?n0(c.costPerAcre)/n0(c.aph):null,ins,rev:ins*n0(c.projPrice)}}),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['CROP_PLAN_ID','VARCHAR',r=>r.c.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.c.year)],['CROP','VARCHAR',r=>r.c.crop],
+    ['ACRES','NUMBER(12,2)',r=>nz(r.c.acres)],['APH_YIELD','NUMBER(10,2)',r=>nz(r.c.aph)],['COST_PER_ACRE','NUMBER(12,2)',r=>nz(r.c.costPerAcre)],
+    ['INSURANCE_PLAN','VARCHAR',r=>r.c.insType||null],['COVERAGE_PCT','NUMBER(5,2)',r=>nz(r.c.coverage)],['PROJECTED_PRICE','NUMBER(10,4)',r=>nz(r.c.projPrice)],
+    ['EXPECTED_BU','NUMBER(14,2)',r=>r.exp],['BREAKEVEN_PER_BU','NUMBER(10,4)',r=>r.be==null?null:+r.be.toFixed(4)],['INSURED_BU','NUMBER(14,2)',r=>+r.ins.toFixed(2)],['REVENUE_GUARANTEE','NUMBER(16,2)',r=>+r.rev.toFixed(2)]]},
+  {name:'CONTRACTS',file:'contracts.csv',rows:(id,f)=>f.sales.map(s=>({id,s,fp:flatPrice(s)})),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.s.year)],['CROP','VARCHAR',r=>r.s.crop],
+    ['CONTRACT_TYPE','VARCHAR',r=>r.s.type],['IS_HEDGE','BOOLEAN',r=>HEDGE_TYPES.includes(r.s.type)],['DATE_MADE','DATE',r=>r.s.date||null],
+    ['CONTRACT_NO','VARCHAR',r=>r.s.contractNo||null],['BUYER','VARCHAR',r=>r.s.buyer||null],['DELIVERY_LOCATION','VARCHAR',r=>r.s.location||null],
+    ['BUSHELS','NUMBER(14,2)',r=>nz(r.s.bu)],['FUTURES_MONTH','VARCHAR',r=>r.s.futuresMonth||null],['FUTURES_OR_PRICE','NUMBER(10,4)',r=>nz(r.s.price)],
+    ['BASIS','NUMBER(10,4)',r=>nz(r.s.basis)],['FLAT_PRICE','NUMBER(10,4)',r=>r.fp==null?null:+r.fp.toFixed(4)],['PRICED_VALUE','NUMBER(16,2)',r=>r.fp==null?null:+(r.fp*n0(r.s.bu)).toFixed(2)],
+    ['PREMIUM','NUMBER(10,4)',r=>nz(r.s.premium)],['NEEDS_PRICING','BOOLEAN',r=>!!openLeg(r.s)],['DELIVERY_START','DATE',r=>r.s.deliveryStart||null],['DELIVERY_END','DATE',r=>r.s.deliveryEnd||null],
+    ['TRACK_LOADS','BOOLEAN',r=>!!r.s.trackLoads],['DELIVERED_BU','NUMBER(14,2)',r=>delivered(r.s)],['REMAINING_BU','NUMBER(14,2)',r=>remaining(r.s)],
+    ['STATUS','VARCHAR',r=>HEDGE_TYPES.includes(r.s.type)?'Hedge':remaining(r.s)>0?'Open':'Delivered'],['NOTES','VARCHAR',r=>r.s.notes||null]]},
+  {name:'LOADS',file:'loads.csv',rows:(id,f)=>f.sales.flatMap(s=>(s.loads||[]).map(l=>({id,s,l}))),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['LOAD_ID','VARCHAR',r=>r.l.id],['DELIVERY_DATE','DATE',r=>r.l.date||null],
+    ['SCALE_TICKET','VARCHAR',r=>r.l.ticket||null],['NET_BU','NUMBER(14,2)',r=>nz(r.l.netBu)],['MOISTURE_PCT','NUMBER(5,2)',r=>nz(r.l.moisture)],
+    ['DISCOUNTS_USD','NUMBER(12,2)',r=>nz(r.l.discount)],['NOTES','VARCHAR',r=>r.l.notes||null]]},
+  {name:'PRICING_EVENTS',file:'pricing_events.csv',rows:(id,f)=>f.sales.flatMap(s=>(s.pricing||[]).map(p=>({id,s,p}))),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['EVENT_ID','VARCHAR',r=>r.p.id],['PRICED_DATE','DATE',r=>r.p.date||null],
+    ['LEG','VARCHAR',r=>r.p.leg],['VALUE','NUMBER(10,4)',r=>nz(r.p.value)],['FUTURES_MONTH','VARCHAR',r=>r.p.month||null],['NOTE','VARCHAR',r=>r.p.note||null]]},
+  {name:'BINS',file:'bins.csv',rows:(id,f)=>f.bins.map(b=>({id,b})),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['BIN_ID','VARCHAR',r=>r.b.id],['BIN_NAME','VARCHAR',r=>r.b.name],['LOCATION','VARCHAR',r=>r.b.location||null],
+    ['CAPACITY_BU','NUMBER(14,2)',r=>nz(r.b.capacity)],['CROP','VARCHAR',r=>r.b.crop||null],['BUSHELS','NUMBER(14,2)',r=>nz(r.b.bu)],
+    ['MOISTURE_PCT','NUMBER(5,2)',r=>nz(r.b.moisture)],['LAST_CHECKED','DATE',r=>r.b.checked||null]]},
+];
+function snowflakeSQL(){
+  const t=SF_TABLES;
+  return`-- Grain Marketing Desk -> Snowflake
+-- Generated by the app. Column order matches the CSV files in this export.
+-- Every table has EXPORTED_AT, so each export is kept as a snapshot and you can
+-- track marketing progress over time. The *_CURRENT views show the latest export.
+
+-- 1) ONE-TIME SETUP ---------------------------------------------------------
+CREATE DATABASE IF NOT EXISTS GRAIN_DESK;
+CREATE SCHEMA IF NOT EXISTS GRAIN_DESK.MARKETING;
+USE SCHEMA GRAIN_DESK.MARKETING;
+
+CREATE FILE FORMAT IF NOT EXISTS GRAIN_DESK_CSV
+  TYPE = CSV SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+  EMPTY_FIELD_AS_NULL = TRUE NULL_IF = ('') ENCODING = 'UTF8';
+CREATE STAGE IF NOT EXISTS GRAIN_DESK_STAGE FILE_FORMAT = GRAIN_DESK_CSV;
+
+${t.map(x=>`CREATE TABLE IF NOT EXISTS ${x.name} (\n  EXPORTED_AT TIMESTAMP_TZ,\n${x.cols.map(c=>`  ${c[0]} ${c[1]}`).join(',\n')}\n);`).join('\n\n')}
+
+${t.map(x=>`CREATE OR REPLACE VIEW ${x.name}_CURRENT AS\n  SELECT * FROM ${x.name} WHERE EXPORTED_AT = (SELECT MAX(EXPORTED_AT) FROM ${x.name});`).join('\n')}
+
+-- 2) EACH EXPORT ------------------------------------------------------------
+-- Option A: Snowflake CLI or SnowSQL. Unzip the export, then (fix the path):
+--   PUT 'file://C:/path/to/export/*.csv' @GRAIN_DESK_STAGE AUTO_COMPRESS = TRUE OVERWRITE = TRUE;
+${t.map(x=>`COPY INTO ${x.name} FROM @GRAIN_DESK_STAGE FILES = ('${x.file}.gz') FILE_FORMAT = (FORMAT_NAME = GRAIN_DESK_CSV) ON_ERROR = ABORT_STATEMENT FORCE = TRUE;`).join('\n')}
+REMOVE @GRAIN_DESK_STAGE;
+-- Option B: in Snowsight, open each table under GRAIN_DESK.MARKETING, choose
+-- Load Data, pick the matching CSV and the GRAIN_DESK_CSV file format.
+
+-- 3) EXAMPLE ANALYSIS: percent sold and price vs. break-even, every export --
+SELECT p.EXPORTED_AT, f.FARM_NAME, p.CROP_YEAR, p.CROP, p.EXPECTED_BU, p.INSURED_BU, p.BREAKEVEN_PER_BU,
+  SUM(IFF(c.IS_HEDGE, 0, c.BUSHELS)) AS CONTRACTED_BU,
+  DIV0(SUM(IFF(c.IS_HEDGE, 0, c.BUSHELS)), p.EXPECTED_BU) AS PCT_CONTRACTED,
+  DIV0(SUM(c.PRICED_VALUE), SUM(IFF(c.FLAT_PRICE IS NULL, 0, c.BUSHELS))) AS AVG_FLAT_PRICE
+FROM CROP_PLANS p
+JOIN FARMS f ON f.FARM_ID = p.FARM_ID AND f.EXPORTED_AT = p.EXPORTED_AT
+LEFT JOIN CONTRACTS c ON c.FARM_ID = p.FARM_ID AND c.EXPORTED_AT = p.EXPORTED_AT
+  AND c.CROP_YEAR = p.CROP_YEAR AND LOWER(c.CROP) = LOWER(p.CROP)
+WHERE NOT f.IS_SAMPLE
+GROUP BY p.EXPORTED_AT, f.FARM_NAME, p.CROP_YEAR, p.CROP, p.EXPECTED_BU, p.INSURED_BU, p.BREAKEVEN_PER_BU
+ORDER BY p.EXPORTED_AT, f.FARM_NAME, p.CROP_YEAR, p.CROP;
+`}
+function snowflakeFiles(){
+  const at=new Date().toISOString().replace('Z','+00:00'),ids=Object.keys(S.farms);
+  const files=SF_TABLES.map(t=>{const rows=ids.flatMap(id=>t.rows(id,S.farms[id]));
+    return{name:t.file,text:[['EXPORTED_AT',...t.cols.map(c=>c[0])].join(','),...rows.map(r=>[at,...t.cols.map(c=>c[2](r))].map(csvCell).join(','))].join('\r\n')+'\r\n',n:rows.length}});
+  files.push({name:'snowflake_setup.sql',text:snowflakeSQL()});
+  files.push({name:'README.txt',text:`Grain Marketing Desk export for Snowflake\nExported ${at}\n${ids.length} farms. ${files.filter(f=>f.n!=null).map(f=>`${f.name}: ${f.n} rows`).join(', ')}.\n\nFirst time: run section 1 of snowflake_setup.sql in a Snowflake worksheet.\nEvery export: load the CSV files with section 2 (Snowflake CLI) or Snowsight's Load Data.\nIS_SAMPLE marks example farms; filter them out in your analysis.\n`});
+  return files}
+function crc32(b){let c=~0;for(let i=0;i<b.length;i++){c^=b[i];for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1}return(~c)>>>0}
+function makeZip(files){
+  const enc=new TextEncoder(),parts=[],central=[];let off=0;const d=new Date();
+  const tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  files.forEach(f=>{const nm=enc.encode(f.name),data=enc.encode(f.text),crc=crc32(data);
+    const h=new DataView(new ArrayBuffer(30));
+    [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[8,0,2],[10,tm,2],[12,dt,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,nm.length,2],[28,0,2]].forEach(([o,v,s])=>s===4?h.setUint32(o,v,true):h.setUint16(o,v,true));
+    const c=new DataView(new ArrayBuffer(46));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[10,0,2],[12,tm,2],[14,dt,2],[16,crc,4],[20,data.length,4],[24,data.length,4],[28,nm.length,2],[30,0,2],[32,0,2],[34,0,2],[36,0,2],[38,0,4],[42,off,4]].forEach(([o,v,s])=>s===4?c.setUint32(o,v,true):c.setUint16(o,v,true));
+    parts.push(h,nm,data);central.push(c,nm);off+=30+nm.length+data.length});
+  const size=central.reduce((a,p)=>a+p.byteLength,0),e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,size,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...central,e],{type:'application/zip'})}
+
+function tabStorage(f){
+  const st=storage(f);
+  return`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
+  <div class="panel tablewrap">${f.bins.length?`<table><thead><tr><th>Bin</th><th>Crop</th><th class="n">Bushels</th><th class="n">Capacity</th><th>Fill</th><th class="n">Moisture</th><th>Checked</th><th></th></tr></thead><tbody>
+    ${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0;return`<tr class="click" data-edit="bin" data-id="${b.id}"><td><b>${esc(b.name)}</b><div class="muted" style="font-size:.78rem">${esc(b.location||'')}</div></td><td>${esc(b.crop||'Empty')}</td>
+      <td class="n">${bu(n0(b.bu))}</td><td class="n">${bu(n0(b.capacity))}</td><td><div class="binbar"><div class="${fill>1?'over':''}" style="width:${Math.min(100,fill*100)}%"></div></div><span class="mono muted" style="font-size:.75rem">${pct(fill)}</span></td>
+      <td class="n">${num(b.moisture)==null?'—':num(b.moisture).toFixed(1)+'%'}</td><td style="white-space:nowrap">${fmtDate(b.checked)}</td><td><button class="small" data-edit="bin" data-id="${b.id}">Edit</button></td></tr>`}).join('')}</tbody></table>`
+    :`<div class="empty"><b>No bins added</b>Add each bin, bag or storage site with its capacity and what's in it.</div>`}</div></section>
+  <section><div class="sechead"><h2>Stored grain vs. open contracts</h2></div><div class="panel tablewrap">${st.rows.length?`<table><thead><tr><th>Crop</th><th class="n">In storage</th><th class="n">Committed to open contracts</th><th class="n">Uncommitted in storage</th><th class="n">Short to fill</th></tr></thead><tbody>
+    ${st.rows.map(r=>`<tr><td><b>${esc(r.crop)}</b></td><td class="n">${bu(r.stored)}</td><td class="n">${bu(r.open)}</td><td class="n">${bu(r.free)}</td><td class="n" style="color:${r.short?'var(--warn)':'inherit'}">${r.short?bu(r.short):'—'}</td></tr>`).join('')}</tbody></table>`
+    :`<div class="empty">Add bins and open contracts to compare stored grain against what's committed.</div>`}</div></section>`}
+
+function tabCrops(f){
+  const list=f.crops.filter(c=>+c.year===+S.year);const p=position(f,S.year);
+  return`<section><div class="sechead"><h2>${S.year} crop plans</h2><div class="sp"></div><button class="primary" data-add="crop">Add crop plan</button></div>
+  <div class="panel tablewrap">${list.length?`<table><thead><tr><th>Crop</th><th class="n">Acres</th><th class="n">APH</th><th class="n">Expected bu</th><th class="n">Cost / acre</th><th class="n">Break-even</th><th>Insurance</th><th class="n">Insured bu</th><th class="n">Revenue guarantee</th><th></th></tr></thead><tbody>
+    ${list.map(c=>{const r=p.find(x=>key(x.crop)===key(c.crop))||{};return`<tr class="click" data-edit="crop" data-id="${c.id}"><td><b>${esc(c.crop)}</b></td><td class="n">${bu(n0(c.acres))}</td><td class="n">${n0(c.aph)}</td><td class="n">${bu(r.expected||0)}</td>
+      <td class="n">${usd(num(c.costPerAcre))}</td><td class="n"><b>${usd(r.be)}</b></td><td>${c.insType&&c.insType!=='None'?`${esc(c.insType)} ${n0(c.coverage)}%`:'<span class="pill warn">None</span>'}</td>
+      <td class="n">${r.insured?bu(r.insured):'—'}</td><td class="n">${r.revGuar?usd(r.revGuar,0):'—'}</td><td><button class="small" data-edit="crop" data-id="${c.id}">Edit</button></td></tr>`}).join('')}</tbody></table>`
+    :`<div class="empty"><b>No ${S.year} crop plans</b>Add each crop's acres, APH yield and cost per acre to calculate break-even and insured bushels.</div>`}</div>
+  <p class="muted" style="font-size:.8rem;margin-top:10px;max-width:80ch">Break-even = cost per acre ÷ APH yield. Insured bushels = acres × APH × coverage level. Revenue guarantee uses the projected price; with RP, the guarantee rises if the harvest price is higher. Figures are estimates for planning, not policy terms.</p></section>`}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
+  if(t.dataset.sale){showSale(t.dataset.sale);return}
+  if(t.dataset.sort){const k=t.dataset.sort;S.sort=S.sort.k===k?{k,dir:-S.sort.dir}:{k,dir:k==='date'||k==='bu'?-1:1};render();return}
+  if(t.dataset.by){S.by=t.dataset.by;render();return}
+  if(t.dataset.add){openForm(t.dataset.add);return}
+  if(t.dataset.edit){e.stopPropagation();openForm(t.dataset.edit,t.dataset.id);return}
+  if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.confirmRemove=false;render();return}
+  const a=t.dataset.act;
+  if(a==='back'){S.current=null;render()}
+  if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:''};render()}
+  if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
+    S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
+  if(a==='showunpriced'){S.flt.status='unpriced';render()}
+  if(a==='export'){const f=S.farms[S.current];const name=(f.name.replace(/[^\w\- ]+/g,'').trim()||'farm')+` ${S.year} sales.csv`;
+    S.downloads.save({filename:name,data:csvSales(f)}).then(()=>toast('CSV saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't export the file here.",true)})}
+  if(a==='copysum'){const txt=textSummary(S.farms[S.current]);
+    const fallback=()=>{dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>Marketing summary</h2><p class="muted" style="font-size:.85rem">Select the text and copy it into an email or notes.</p><textarea id="sumtxt" rows="12" readonly>${esc(txt)}</textarea><div class="dlgfoot"><div class="sp"></div><button type="button" class="primary" data-act="close-plain">Done</button></div>`;
+      $('#dlg').showModal();const ta=$('#sumtxt');ta.focus();ta.select();$('[data-act="close-plain"]').onclick=()=>$('#dlg').close()};
+    try{navigator.clipboard.writeText(txt).then(()=>toast('Summary copied: paste it into an email or notes'),fallback)}catch(err){fallback()}}
+  if(a==='addclient')nameDialog('Add a client farm','',name=>{const id='client-'+uid();S.farms[id]=normalize({name});S.current=id;S.tab='overview';persist(id)});
+  if(a==='rename')nameDialog('Rename farm',S.farms[S.current].name,name=>{S.farms[S.current].name=name;persist(S.current)});
+  if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
+    const id=S.current;delete S.farms[id];S.current=null;S.confirmRemove=false;render();
+    if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
+});
+document.addEventListener('change',e=>{if(e.target.id==='yearSel'){S.year=+e.target.value;render()}
+  const m=/^flt_(crop|type|buyer|status)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
+document.addEventListener('input',e=>{if(e.target.id!=='flt_q')return;S.flt.q=e.target.value;const pos=e.target.selectionStart;render();
+  const el=$('#flt_q');if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(_){}}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.sale&&!e.target.closest('dialog'))showSale(e.target.dataset.sale)});
+document.addEventListener('submit',e=>{if(e.target.id!=='onboard')return;e.preventDefault();
+  const name=$('#ob_name').value.trim();if(!name)return;S.farms[S.uid]=normalize({name});persist(S.uid)});
+function nameDialog(title,val,done){
+  dlgCtx=null;$('#dlgform').innerHTML=`<h2>${esc(title)}</h2><div class="fgrid"><label class="full">Farm or operation name<input id="nd_name" required value="${esc(val)}"></label></div>
+  <div class="dlgfoot"><div class="sp"></div><button type="button" id="nd_cancel">Cancel</button><button class="primary" type="submit" id="nd_ok">Save</button></div>`;
+  const dlg=$('#dlg');dlg.showModal();$('#nd_cancel').onclick=()=>dlg.close();
+  $('#nd_ok').onclick=ev=>{ev.preventDefault();const v=$('#nd_name').value.trim();if(!v)return;dlg.close();done(v)}}
+$('#dlg').addEventListener('close',()=>{dlgCtx=null;detail=null;render()});
+
+/* ---------- boot ---------- */
+const PREVIEW={name:'Prairie Ridge Farms',sample:true,
+  crops:[{id:'c1',year:THIS_YEAR,crop:'Corn',acres:1200,aph:195,costPerAcre:865,insType:'RP',coverage:80,projPrice:4.62},
+    {id:'c2',year:THIS_YEAR,crop:'Soybeans',acres:900,aph:58,costPerAcre:560,insType:'RP',coverage:80,projPrice:10.54},
+    {id:'c3',year:THIS_YEAR,crop:'Wheat',acres:300,aph:62,costPerAcre:330,insType:'RP',coverage:75,projPrice:6.00}],
+  sales:[{id:'s1',year:THIS_YEAR,crop:'Corn',type:'Forward contract',date:THIS_YEAR+'-03-12',bu:40000,price:4.48,futuresMonth:'Dec 26',contractNo:'VG-20417',buyer:'Valley Grain Co-op',location:'Valley Grain, Main St elevator',deliveryStart:THIS_YEAR+'-10-01',deliveryEnd:THIS_YEAR+'-10-15',status:'Open',trackLoads:true,
+      pricing:[{id:'p1',date:THIS_YEAR+'-03-12',leg:'Flat price',value:4.48,month:'Dec 26'}],
+      loads:[{id:'l1',date:THIS_YEAR+'-10-02',ticket:'48211',netBu:9850,moisture:16.2,discount:310},{id:'l2',date:THIS_YEAR+'-10-03',ticket:'48264',netBu:10120,moisture:15.4,discount:95}]},
+    {id:'s2',year:THIS_YEAR,crop:'Corn',type:'HTA',date:THIS_YEAR+'-05-20',bu:30000,price:4.70,futuresMonth:'Dec 26',contractNo:'RE-5531',buyer:'Riverside Ethanol',deliveryStart:THIS_YEAR+'-11-01',deliveryEnd:THIS_YEAR+'-11-30',status:'Open',
+      pricing:[{id:'p2',date:THIS_YEAR+'-05-20',leg:'Futures',value:4.70,month:'Dec 26'}]},
+    {id:'s3',year:THIS_YEAR,crop:'Corn',type:'Basis contract',date:THIS_YEAR+'-08-02',bu:20000,basis:-0.28,buyer:'Valley Grain Co-op',deliveryStart:(THIS_YEAR+1)+'-01-05',deliveryEnd:(THIS_YEAR+1)+'-01-31',status:'Open'},
+    {id:'s4',year:THIS_YEAR,crop:'Corn',type:'Put option',date:THIS_YEAR+'-06-10',bu:50000,price:4.60,premium:0.18,buyer:'Heartland Futures'},
+    {id:'s5',year:THIS_YEAR,crop:'Corn',type:'Cash sale',date:THIS_YEAR+'-09-28',bu:15000,price:4.21,buyer:'Valley Grain Co-op'},
+    {id:'s6',year:THIS_YEAR,crop:'Soybeans',type:'Forward contract',date:THIS_YEAR+'-04-15',bu:15000,price:10.35,buyer:'Bayside Processing',deliveryStart:THIS_YEAR+'-10-05',deliveryEnd:THIS_YEAR+'-10-20',status:'Open'},
+    {id:'s7',year:THIS_YEAR,crop:'Soybeans',type:'Cash sale',date:THIS_YEAR+'-09-30',bu:8000,price:10.05,buyer:'Bayside Processing'},
+    {id:'s8',year:THIS_YEAR,crop:'Soybeans',type:'Futures hedge',date:THIS_YEAR+'-06-24',bu:10000,price:10.60,buyer:'Heartland Futures'},
+    {id:'s9',year:THIS_YEAR,crop:'Wheat',type:'Cash sale',date:THIS_YEAR+'-07-14',bu:12000,price:5.62,buyer:'Valley Grain Co-op'},
+    {id:'s10',year:THIS_YEAR,crop:'Wheat',type:'Forward contract',date:THIS_YEAR+'-02-08',bu:4000,price:5.90,buyer:'Valley Grain Co-op',deliveryStart:THIS_YEAR+'-07-01',deliveryEnd:THIS_YEAR+'-07-31',status:'Delivered'}],
+  bins:[{id:'b1',name:'Home bin 1',location:'Home place',capacity:30000,crop:'Corn',bu:28500,moisture:15.0,checked:THIS_YEAR+'-10-01'},
+    {id:'b2',name:'Home bin 2',location:'Home place',capacity:30000,crop:'Corn',bu:30000,moisture:15.5,checked:THIS_YEAR+'-10-01'},
+    {id:'b3',name:'North site bags',location:'North quarter',capacity:60000,crop:'Soybeans',bu:41000,moisture:12.5,checked:THIS_YEAR+'-09-29'},
+    {id:'b4',name:'Hopper bin 4',location:'Home place',capacity:12000,crop:'',bu:0,checked:THIS_YEAR+'-09-15'}]};
+
+function preview(msg){
+  S.mode='preview';S.owner=true;S.note=msg;S.farms={'sample':normalize(PREVIEW)};S.current='sample';
+  $('#who').textContent='Preview';render()}
+async function boot(){
+  const c=window.claude;
+  if(!c||!c.use)return preview('Preview mode: showing sample data. Changes are not saved here.');
+  const [db,user]=await Promise.all([c.use('db'),c.use('user')]);
+  c.use('downloads').then(d=>{S.downloads=d;if(d&&!$('#dlg').open)render()});
+  if(!db||!user)return preview('Saving is not available in this view, so this shows sample data. Open the shared link while signed in to claude.ai to keep records.');
+  S.db=db;S.user=user;S.uid=await user.id();S.owner=await user.isOwner();
+  if(!S.uid&&!S.owner){S.mode='noid';render();return}
+  S.mode='live';
+  const me=await user.me();$('#who').textContent=S.owner?'Consultant · '+(me.name||'you'):(me.name||'');
+  const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
+  if(S.owner){
+    db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
+      S.farms=next;if(S.current&&!next[S.current])S.current=null;if(!$('#dlg').open)render()},onErr);
+  }else{
+    S.current=S.uid;
+    db.doc('farms/'+S.uid).onSnapshot(d=>{if(d.exists)S.farms[S.uid]=normalize(d.data());else delete S.farms[S.uid];if(!$('#dlg').open)render()},onErr);
+  }
+  render()}
+boot();
+</script>
