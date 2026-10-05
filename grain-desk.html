@@ -127,6 +127,28 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* crop cards (farm info / breakeven / crop values) */
+.ccards{display:grid;gap:18px;margin-top:20px}
+.ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.ccard header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:12px 18px 10px;border-bottom:2px solid var(--accent)}
+.ccard header h2{font-size:1.3rem;font-weight:800}
+.crow{display:grid;grid-template-columns:150px minmax(0,1fr);border-bottom:1px solid var(--line)}
+.crow:last-of-type{border-bottom:0}
+.clabel{background:var(--soft);font-family:var(--f-display);font-weight:720;font-size:.98rem;display:flex;align-items:center;padding:12px 18px;border-right:1px solid var(--line)}
+.ccells{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+.kv,.kv2{padding:10px 14px;border-right:1px solid var(--line);min-width:0}
+.kv span,.kv2 span{display:block;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv b{display:block;font:500 1.02rem var(--f-data);font-variant-numeric:tabular-nums;margin-top:3px}
+.kv2{display:grid;gap:8px;grid-template-rows:auto auto}
+.kv2>div{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.kv2>div:first-child{padding-bottom:8px;border-bottom:1px dashed var(--line)}
+.kv2 span{display:inline;white-space:normal}
+.kv2 b{font:600 .92rem var(--f-data);font-variant-numeric:tabular-nums}
+.kv2 em{font-style:normal;font-size:.7rem}
+.ccard .pos{color:var(--good)} .ccard .neg{color:var(--bad)} .ccard .warn{color:var(--warn)}
+.ccard footer{font-size:.76rem;padding:8px 18px;border-top:1px solid var(--line);background:var(--bg)}
+.crow:has(.kv2) .ccells{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+@media (max-width:640px){.crow{grid-template-columns:minmax(0,1fr)}.clabel{border-right:0;border-bottom:1px solid var(--line);padding:8px 14px}}
 /* farm summary */
 table.summary td:first-child{color:var(--muted);white-space:nowrap}
 table.summary td.n{white-space:nowrap}
@@ -375,6 +397,11 @@ const FORMS={
     {k:'expectedYield',label:'Expected yield (bu/ac)',type:'number',step:'any',hint:'Your yield estimate this year. Leave blank to use APH.'},
     {k:'costPerAcre',label:'Total cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, insurance, overhead'},
   ],blank:()=>({year:S.year,crop:'Corn'})},
+  mkt:{title:'Market prices',fields:[
+    {k:'futPrice',label:'Futures price ($/bu)',type:'number',step:'any',hint:'Current futures for this crop year. The Quotes tab will fill this in later.'},
+    {k:'estBasis',label:'Estimated basis ($/bu)',type:'number',step:'any',hint:'Negative under futures, e.g. -0.70'},
+    {k:'priceDate',label:'Prices as of',type:'date'},
+  ]},
   ins:{title:'Crop insurance',fields:[
     {k:'insType',label:'Insurance plan',type:'select',options:INS_TYPES,hint:'RP = Revenue Protection, RP-HPE = harvest price exclusion, YP = Yield Protection'},
     {k:'coverage',label:'Coverage level (%)',type:'number',step:'5',hint:'e.g. 80',show:v=>v.insType!=='None'},
@@ -443,7 +470,7 @@ const FORMS={
     {k:'checked',label:'Last checked',type:'date'},
   ],blank:()=>({checked:TODAY})},
 };
-const LISTS={sale:'sales',crop:'crops',ins:'crops',bin:'bins'};
+const LISTS={sale:'sales',crop:'crops',ins:'crops',mkt:'crops',bin:'bins'};
 let dlgCtx=null,detail=null;
 function listSave(kind,id){return rec=>{const f=S.farms[S.current],list=LISTS[kind];
   f[list]=id?f[list].map(r=>r.id===id?rec:r):[...f[list],rec];if(rec.year)S.year=+rec.year;persist(S.current)}}
@@ -459,7 +486,7 @@ function openForm(kind,id,opts={}){
   detail=opts.back?detail:null;
   dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,
     onSave:opts.onSave||(kind==='sale'?saleSave(id):listSave(kind,id)),
-    onDelete:id&&LISTS[kind]&&kind!=='ins'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null};
+    onDelete:id&&LISTS[kind]&&kind!=='ins'&&kind!=='mkt'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null};
   drawForm();if(!$('#dlg').open)$('#dlg').showModal()}
 function drawForm(){
   const {kind,id,vals}=dlgCtx;const spec=FORMS[kind];
@@ -642,6 +669,46 @@ function pieSVG(segs,label){
     const a1=a0+frac*2*Math.PI,pt=a=>`${(C+R*Math.cos(a)).toFixed(2)} ${(C+R*Math.sin(a)).toFixed(2)}`;
     parts.push(`<path d="M${C} ${C} L${pt(a0)} A${R} ${R} 0 ${frac>0.5?1:0} 1 ${pt(a1)} Z" class="${s.cls}">${tip}</path>`);a0=a1});
   return`<svg viewBox="0 0 120 120" class="pie" role="img" aria-label="${esc(label)}">${parts.join('')}</svg>`}
+// one card per crop, laid out like the KD Farm Operations sheet: Farm info / Breakeven / Crop values
+function cropMarket(f,r){
+  const pl=r.plan||{},fut=num(pl.futPrice),basis=num(pl.estBasis),mkt=fut!=null?fut+(basis??0):null;
+  const prod=r.expected,sold=r.sold,unsold=Math.max(0,prod-sold),hedged=r.hedged,unpriced=Math.max(0,unsold-hedged);
+  const sales=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop));
+  // sold value: priced contracts at their flat price; open legs estimated from today's futures / est. basis
+  let soldVal=0,estBu=0,missBu=0;
+  sales.filter(s=>CONTRACT_TYPES.includes(s.type)).forEach(s=>{const q=qty(s),fp=flatPrice(s);if(fp!=null){soldVal+=q*fp;return}
+    const fu=num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
+  let hedgeVal=null,itmBu=0,premium=0;
+  sales.filter(s=>s.type==='Put option').forEach(s=>premium+=qty(s)*n0(s.premium));
+  if(fut!=null){hedgeVal=0;sales.filter(s=>HEDGE_TYPES.includes(s.type)).forEach(s=>{const v=s.type==='Put option'?Math.max(0,n0(s.price)-fut):n0(s.price)-fut;hedgeVal+=v*qty(s);if(s.type==='Put option'&&n0(s.price)>fut)itmBu+=qty(s)})}
+  const cost=r.plan&&num(pl.costPerAcre)!=null?n0(pl.acres)*n0(pl.costPerAcre):null;
+  const unsoldVal=mkt!=null?unsold*mkt:null,unpricedVal=mkt!=null?unpriced*mkt:null;
+  // with a market price: everything valued (sold + unsold + hedges − put premiums − cost); without: profit on priced bushels only
+  const profit=cost==null?null:mkt!=null&&!missBu?soldVal+unsoldVal+(hedgeVal||0)-premium-cost:(r.be!=null?r.pricedRev-r.be*r.pricedBu:null);
+  return{pl,fut,basis,mkt,prod,sold,unsold,hedged,unpriced,soldVal,estBu,missBu,hedgeVal,itmBu,premium,cost,unsoldVal,unpricedVal,profit,
+    ppa:profit!=null&&n0(pl.acres)?profit/n0(pl.acres):null,full:mkt!=null&&!missBu}}
+function cropCard(f,r){
+  const m=cropMarket(f,r),pl=m.pl,n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
+  const signed=(v,d=2)=>v==null?'—':`<span class="${v<0?'neg':'pos'}">${usd(v,d)}</span>`;
+  const cell=(l,v,cls='')=>`<div class="kv ${cls}"><span>${l}</span><b>${v}</b></div>`;
+  const pair=(l1,v1,l2,v2)=>`<div class="kv2"><div><span>${l1}</span><b>${v1}</b></div><div><span>${l2}</span><b>${v2}</b></div></div>`;
+  const dyn=!r.plan||!n0(pl.costPerAcre)?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':`<span class="${r.be!=null&&r.dynBe>r.be?'neg':'pos'}">${usd(r.dynBe,4)}</span>`;
+  return`<article class="ccard">
+    <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2>${esc(r.crop)} ${S.year}</h2></div>
+      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Update prices':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
+    <div class="crow"><div class="clabel">Farm info</div><div class="ccells">
+      ${cell('Acres',n1(pl.acres))}${cell('APH',n1(pl.aph))}${cell('Est. yield',n1(r.yld||null))}${cell('Production goal',n1(m.prod))}
+      ${cell('Cost / acre',usd(num(pl.costPerAcre)))}${cell('Total farm cost',usd(m.cost))}${cell('Net profit / acre',signed(m.ppa))}${cell('Total profit',signed(m.profit,0))}</div></div>
+    <div class="crow"><div class="clabel">Breakeven</div><div class="ccells">
+      ${cell('Est. basis',m.basis==null?'—':`<span class="${m.basis<0?'neg':''}">${m.basis<0?'−':''}${Math.abs(m.basis).toFixed(2)}</span>`)}${cell('Initial B/E',usd(r.be,4))}${cell('Dynamic B/E',dyn)}</div></div>
+    <div class="crow"><div class="clabel">Crop values</div><div class="ccells">
+      ${pair('Total bushels',n1(m.prod),'Futures price',m.fut==null?'—':usd(m.fut,4))}
+      ${pair('Unsold bushels',n1(m.unsold),'Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
+      ${pair('Sold bushels',`<span class="pos">${n1(m.sold)}</span>`,'Value of sold',`<span class="pos">${usd(m.soldVal,0)}</span>`)}
+      ${pair(`Hedged bushels${m.itmBu?` <em>(${n1(m.itmBu)} puts ITM)</em>`:''}`,`<span class="warn">${n1(m.hedged)}</span>`,'Value of hedges',m.hedgeVal==null?'—':signed(m.hedgeVal,0))}
+      ${pair('Unpriced bushels',`<span class="neg">${n1(m.unpriced)}</span>`,'Value of unpriced',m.unpricedVal==null?'—':`<span class="neg">${usd(m.unpricedVal,0)}</span>`)}</div></div>
+    <footer class="muted">${m.full?`Profit values unsold bushels at futures ${m.basis!=null?'+ est. basis ':''}(${usd(m.mkt)})${pl.priceDate?` as of ${fmtDate(pl.priceDate)}`:''}, includes hedge value${m.premium?' less put premiums':''}.`
+      :`Profit counts only priced sold bushels. Add a futures price and est. basis to value unsold bushels.`}${m.estBu?` Value of sold estimates ${n1(m.estBu)} bu whose basis or futures isn't set yet.`:''}</footer></article>`}
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
 function farmSummary(p){
   if(!p.length)return'';
@@ -675,7 +742,7 @@ function farmSummary(p){
   <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:90ch">Profit counts only sold bushels with a flat price: sold value minus initial break-even × those bushels. Unsold bushels and contracts without a full price add nothing until they're priced. Bushels sold include contracts still waiting on basis or futures; hedges and puts count as unsold.</p></section>`}
 function tabOverview(f){
   const p=position(f,S.year);const st=storage(f);const al=alerts(f,S.year);
-  const strip=farmSummary(p);
+  const strip=p.length?`<div class="ccards">${p.map(r=>cropCard(f,r)).join('')}</div>`:'';
   const bars=p.length?`<div class="piegrid">${p.map(r=>{
     const total=Math.max(r.expected,r.sold+r.hedged);
     const share=v=>total?pct(v/total):'—';
