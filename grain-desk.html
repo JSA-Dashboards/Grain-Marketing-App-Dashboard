@@ -127,6 +127,12 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* farm summary */
+table.summary td:first-child{color:var(--muted);white-space:nowrap}
+table.summary td.n{white-space:nowrap}
+table.summary .tot{font-weight:600;background:var(--soft)}
+table.summary thead th:last-child{background:var(--soft)}
+table.summary tr.grp td{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--ink);padding-top:14px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 /* marketing position pies */
 .piegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--line)}
 .piecard{background:var(--surface);padding:16px 18px;display:grid;gap:12px;align-content:start;min-width:0}
@@ -636,15 +642,40 @@ function pieSVG(segs,label){
     const a1=a0+frac*2*Math.PI,pt=a=>`${(C+R*Math.cos(a)).toFixed(2)} ${(C+R*Math.sin(a)).toFixed(2)}`;
     parts.push(`<path d="M${C} ${C} L${pt(a0)} A${R} ${R} 0 ${frac>0.5?1:0} 1 ${pt(a1)} Z" class="${s.cls}">${tip}</path>`);a0=a1});
   return`<svg viewBox="0 0 120 120" class="pie" role="img" aria-label="${esc(label)}">${parts.join('')}</svg>`}
+// crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
+function farmSummary(p){
+  if(!p.length)return'';
+  const c=p.map(r=>{const ac=r.plan?n0(r.plan.acres):0,cpa=r.plan?num(r.plan.costPerAcre):null,cost=cpa!=null?ac*cpa:null;
+    const profit=r.be!=null?r.pricedRev-r.be*r.pricedBu:null;
+    return{r,ac,yld:r.plan?r.yld:null,prod:r.expected,cpa,cost,be:r.be,sold:r.sold,unsold:Math.max(0,r.expected-r.sold),value:r.pricedRev,notPriced:Math.max(0,r.sold-r.pricedBu),profit,ppa:profit!=null&&ac?profit/ac:null}});
+  const sum=k=>c.reduce((a,x)=>a+(x[k]||0),0),T={ac:sum('ac'),prod:sum('prod'),cost:c.some(x=>x.cost!=null)?sum('cost'):null,sold:sum('sold'),unsold:sum('unsold'),value:sum('value'),notPriced:sum('notPriced'),profit:c.some(x=>x.profit!=null)?sum('profit'):null};
+  T.cpa=T.cost!=null&&T.ac?T.cost/T.ac:null;T.ppa=T.profit!=null&&T.ac?T.profit/T.ac:null;
+  const money=(v,d)=>v==null?'—':`<span style="color:${v<0?'var(--bad)':'var(--good)'}">${usd(v,d)}</span>`;
+  const dyn=r=>!r.plan||!n0(r.plan.costPerAcre)?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':usd(r.dynBe);
+  const rows=[
+    ['Production'],
+    ['Acres',x=>x.ac?bu(x.ac):'—',bu(T.ac)],
+    ['Expected yield (bu/ac)',x=>x.yld?x.yld.toLocaleString('en-US',{maximumFractionDigits:1}):'—','—'],
+    ['Expected production (bu)',x=>x.prod?bu(x.prod):'—',bu(T.prod)],
+    ['Costs'],
+    ['Cost per acre',x=>usd(x.cpa),usd(T.cpa)],
+    ['Total farm cost',x=>usd(x.cost,0),usd(T.cost,0)],
+    ['Initial break-even',x=>usd(x.be),'—'],
+    ['Dynamic break-even',x=>dyn(x.r),'—'],
+    ['Sales'],
+    ['Bushels sold',x=>bu(x.sold)+(x.prod?` <span class="muted">${pct(x.sold/x.prod)}</span>`:''),bu(T.sold)+(T.prod?` <span class="muted">${pct(T.sold/T.prod)}</span>`:'')],
+    ['Unsold bushels',x=>bu(x.unsold),bu(T.unsold)],
+    ['Sold bushels value',x=>usd(x.value,0)+(x.notPriced?`<div class="muted" style="font-size:.72rem">+${bu(x.notPriced)} bu not yet priced</div>`:''),usd(T.value,0)],
+    ['Profit on sold bushels'],
+    ['Net profit / acre',x=>money(x.ppa),money(T.ppa)],
+    ['Total profit',x=>money(x.profit,0),money(T.profit,0)],
+  ];
+  return`<section><div class="sechead"><h2>${S.year} farm summary</h2></div><div class="panel tablewrap"><table class="summary"><thead><tr><th></th>${c.map(x=>`<th class="n">${esc(x.r.crop)}</th>`).join('')}<th class="n">Farm total</th></tr></thead><tbody>
+    ${rows.map(([l,fn,t])=>fn?`<tr><td>${l}</td>${c.map(x=>`<td class="n">${fn(x)}</td>`).join('')}<td class="n tot">${t}</td></tr>`:`<tr class="grp"><td colspan="${c.length+2}">${l}</td></tr>`).join('')}</tbody></table></div>
+  <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:90ch">Profit counts only sold bushels with a flat price: sold value minus initial break-even × those bushels. Unsold bushels and contracts without a full price add nothing until they're priced. Bushels sold include contracts still waiting on basis or futures; hedges and puts count as unsold.</p></section>`}
 function tabOverview(f){
   const p=position(f,S.year);const st=storage(f);const al=alerts(f,S.year);
-  const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0),rev=p.reduce((a,r)=>a+r.revGuar,0);
-  const strip=`<div class="strip">
-    <div class="stat"><div class="label">Expected production</div><div class="v">${exp?bu(exp):'—'}</div><div class="s">bushels, ${S.year} crop</div></div>
-    <div class="stat"><div class="label">Sold / contracted</div><div class="v">${exp?pct(sold/exp):'—'}</div><div class="s">${bu(sold)} bu · ${exp?pct((sold+hed)/exp):'—'} incl. hedges</div></div>
-    ${SHOW_INSURANCE?`<div class="stat"><div class="label">Insured revenue</div><div class="v">${rev?usd(rev,0):'—'}</div><div class="s">minimum guarantee at projected price</div></div>`
-      :(()=>{const nx=deliveries(f).find(d=>!d.st.done);return`<div class="stat"><div class="label">Next delivery</div><div class="v">${nx?fmtDate(nx.deliveryEnd).replace(/, \d{4}$/,''):'—'}</div><div class="s">${nx?`${bu(remaining(nx))} bu ${esc(nx.crop.toLowerCase())} to ${esc(nx.buyer||'buyer')}`:'no open deliveries'}</div></div>`})()}
-    <div class="stat"><div class="label">Storage in use</div><div class="v">${st.cap?pct(st.used/st.cap):'—'}</div><div class="s">${bu(st.used)} of ${bu(st.cap)} bu</div></div></div>`;
+  const strip=farmSummary(p);
   const bars=p.length?`<div class="piegrid">${p.map(r=>{
     const total=Math.max(r.expected,r.sold+r.hedged);
     const share=v=>total?pct(v/total):'—';
