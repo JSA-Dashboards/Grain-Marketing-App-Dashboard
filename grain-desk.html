@@ -196,7 +196,7 @@ const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
 const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
-  flt:{q:'',crop:'',type:'',buyer:'',status:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
+  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -590,10 +590,20 @@ function tabOverview(f){
   <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, storage and insurance line up for ${S.year}.</div>`}</div></section>
   <section><div class="sechead"><h2>Upcoming deliveries</h2></div><div class="panel">${ups.length?`<ul class="alerts">${ups.map(d=>`<li class="click" data-sale="${d.id}" tabindex="0"><span style="flex:1"><b>${esc(d.crop)}</b> · ${bu(remaining(d))} bu to ${esc(d.buyer||'buyer')}<div class="muted" style="font-size:.8rem">${esc(d.type)} · window ${fmtDate(d.deliveryStart)} – ${fmtDate(d.deliveryEnd)}</div></span><span class="pill ${d.st.c}">${d.st.t}</span></li>`).join('')}</ul>`:`<div class="empty"><b>No open deliveries</b>Forward, HTA and basis contracts with delivery dates show here.</div>`}</div></section></div>`}
 
+const monthLabel=k=>k==='none'?'No delivery date':new Date(k+'-15T12:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'});
+// months a contract delivers in: every month its delivery window touches; cash sales use the sale date
+function delivMonths(s){
+  if(s.type==='Cash sale')return s.date?[s.date.slice(0,7)]:[];
+  if(!DELIVERABLE.includes(s.type))return[];
+  const a=s.deliveryStart||s.deliveryEnd,b=s.deliveryEnd||s.deliveryStart;if(!a)return[];
+  let[y,m]=a.slice(0,7).split('-').map(Number);const[ey,em]=b.slice(0,7).split('-').map(Number);const out=[];
+  for(let g=0;(y<ey||(y===ey&&m<=em))&&g<36;g++){out.push(y+'-'+String(m).padStart(2,'0'));if(++m>12){m=1;y++}}
+  return out.length?out:[a.slice(0,7)]}
 const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',unpriced:'Needs pricing',hedges:'Hedges only'};
 function filteredSales(f){
   const F=S.flt,q=key(F.q);
-  const list=f.sales.filter(s=>+s.year===+S.year).filter(s=>(!F.crop||key(s.crop)===F.crop)&&(!F.type||s.type===F.type)&&(!F.buyer||key(s.buyer)===F.buyer)
+  const list=f.sales.filter(s=>+s.year===+S.year).filter(s=>(!F.crop||key(s.crop)===F.crop)
+    &&(!F.month||(F.month==='none'?!delivMonths(s).length:delivMonths(s).includes(F.month)))&&(!F.type||s.type===F.type)&&(!F.buyer||key(s.buyer)===F.buyer)
     &&(!F.status||(F.status==='open'&&(remaining(s)>0||accActive(s)))||(F.status==='delivered'&&CONTRACT_TYPES.includes(s.type)&&remaining(s)<=0&&!accActive(s))
       ||(F.status==='unpriced'&&!!openLeg(s))||(F.status==='hedges'&&HEDGE_TYPES.includes(s.type)))
     &&(!q||[s.crop,s.type,s.buyer,s.contractNo,s.notes,s.location,s.futuresMonth].some(v=>key(v).includes(q))));
@@ -601,11 +611,14 @@ function filteredSales(f){
   return list.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return-1;return(x<y?-1:x>y?1:0)*S.sort.dir})}
 function summarize(list,by){
   const g={};
-  list.forEach(s=>{const k=by==='crop'?s.crop:by==='buyer'?(s.buyer||'—'):s.type;const r=g[key(k)]||(g[key(k)]={label:k,n:0,contracted:0,priced:0,value:0,hedged:0,left:0,crop:s.crop,crops:new Set()});
+  list.forEach(s=>{const mk=by==='month'?(delivMonths(s)[0]||'none'):null;
+    const k=by==='crop'?s.crop:by==='buyer'?(s.buyer||'—'):by==='month'?mk:s.type;const r=g[key(k)]||(g[key(k)]={label:by==='month'?monthLabel(mk):k,mk,n:0,contracted:0,priced:0,value:0,hedged:0,left:0,crop:s.crop,crops:new Set()});
     r.n++;r.crops.add(key(s.crop));
     if(HEDGE_TYPES.includes(s.type)){r.hedged+=qty(s);return}
     r.contracted+=qty(s);r.left+=remaining(s);const fp=flatPrice(s);if(fp!=null){r.priced+=qty(s);r.value+=qty(s)*fp}});
-  return Object.values(g).sort((a,b)=>b.contracted+b.hedged-a.contracted-a.hedged)}
+  const rows=Object.values(g);
+  if(by==='month')return rows.sort((a,b)=>a.mk==='none'?1:b.mk==='none'?-1:a.mk.localeCompare(b.mk));
+  return rows.sort((a,b)=>b.contracted+b.hedged-a.contracted-a.hedged)}
 function saleStatus(s){
   if(HEDGE_TYPES.includes(s.type))return`<span class="pill neutral">Hedge</span>`;
   const leg=openLeg(s);const d=DELIVERABLE.includes(s.type)&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
@@ -615,7 +628,8 @@ function tabSales(f){
   const all=f.sales.filter(s=>+s.year===+S.year),list=filteredSales(f);
   const opts=(arr,cur,lbl)=>`<option value="">${lbl}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`).join('');
   const crops=[...new Map(all.map(s=>[key(s.crop),s.crop]))],buyers=[...new Map(all.filter(s=>s.buyer).map(s=>[key(s.buyer),s.buyer]))];
-  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status;
+  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status||F.month;
+  const months=[...new Set(all.flatMap(delivMonths))].sort(),hasNone=all.some(s=>!delivMonths(s).length);
   const sum=summarize(list,'all'),tot=sum.reduce((a,r)=>({c:a.c+r.contracted,p:a.p+r.priced,v:a.v+r.value,h:a.h+r.hedged,l:a.l+r.left}),{c:0,p:0,v:0,h:0,l:0});
   const needs=list.filter(s=>openLeg(s)).length;
   const by=summarize(list,S.by);
@@ -628,6 +642,7 @@ function tabSales(f){
     <select id="flt_crop" aria-label="Crop">${opts(crops,F.crop,'All crops')}</select>
     <select id="flt_type" aria-label="Type">${opts(SALE_TYPES.map(t=>[t,t]),F.type,'All types')}</select>
     <select id="flt_buyer" aria-label="Buyer">${opts(buyers,F.buyer,'All buyers')}</select>
+    <select id="flt_month" aria-label="Delivery month">${opts([...months.map(m=>[m,monthLabel(m)]),...(hasNone?[['none','No delivery date']]:[])],F.month,'All delivery months')}</select>
     <select id="flt_status" aria-label="Status">${Object.entries(STATUS_F).map(([v,l])=>`<option value="${v}" ${v===F.status?'selected':''}>${l}</option>`).join('')}</select>
     ${filtered?'<button class="link" data-act="clearflt">Clear filters</button>':''}</div>
   <div class="strip strip5">
@@ -648,8 +663,8 @@ function tabSales(f){
       <div class="cl"><span>${saleStatus(s)}</span>${DELIVERABLE.includes(s.type)&&remaining(s)>0?`<span class="muted mono" style="font-size:.8rem">${bu(remaining(s))} left</span>`:''}</div></li>`}).join('')}</ul>`
     :all.length?`<div class="empty"><b>No contracts match these filters</b><button class="link" data-act="clearflt">Clear filters</button></div>`
     :`<div class="empty"><b>No ${S.year} sales recorded</b>Add cash sales, forward contracts, HTAs, basis contracts, futures hedges and puts.</div>`}</div>
-  ${list.length?`<section><div class="sechead"><h2>Summary</h2><div class="seg-ctl" role="group" aria-label="Group summary by">${[['crop','By crop'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div></div>
-    <div class="panel tablewrap"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':'Type'}</th><th class="n">Contracts</th><th class="n">Contracted bu</th><th class="n">Priced bu</th><th class="n">Avg flat price</th><th class="n">Priced value</th><th class="n">Hedged bu</th><th class="n">Left to deliver</th></tr></thead><tbody>
+  ${list.length?`<section><div class="sechead"><h2>Summary</h2><div class="seg-ctl" role="group" aria-label="Group summary by">${[['crop','By crop'],['month','By delivery month'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div></div>
+    <div class="panel tablewrap"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':S.by==='month'?'Delivery month':'Type'}</th><th class="n">Contracts</th><th class="n">Contracted bu</th><th class="n">Priced bu</th><th class="n">Avg flat price</th><th class="n">Priced value</th><th class="n">Hedged bu</th><th class="n">Left to deliver</th></tr></thead><tbody>
     ${by.map(r=>`<tr><td><b>${esc(r.label)}</b></td><td class="n">${r.n}</td><td class="n">${bu(r.contracted)}</td><td class="n">${bu(r.priced)}</td><td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted" title="Mixed crops">mixed</span>':'—'}</td><td class="n">${r.value?usd(r.value,0):'—'}</td><td class="n">${r.hedged?bu(r.hedged):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
   <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Hedges and puts protect price but aren't sales, so they're left out of contracted and priced totals. Averages are weighted by bushels.</p></section>`}
 
@@ -834,7 +849,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.confirmRemove=false;render();return}
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
-  if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:''};render()}
+  if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:''};render()}
   if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
     S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
   if(a==='showunpriced'){S.flt.status='unpriced';render()}
@@ -851,7 +866,7 @@ document.addEventListener('click',e=>{
     if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
 });
 document.addEventListener('change',e=>{if(e.target.id==='yearSel'){S.year=+e.target.value;render()}
-  const m=/^flt_(crop|type|buyer|status)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
+  const m=/^flt_(crop|type|buyer|status|month)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id!=='flt_q')return;S.flt.q=e.target.value;const pos=e.target.selectionStart;render();
   const el=$('#flt_q');if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(_){}}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.sale&&!e.target.closest('dialog'))showSale(e.target.dataset.sale)});
