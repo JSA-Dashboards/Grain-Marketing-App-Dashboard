@@ -224,6 +224,8 @@ const CONTRACT_TYPES=['Cash sale','Forward contract','HTA','Basis contract','Acc
 const HEDGE_TYPES=['Futures hedge','Put option'];
 const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
 const DELIVERABLE=['Forward contract','HTA','Basis contract','Accumulator'];
+// insurance figures stay off the Crop Overview and alerts until the Crop insurance tab is built out
+const SHOW_INSURANCE=false;
 const isAcc=s=>s.type==='Accumulator';
 const hasSource=s=>DELIVERABLE.includes(s.type)||s.type==='Cash sale';
 const fromHarvest=s=>s.source==='Harvest';
@@ -332,8 +334,8 @@ function alerts(f,year){
   const out=[];
   position(f,year).forEach(r=>{
     if(!r.plan)out.push({c:'neutral',t:`${r.crop}: no ${year} crop plan yet. Add acres and APH yield to see percent sold and break-even.`});
-    if(r.insured>0&&r.sold>r.insured)out.push({c:'bad',t:`${r.crop}: ${bu(r.sold)} bu contracted is above the ${bu(r.insured)} bu insured guarantee. A short crop could leave contracts unfilled.`});
-    if(r.plan&&(!r.plan.insType||r.plan.insType==='None')&&r.sold>0)out.push({c:'warn',t:`${r.crop}: bushels are contracted but no crop insurance is recorded.`});
+    if(SHOW_INSURANCE&&r.insured>0&&r.sold>r.insured)out.push({c:'bad',t:`${r.crop}: ${bu(r.sold)} bu contracted is above the ${bu(r.insured)} bu insured guarantee. A short crop could leave contracts unfilled.`});
+    if(SHOW_INSURANCE&&r.plan&&(!r.plan.insType||r.plan.insType==='None')&&r.sold>0)out.push({c:'warn',t:`${r.crop}: bushels are contracted but no crop insurance is recorded.`});
     if(r.avg!=null&&r.be!=null&&r.avg<r.be)out.push({c:'warn',t:`${r.crop}: average priced sale ${usd(r.avg)} is ${usd(r.be-r.avg)}/bu below break-even (${usd(r.be)}).`});
   });
   deliveries(f).forEach(d=>{if(d.st.c==='bad')out.push({c:'bad',t:`${d.crop} ${d.type.toLowerCase()} to ${d.buyer||'buyer'}: ${bu(remaining(d))} bu still undelivered; window closed ${fmtDate(d.deliveryEnd)}.`});
@@ -614,7 +616,7 @@ function renderClients(){
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
-  const tabs=[['overview','Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['storage','Storage'],['insurance','Crop insurance']];
+  const tabs=[['overview','Crop Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['storage','Storage'],['insurance','Crop insurance']];
   if(!tabs.some(t=>t[0]===S.tab))S.tab='overview';
   const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,insurance:tabInsurance}[S.tab](f);
   return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
@@ -640,7 +642,8 @@ function tabOverview(f){
   const strip=`<div class="strip">
     <div class="stat"><div class="label">Expected production</div><div class="v">${exp?bu(exp):'—'}</div><div class="s">bushels, ${S.year} crop</div></div>
     <div class="stat"><div class="label">Sold / contracted</div><div class="v">${exp?pct(sold/exp):'—'}</div><div class="s">${bu(sold)} bu · ${exp?pct((sold+hed)/exp):'—'} incl. hedges</div></div>
-    <div class="stat"><div class="label">Insured revenue</div><div class="v">${rev?usd(rev,0):'—'}</div><div class="s">minimum guarantee at projected price</div></div>
+    ${SHOW_INSURANCE?`<div class="stat"><div class="label">Insured revenue</div><div class="v">${rev?usd(rev,0):'—'}</div><div class="s">minimum guarantee at projected price</div></div>`
+      :(()=>{const nx=deliveries(f).find(d=>!d.st.done);return`<div class="stat"><div class="label">Next delivery</div><div class="v">${nx?fmtDate(nx.deliveryEnd).replace(/, \d{4}$/,''):'—'}</div><div class="s">${nx?`${bu(remaining(nx))} bu ${esc(nx.crop.toLowerCase())} to ${esc(nx.buyer||'buyer')}`:'no open deliveries'}</div></div>`})()}
     <div class="stat"><div class="label">Storage in use</div><div class="v">${st.cap?pct(st.used/st.cap):'—'}</div><div class="s">${bu(st.used)} of ${bu(st.cap)} bu</div></div></div>`;
   const bars=p.length?`<div class="piegrid">${p.map(r=>{
     const total=Math.max(r.expected,r.sold+r.hedged);
@@ -656,12 +659,12 @@ function tabOverview(f){
       <dl class="posfacts"><dt>Avg priced</dt><dd>${usd(r.avg)}</dd><dt>Break-even</dt><dd>${usd(r.be)}</dd>
         <dt>BE on unpriced</dt><dd>${r.dynBe!=null?usd(r.dynBe):r.plan&&r.restBu<=0?'all priced':'—'}</dd>
         <dt>Margin/bu</dt><dd style="color:${r.avg!=null&&r.be!=null?(r.avg>=r.be?'var(--good)':'var(--bad)'):'inherit'}">${r.avg!=null&&r.be!=null?usd(r.avg-r.be):'—'}</dd>
-        <dt>Insured bu</dt><dd>${r.insured?bu(r.insured)+(r.sold>r.insured?' ⚠':''):'—'}</dd></dl></div>`}).join('')}</div>`
+        ${SHOW_INSURANCE?`<dt>Insured bu</dt><dd>${r.insured?bu(r.insured)+(r.sold>r.insured?' ⚠':''):'—'}</dd>`:''}</dl></div>`}).join('')}</div>`
     :`<div class="empty"><b>No ${S.year} crops yet</b>Add a crop plan with acres and APH yield to see your marketing position.<div style="margin-top:12px"><button class="primary" data-add="crop">Add crop plan</button></div></div>`;
   const ups=deliveries(f).filter(d=>!d.st.done).slice(0,5);
   return strip+`<section><div class="sechead"><h2>Marketing position</h2><div class="sp"></div><button class="small" data-add="sale">Add sale</button></div>
     <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures, puts)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span></div>`:''}<div class="pos">${bars}</div></div></section>
-  <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, storage and insurance line up for ${S.year}.</div>`}</div></section>
+  <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, deliveries and storage line up for ${S.year}.</div>`}</div></section>
   <section><div class="sechead"><h2>Upcoming deliveries</h2></div><div class="panel">${ups.length?`<ul class="alerts">${ups.map(d=>`<li class="click" data-sale="${d.id}" tabindex="0"><span style="flex:1"><b>${esc(d.crop)}</b> · ${bu(remaining(d))} bu to ${esc(d.buyer||'buyer')}<div class="muted" style="font-size:.8rem">${esc(d.type)} · window ${fmtDate(d.deliveryStart)} – ${fmtDate(d.deliveryEnd)}</div></span><span class="pill ${d.st.c}">${d.st.t}</span></li>`).join('')}</ul>`:`<div class="empty"><b>No open deliveries</b>Forward, HTA and basis contracts with delivery dates show here.</div>`}</div></section></div>`}
 
 const monthLabel=k=>k==='none'?'No delivery date':new Date(k+'-15T12:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'});
