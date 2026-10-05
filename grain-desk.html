@@ -185,6 +185,7 @@ const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
 const DELIVERABLE=['Forward contract','HTA','Basis contract'];
 const INS_TYPES=['RP','RP-HPE','YP','None'];
 const CROPS=['Corn','Soybeans','Wheat','Sorghum','Barley','Oats','Canola','Sunflowers'];
+const SALE_CROPS=['Corn','Soybeans','Wheat'];
 const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
@@ -293,7 +294,7 @@ const FORMS={
   sale:{title:'Sale or contract',fields:[
     {k:'type',label:'Type',type:'select',options:SALE_TYPES},
     {k:'date',label:'Date made',type:'date',req:1},
-    {k:'crop',label:'Crop',type:'text',list:'crops',req:1},
+    {k:'crop',label:'Crop',type:'select',options:v=>SALE_CROPS.includes(v.crop)||!v.crop?SALE_CROPS:[...SALE_CROPS,v.crop]},
     {k:'year',label:'Crop year',type:'number',req:1},
     {k:'bu',label:'Bushels',type:'number',step:'any',req:1},
     {k:'price',label:v=>({'Cash sale':'Flat price ($/bu)','Forward contract':'Flat price ($/bu)','HTA':'Futures price ($/bu)','Basis contract':'Futures price, once set','Futures hedge':'Futures sell price','Put option':'Strike price'}[v.type]),type:'number',step:'any'},
@@ -308,7 +309,7 @@ const FORMS={
     {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
     {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
     {k:'notes',label:'Notes',type:'text',full:1},
-  ],blank:()=>({type:'Forward contract',date:TODAY,year:S.year,status:'Open',trackLoads:false})},
+  ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false})},
   price:{title:'Pricing',fields:[
     {k:'date',label:'Date priced',type:'date',req:1},
     {k:'value',label:v=>v.leg==='basis'?'Basis ($/bu)':'Futures price ($/bu)',type:'number',step:'any',req:1,hint:v=>v.leg==='basis'?'Negative under futures, e.g. -0.30':''},
@@ -360,7 +361,7 @@ function drawForm(){
   <div class="fgrid">${spec.fields.filter(f=>!f.show||f.show(vals)).map(f=>f.type==='check'
     ?`<label class="full check"><span><input id="f_${f.k}" name="${f.k}" type="checkbox" ${vals[f.k]?'checked':''}> ${esc(val(f.label))}</span>${f.hint?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`
     :`<label class="${f.full?'full':''}">${esc(val(f.label))}${f.req?' *':''}
-    ${f.type==='select'?`<select id="f_${f.k}" name="${f.k}">${f.options.map(o=>`<option ${o===vals[f.k]?'selected':''}>${esc(o)}</option>`).join('')}</select>`
+    ${f.type==='select'?`<select id="f_${f.k}" name="${f.k}">${val(f.options).map(o=>`<option ${o===vals[f.k]?'selected':''}>${esc(o)}</option>`).join('')}</select>`
     :`<input id="f_${f.k}" name="${f.k}" type="${f.type}" ${f.step?`step="${f.step}"`:''} ${f.list?`list="${f.list}"`:''} ${f.req?'required':''} value="${esc(vals[f.k]??'')}">`}
     ${val(f.hint)?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`).join('')}</div>
   <datalist id="crops">${CROPS.map(c=>`<option value="${c}">`).join('')}</datalist>
