@@ -84,7 +84,7 @@ tr.click:hover td{background:var(--soft)}
 .pill.solid{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 
 /* marketing position bars */
-.pos{padding:6px 18px 14px}
+.pos{padding:12px 0 0}
 .posrow{display:grid;grid-template-columns:140px minmax(0,1fr) 210px;gap:16px;align-items:center;padding-block:14px;border-bottom:1px solid var(--line)}
 .posrow:last-child{border-bottom:0}
 .posrow .crop{font-family:var(--f-display);font-weight:720;font-size:1.02rem}
@@ -127,6 +127,22 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* marketing position pies */
+.piegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--line)}
+.piecard{background:var(--surface);padding:16px 18px;display:grid;gap:12px;align-content:start;min-width:0}
+.piehead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.piehead .crop{font-family:var(--f-display);font-weight:720;font-size:1.05rem}
+.piebody{display:grid;grid-template-columns:110px minmax(0,1fr);gap:16px;align-items:center}
+.pie{width:110px;height:110px;display:block}
+.pie path,.pie circle{stroke:var(--surface);stroke-width:2;stroke-linejoin:round}
+.pie .sold{fill:var(--accent)} .pie .hedged{fill:var(--grain)} .pie .unpriced{fill:var(--soft)}
+.pie path:hover,.pie circle:hover{opacity:.85}
+.piefacts{display:grid;grid-template-columns:auto auto auto;gap:4px 12px;margin:0;font-size:.85rem;align-items:center}
+.piefacts dt{color:var(--muted);display:flex;align-items:center;gap:6px}
+.piefacts dt i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.piefacts dd{margin:0;text-align:right;font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.piecard .posfacts{border-top:1px solid var(--line);padding-top:10px}
+@media (max-width:380px){.piebody{grid-template-columns:84px minmax(0,1fr)}.pie{width:84px;height:84px}}
 /* storage bins */
 .bingrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .bincard{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:center;padding:14px 16px}
@@ -608,6 +624,16 @@ function renderFarm(f){
     <button class="small" data-act="rename">${S.owner?'Edit details':'Rename'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
   <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>${body}`}
 
+// pie of part-to-whole; slices start at 12 o'clock and run clockwise, separated by a 2px surface gap
+function pieSVG(segs,label){
+  const R=56,C=60,tot=segs.reduce((a,s)=>a+s.v,0);
+  if(!tot)return`<svg viewBox="0 0 120 120" class="pie" role="img" aria-label="${esc(label)}"><circle cx="${C}" cy="${C}" r="${R}" class="unpriced"/></svg>`;
+  let a0=-Math.PI/2;const parts=[];
+  segs.filter(s=>s.v>0).forEach(s=>{const frac=s.v/tot,tip=`<title>${esc(s.label)}: ${bu(s.v)} bu (${pct(frac)})</title>`;
+    if(frac>=0.9999){parts.push(`<circle cx="${C}" cy="${C}" r="${R}" class="${s.cls}">${tip}</circle>`);return}
+    const a1=a0+frac*2*Math.PI,pt=a=>`${(C+R*Math.cos(a)).toFixed(2)} ${(C+R*Math.sin(a)).toFixed(2)}`;
+    parts.push(`<path d="M${C} ${C} L${pt(a0)} A${R} ${R} 0 ${frac>0.5?1:0} 1 ${pt(a1)} Z" class="${s.cls}">${tip}</path>`);a0=a1});
+  return`<svg viewBox="0 0 120 120" class="pie" role="img" aria-label="${esc(label)}">${parts.join('')}</svg>`}
 function tabOverview(f){
   const p=position(f,S.year);const st=storage(f);const al=alerts(f,S.year);
   const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0),rev=p.reduce((a,r)=>a+r.revGuar,0);
@@ -616,20 +642,25 @@ function tabOverview(f){
     <div class="stat"><div class="label">Sold / contracted</div><div class="v">${exp?pct(sold/exp):'—'}</div><div class="s">${bu(sold)} bu · ${exp?pct((sold+hed)/exp):'—'} incl. hedges</div></div>
     <div class="stat"><div class="label">Insured revenue</div><div class="v">${rev?usd(rev,0):'—'}</div><div class="s">minimum guarantee at projected price</div></div>
     <div class="stat"><div class="label">Storage in use</div><div class="v">${st.cap?pct(st.used/st.cap):'—'}</div><div class="s">${bu(st.used)} of ${bu(st.cap)} bu</div></div></div>`;
-  const bars=p.length?p.map(r=>{
-    const total=Math.max(r.expected,r.sold+r.hedged)||1;
-    const w=v=>(v/total*100).toFixed(2)+'%';
-    return`<div class="posrow"><div><div class="crop">${esc(r.crop)}</div><div class="muted mono" style="font-size:.78rem">${r.expected?bu(r.expected)+' bu exp.':'No crop plan'}</div></div>
-      <div class="track" role="img" aria-label="${esc(r.crop)}: ${bu(r.sold)} sold, ${bu(r.hedged)} hedged of ${bu(r.expected)} expected">
-        <div class="seg sold" style="width:${w(r.sold)}"></div><div class="seg hedged" style="width:${w(r.hedged)}"></div>
-        ${r.insured?`<div class="ins" style="left:${w(r.insured)}"><span>insured ${bu(r.insured)}</span></div>`:''}</div>
-      <dl class="posfacts"><dt>Sold</dt><dd>${r.expected?pct(r.sold/r.expected):bu(r.sold)+' bu'}</dd>
-        <dt>Avg priced</dt><dd>${usd(r.avg)}</dd><dt>Break-even</dt><dd>${usd(r.be)}</dd><dt>BE on unpriced</dt><dd>${r.dynBe!=null?usd(r.dynBe):r.plan&&r.restBu<=0?'all priced':'—'}</dd>
-        <dt>Margin/bu</dt><dd style="color:${r.avg!=null&&r.be!=null?(r.avg>=r.be?'var(--good)':'var(--bad)'):'inherit'}">${r.avg!=null&&r.be!=null?usd(r.avg-r.be):'—'}</dd></dl></div>`}).join('')
+  const bars=p.length?`<div class="piegrid">${p.map(r=>{
+    const total=Math.max(r.expected,r.sold+r.hedged);
+    const share=v=>total?pct(v/total):'—';
+    return`<div class="piecard">
+      <div class="piehead"><h3 class="crop">${esc(r.crop)}</h3><span class="muted mono" style="font-size:.78rem">${r.expected?bu(r.expected)+' bu expected':'No crop plan'}</span></div>
+      <div class="piebody">${pieSVG([{v:r.sold,cls:'sold',label:'Sold / contracted'},{v:r.hedged,cls:'hedged',label:'Hedged'},{v:Math.max(0,total-r.sold-r.hedged),cls:'unpriced',label:'Unpriced'}],`${r.crop}: ${bu(r.sold)} sold, ${bu(r.hedged)} hedged, ${bu(r.unpriced)} unpriced of ${bu(r.expected)} expected`)}
+        <dl class="piefacts">
+          <dt><i style="background:var(--accent)"></i>Sold</dt><dd>${bu(r.sold)}</dd><dd class="muted">${share(r.sold)}</dd>
+          <dt><i style="background:var(--grain)"></i>Hedged</dt><dd>${bu(r.hedged)}</dd><dd class="muted">${share(r.hedged)}</dd>
+          <dt><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</dt><dd>${bu(r.unpriced)}</dd><dd class="muted">${share(r.unpriced)}</dd></dl></div>
+      ${r.sold+r.hedged>r.expected&&r.expected?`<p class="binnote" style="margin:0">Sold and hedged bushels are more than expected production.</p>`:''}
+      <dl class="posfacts"><dt>Avg priced</dt><dd>${usd(r.avg)}</dd><dt>Break-even</dt><dd>${usd(r.be)}</dd>
+        <dt>BE on unpriced</dt><dd>${r.dynBe!=null?usd(r.dynBe):r.plan&&r.restBu<=0?'all priced':'—'}</dd>
+        <dt>Margin/bu</dt><dd style="color:${r.avg!=null&&r.be!=null?(r.avg>=r.be?'var(--good)':'var(--bad)'):'inherit'}">${r.avg!=null&&r.be!=null?usd(r.avg-r.be):'—'}</dd>
+        <dt>Insured bu</dt><dd>${r.insured?bu(r.insured)+(r.sold>r.insured?' ⚠':''):'—'}</dd></dl></div>`}).join('')}</div>`
     :`<div class="empty"><b>No ${S.year} crops yet</b>Add a crop plan with acres and APH yield to see your marketing position.<div style="margin-top:12px"><button class="primary" data-add="crop">Add crop plan</button></div></div>`;
   const ups=deliveries(f).filter(d=>!d.st.done).slice(0,5);
   return strip+`<section><div class="sechead"><h2>Marketing position</h2><div class="sp"></div><button class="small" data-add="sale">Add sale</button></div>
-    <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures, puts)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span><span><i style="border-left:2px dashed var(--ink);border-radius:0;width:2px"></i>Insured bushels</span></div>`:''}<div class="pos">${bars}</div></div></section>
+    <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures, puts)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span></div>`:''}<div class="pos">${bars}</div></div></section>
   <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, storage and insurance line up for ${S.year}.</div>`}</div></section>
   <section><div class="sechead"><h2>Upcoming deliveries</h2></div><div class="panel">${ups.length?`<ul class="alerts">${ups.map(d=>`<li class="click" data-sale="${d.id}" tabindex="0"><span style="flex:1"><b>${esc(d.crop)}</b> · ${bu(remaining(d))} bu to ${esc(d.buyer||'buyer')}<div class="muted" style="font-size:.8rem">${esc(d.type)} · window ${fmtDate(d.deliveryStart)} – ${fmtDate(d.deliveryEnd)}</div></span><span class="pill ${d.st.c}">${d.st.t}</span></li>`).join('')}</ul>`:`<div class="empty"><b>No open deliveries</b>Forward, HTA and basis contracts with delivery dates show here.</div>`}</div></section></div>`}
 
