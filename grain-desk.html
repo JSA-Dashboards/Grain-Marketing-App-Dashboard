@@ -8,6 +8,7 @@
   --ink:#17201A; --muted:#5A675E;
   --accent:#1D6A4D; --accent-ink:#FFFFFF; --grain:#B5862B;
   --good:#2C7A4C; --warn:#A86A12; --bad:#AE3D2B;
+  --c-corn:#C99A06; --c-soy:#4F8A2B; --c-wheat:#A8702F;
   --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
   --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-data:"IBM Plex Mono",ui-monospace,Consolas,monospace;
@@ -17,12 +18,14 @@
   --bg:#111612; --surface:#192019; --soft:#232C25; --line:#2E3830;
   --ink:#E4EBE5; --muted:#99A69C;
   --accent:#5FBC90; --accent-ink:#0C1810; --grain:#D9AF57;
-  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66; color-scheme:dark}}
+  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66;
+  --c-corn:#E7BC3A; --c-soy:#86C25E; --c-wheat:#D59C5A; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111612; --surface:#192019; --soft:#232C25; --line:#2E3830;
   --ink:#E4EBE5; --muted:#99A69C;
   --accent:#5FBC90; --accent-ink:#0C1810; --grain:#D9AF57;
-  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66; color-scheme:dark}
+  --good:#6BC38F; --warn:#E2A94B; --bad:#E57B66;
+  --c-corn:#E7BC3A; --c-soy:#86C25E; --c-wheat:#D59C5A; color-scheme:dark}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
@@ -148,6 +151,16 @@ tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)
 .ccard .pos{color:var(--good)} .ccard .neg{color:var(--bad)} .ccard .warn{color:var(--warn)}
 .ccard footer{font-size:.76rem;padding:8px 18px;border-top:1px solid var(--line);background:var(--bg)}
 .crow:has(.kv2) .ccells{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+/* color: each card wears its crop's hue; values cells tinted by meaning */
+.ccard{border-top:5px solid var(--crop)}
+.ccard header{background:color-mix(in srgb,var(--crop) 16%,var(--surface));border-bottom-color:var(--crop)}
+.cdot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--crop);margin-right:8px;vertical-align:1px}
+.clabel{background:color-mix(in srgb,var(--crop) 10%,var(--surface));border-left:4px solid var(--crop)}
+.kv2.t-good{background:color-mix(in srgb,var(--good) 9%,var(--surface))}
+.kv2.t-warn{background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.kv2.t-bad{background:color-mix(in srgb,var(--bad) 8%,var(--surface))}
+.crow:first-of-type .kv:nth-last-child(-n+2){background:color-mix(in srgb,var(--crop) 7%,var(--surface))}
+.ccard footer{background:color-mix(in srgb,var(--crop) 5%,var(--bg))}
 @media (max-width:640px){.crow{grid-template-columns:minmax(0,1fr)}.clabel{border-right:0;border-bottom:1px solid var(--line);padding:8px 14px}}
 /* farm summary */
 table.summary td:first-child{color:var(--muted);white-space:nowrap}
@@ -691,10 +704,11 @@ function cropCard(f,r){
   const m=cropMarket(f,r),pl=m.pl,n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
   const signed=(v,d=2)=>v==null?'—':`<span class="${v<0?'neg':'pos'}">${usd(v,d)}</span>`;
   const cell=(l,v,cls='')=>`<div class="kv ${cls}"><span>${l}</span><b>${v}</b></div>`;
-  const pair=(l1,v1,l2,v2)=>`<div class="kv2"><div><span>${l1}</span><b>${v1}</b></div><div><span>${l2}</span><b>${v2}</b></div></div>`;
+  const pair=(l1,v1,l2,v2,tone='')=>`<div class="kv2 ${tone}"><div><span>${l1}</span><b>${v1}</b></div><div><span>${l2}</span><b>${v2}</b></div></div>`;
   const dyn=!r.plan||!n0(pl.costPerAcre)?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':`<span class="${r.be!=null&&r.dynBe>r.be?'neg':'pos'}">${usd(r.dynBe,4)}</span>`;
-  return`<article class="ccard">
-    <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2>${esc(r.crop)} ${S.year}</h2></div>
+  const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)];
+  return`<article class="ccard" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
+    <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2><span class="cdot"></span>${esc(r.crop)} ${S.year}</h2></div>
       ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Update prices':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
     <div class="crow"><div class="clabel">Farm info</div><div class="ccells">
       ${cell('Acres',n1(pl.acres))}${cell('APH',n1(pl.aph))}${cell('Est. yield',n1(r.yld||null))}${cell('Production goal',n1(m.prod))}
@@ -704,9 +718,9 @@ function cropCard(f,r){
     <div class="crow"><div class="clabel">Crop values</div><div class="ccells">
       ${pair('Total bushels',n1(m.prod),'Futures price',m.fut==null?'—':usd(m.fut,4))}
       ${pair('Unsold bushels',n1(m.unsold),'Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
-      ${pair('Sold bushels',`<span class="pos">${n1(m.sold)}</span>`,'Value of sold',`<span class="pos">${usd(m.soldVal,0)}</span>`)}
-      ${pair(`Hedged bushels${m.itmBu?` <em>(${n1(m.itmBu)} puts ITM)</em>`:''}`,`<span class="warn">${n1(m.hedged)}</span>`,'Value of hedges',m.hedgeVal==null?'—':signed(m.hedgeVal,0))}
-      ${pair('Unpriced bushels',`<span class="neg">${n1(m.unpriced)}</span>`,'Value of unpriced',m.unpricedVal==null?'—':`<span class="neg">${usd(m.unpricedVal,0)}</span>`)}</div></div>
+      ${pair('Sold bushels',`<span class="pos">${n1(m.sold)}</span>`,'Value of sold',`<span class="pos">${usd(m.soldVal,0)}</span>`,'t-good')}
+      ${pair(`Hedged bushels${m.itmBu?` <em>(${n1(m.itmBu)} puts ITM)</em>`:''}`,`<span class="warn">${n1(m.hedged)}</span>`,'Value of hedges',m.hedgeVal==null?'—':signed(m.hedgeVal,0),'t-warn')}
+      ${pair('Unpriced bushels',`<span class="neg">${n1(m.unpriced)}</span>`,'Value of unpriced',m.unpricedVal==null?'—':`<span class="neg">${usd(m.unpricedVal,0)}</span>`,'t-bad')}</div></div>
     <footer class="muted">${m.full?`Profit values unsold bushels at futures ${m.basis!=null?'+ est. basis ':''}(${usd(m.mkt)})${pl.priceDate?` as of ${fmtDate(pl.priceDate)}`:''}, includes hedge value${m.premium?' less put premiums':''}.`
       :`Profit counts only priced sold bushels. Add a futures price and est. basis to value unsold bushels.`}${m.estBu?` Value of sold estimates ${n1(m.estBu)} bu whose basis or futures isn't set yet.`:''}</footer></article>`}
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
