@@ -221,7 +221,8 @@ const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
 const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
-  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
+  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null,brokerF:''};
+try{S.brokerF=localStorage.getItem('gd.brokerFilter')||''}catch(_){}
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -236,7 +237,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -565,12 +566,17 @@ function renderOnboard(){return`<form class="onboard" id="onboard"><h1>Set up yo
   <div class="dlgfoot"><button class="primary" type="submit">Start tracking</button></div></form>`}
 
 function renderClients(){
-  const ids=Object.keys(S.farms).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
+  const allIds=Object.keys(S.farms).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
+  const brokers=brokerList(),hasUnassigned=allIds.some(id=>!S.farms[id].broker);
+  // a remembered filter for a broker who no longer has farms falls back to all
+  const bf=(S.brokerF==='__none'&&hasUnassigned)||brokers.some(b=>key(b)===S.brokerF)?S.brokerF:'',_u=allIds.some(id=>!S.farms[id].broker);
+  const ids=allIds.filter(id=>!bf||(bf==='__none'?!S.farms[id].broker:key(S.farms[id].broker)===bf));
   const rows=ids.map(id=>{const f=S.farms[id];const p=position(f,S.year);
     const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0);
     const al=alerts(f,S.year);const bad=al.filter(a=>a.c==='bad').length,warn=al.filter(a=>a.c==='warn').length;
     const next=deliveries(f).find(d=>!d.st.done);
     return`<tr class="click" data-open="${esc(id)}"><td><b>${esc(f.name)}</b>${f.sample?' <span class="pill neutral">Sample</span>':''}<div class="muted" style="font-size:.78rem">${esc(p.map(r=>r.crop).join(', ')||'No crops yet')}</div></td>
+      <td>${f.broker?esc(f.broker):'<span class="muted">Unassigned</span>'}</td>
       <td class="n">${exp?bu(exp):'—'}</td><td class="n">${exp?pct(sold/exp):'—'}</td><td class="n">${exp?pct((sold+hed)/exp):'—'}</td>
       <td>${next?`${fmtDate(next.deliveryEnd)} <span class="pill ${next.st.c}">${next.st.t}</span>`:'<span class="muted">None open</span>'}</td>
       <td>${bad?`<span class="pill bad">${bad} critical</span> `:''}${warn?`<span class="pill warn">${warn} watch</span>`:''}${!bad&&!warn?'<span class="pill good">Clear</span>':''}</td>
@@ -580,7 +586,14 @@ function renderClients(){
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.downloads&&ids.length?'<button data-act="sfexport">Export for Snowflake</button>':''}<button class="primary" data-act="addclient">Add a client farm</button></div>
   <p class="muted" style="margin:4px 0 0;max-width:70ch">Farmers you share this app with appear here once they set up their farm. You can also add a client yourself and enter their records for them.</p>
-  <section class="panel"><div class="tablewrap">${ids.length?`<table><thead><tr><th>Farm</th><th class="n">Expected bu</th><th class="n">Sold</th><th class="n">Sold + hedged</th><th>Next delivery</th><th>Flags</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>`
+  ${allIds.length?`<div class="filters" style="margin-top:16px">
+    <label class="label" style="display:flex;gap:8px;align-items:center">Broker <select id="brokerSel" style="width:auto">
+      <option value="">All brokers (${allIds.length} farms)</option>
+      ${brokers.map(b=>`<option value="${esc(key(b))}" ${key(b)===bf?'selected':''}>${esc(b)} (${allIds.filter(id=>key(S.farms[id].broker)===key(b)).length})</option>`).join('')}
+      ${hasUnassigned?`<option value="__none" ${bf==='__none'?'selected':''}>Unassigned (${allIds.filter(id=>!S.farms[id].broker).length})</option>`:''}</select></label>
+    ${bf?'<button class="link" data-act="clearbroker">Show all brokers</button>':''}</div>`:''}
+  <section class="panel" style="margin-top:12px"><div class="tablewrap">${ids.length?`<table><thead><tr><th>Farm</th><th>Broker</th><th class="n">Expected bu</th><th class="n">Sold</th><th class="n">Sold + hedged</th><th>Next delivery</th><th>Flags</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>`
+    :allIds.length?`<div class="empty"><b>No farms for this broker yet</b>Assign farms with Edit details on each farm, or add a client farm.</div>`
     :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</div></section>`}
 
 function renderFarm(f){
@@ -591,7 +604,8 @@ function renderFarm(f){
   return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
     <h1>${esc(f.name)} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
-    <button class="small" data-act="rename">Rename</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
+    ${S.owner?`<span class="muted" style="font-size:.85rem">Broker: <b style="color:var(--ink)">${esc(f.broker||'Unassigned')}</b></span>`:''}
+    <button class="small" data-act="rename">${S.owner?'Edit details':'Rename'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
   <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>${body}`}
 
 function tabOverview(f){
@@ -722,7 +736,7 @@ const csvCell=v=>{if(v==null)return'';if(typeof v==='boolean')return v?'TRUE':'F
 const nz=v=>num(v);
 const SF_TABLES=[
   {name:'FARMS',file:'farms.csv',rows:(id,f)=>[{id,f}],cols:[
-    ['FARM_ID','VARCHAR',r=>r.id],['FARM_NAME','VARCHAR',r=>r.f.name],['IS_SAMPLE','BOOLEAN',r=>r.f.sample],['UPDATED_AT','TIMESTAMP_TZ',r=>r.f.updatedAt?r.f.updatedAt.replace('Z','+00:00'):null]]},
+    ['FARM_ID','VARCHAR',r=>r.id],['FARM_NAME','VARCHAR',r=>r.f.name],['BROKER','VARCHAR',r=>r.f.broker||null],['IS_SAMPLE','BOOLEAN',r=>r.f.sample],['UPDATED_AT','TIMESTAMP_TZ',r=>r.f.updatedAt?r.f.updatedAt.replace('Z','+00:00'):null]]},
   {name:'CROP_PLANS',file:'crop_plans.csv',rows:(id,f)=>f.crops.map(c=>({id,c,r:position(f,c.year).find(x=>key(x.crop)===key(c.crop))||{}})),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CROP_PLAN_ID','VARCHAR',r=>r.c.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.c.year)],['CROP','VARCHAR',r=>r.c.crop],
     ['ACRES','NUMBER(12,2)',r=>nz(r.c.acres)],['APH_YIELD','NUMBER(10,2)',r=>nz(r.c.aph)],['EXPECTED_YIELD','NUMBER(10,2)',r=>r.r.yld??null],['COST_PER_ACRE','NUMBER(12,2)',r=>nz(r.c.costPerAcre)],
@@ -917,6 +931,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.confirmRemove=false;render();return}
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
+  if(a==='clearbroker')setBrokerF('');
   if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''};render()}
   if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
     S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
@@ -927,24 +942,35 @@ document.addEventListener('click',e=>{
     const fallback=()=>{dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>Marketing summary</h2><p class="muted" style="font-size:.85rem">Select the text and copy it into an email or notes.</p><textarea id="sumtxt" rows="12" readonly>${esc(txt)}</textarea><div class="dlgfoot"><div class="sp"></div><button type="button" class="primary" data-act="close-plain">Done</button></div>`;
       $('#dlg').showModal();const ta=$('#sumtxt');ta.focus();ta.select();$('[data-act="close-plain"]').onclick=()=>$('#dlg').close()};
     try{navigator.clipboard.writeText(txt).then(()=>toast('Summary copied: paste it into an email or notes'),fallback)}catch(err){fallback()}}
-  if(a==='addclient')nameDialog('Add a client farm','',name=>{const id='client-'+uid();S.farms[id]=normalize({name});S.current=id;S.tab='overview';persist(id)});
-  if(a==='rename')nameDialog('Rename farm',S.farms[S.current].name,name=>{S.farms[S.current].name=name;persist(S.current)});
+  if(a==='addclient')nameDialog('Add a client farm','',(name,broker)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker});S.current=id;S.tab='overview';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
+  if(a==='rename'){const f=S.farms[S.current];
+    nameDialog(S.owner?'Edit farm details':'Rename farm',f.name,(name,broker)=>{f.name=name;if(broker!==undefined)f.broker=broker;persist(S.current)},S.owner?(f.broker||''):undefined)}
   if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
     const id=S.current;delete S.farms[id];S.current=null;S.confirmRemove=false;render();
     if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
 });
+const setBrokerF=v=>{S.brokerF=v;try{localStorage.setItem('gd.brokerFilter',v)}catch(_){}render()};
 document.addEventListener('change',e=>{if(e.target.id==='yearSel'){S.year=+e.target.value;render()}
+  if(e.target.id==='brokerSel')setBrokerF(e.target.value);
   const m=/^flt_(crop|type|buyer|status|month|source)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id!=='flt_q')return;S.flt.q=e.target.value;const pos=e.target.selectionStart;render();
   const el=$('#flt_q');if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(_){}}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.sale&&!e.target.closest('dialog'))showSale(e.target.dataset.sale)});
 document.addEventListener('submit',e=>{if(e.target.id!=='onboard')return;e.preventDefault();
   const name=$('#ob_name').value.trim();if(!name)return;S.farms[S.uid]=normalize({name});persist(S.uid)});
-function nameDialog(title,val,done){
-  dlgCtx=null;$('#dlgform').innerHTML=`<h2>${esc(title)}</h2><div class="fgrid"><label class="full">Farm or operation name<input id="nd_name" required value="${esc(val)}"></label></div>
+const brokerList=()=>[...new Map(Object.values(S.farms).filter(f=>f.broker).map(f=>[key(f.broker),f.broker])).values()].sort((a,b)=>a.localeCompare(b));
+// broker is shown only to the consultant (owner); farmers just edit their farm name
+function nameDialog(title,val,done,broker){
+  const withBroker=broker!==undefined;
+  dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>${esc(title)}</h2><div class="fgrid"><label class="full">Farm or operation name<input id="nd_name" required value="${esc(val)}"></label>
+    ${withBroker?`<label class="full">Assigned broker<input id="nd_broker" list="brokerlist" value="${esc(broker)}" placeholder="Leave blank if unassigned"><span class="hint">Pick an existing broker or type a new name.</span></label>
+    <datalist id="brokerlist">${brokerList().map(b=>`<option value="${esc(b)}">`).join('')}</datalist>`:''}</div>
   <div class="dlgfoot"><div class="sp"></div><button type="button" id="nd_cancel">Cancel</button><button class="primary" type="submit" id="nd_ok">Save</button></div>`;
   const dlg=$('#dlg');dlg.showModal();$('#nd_cancel').onclick=()=>dlg.close();
-  $('#nd_ok').onclick=ev=>{ev.preventDefault();const v=$('#nd_name').value.trim();if(!v)return;dlg.close();done(v)}}
+  $('#nd_ok').onclick=ev=>{ev.preventDefault();const v=$('#nd_name').value.trim();if(!v)return;
+    let b=withBroker?$('#nd_broker').value.trim():undefined;
+    if(b){const match=brokerList().find(x=>key(x)===key(b));if(match)b=match}
+    dlg.close();done(v,b)}}
 $('#dlg').addEventListener('close',()=>{dlgCtx=null;detail=null;render()});
 
 /* ---------- boot ---------- */
