@@ -144,6 +144,10 @@ tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)
 .binfacts dt i{display:inline-block;width:10px;height:10px;border-radius:2px}
 .binfacts dd{margin:0;text-align:right;font-family:var(--f-data);font-variant-numeric:tabular-nums}
 .binnote{font-size:.78rem;color:var(--warn);margin:8px 0 0}
+.binharvest{font-size:.78rem;color:var(--muted);margin:8px 0 0}
+.tag{display:inline-block;font:600 .66rem var(--f-body);letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:3px;vertical-align:1px;white-space:nowrap}
+.tag.bin{background:var(--soft);color:var(--muted)}
+.tag.harvest{background:var(--grain);color:var(--surface)}
 @media (max-width:380px){.bincard{grid-template-columns:90px minmax(0,1fr)}.binsvg{width:90px}}
 /* sales & contracts */
 .strip5{grid-template-columns:repeat(5,minmax(0,1fr))}
@@ -205,6 +209,9 @@ const HEDGE_TYPES=['Futures hedge','Put option'];
 const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
 const DELIVERABLE=['Forward contract','HTA','Basis contract','Accumulator'];
 const isAcc=s=>s.type==='Accumulator';
+const hasSource=s=>DELIVERABLE.includes(s.type)||s.type==='Cash sale';
+const fromHarvest=s=>s.source==='Harvest';
+const sourceLabel=s=>hasSource(s)?(fromHarvest(s)?'At harvest':'From bin'):'';
 // committed bushels: for an accumulator only what has accumulated so far
 const qty=s=>isAcc(s)?n0(s.accBu):n0(s.bu);
 const INS_TYPES=['RP','RP-HPE','YP','None'];
@@ -214,7 +221,7 @@ const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
 const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
-  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
+  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null};
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -298,8 +305,10 @@ function deliveries(f){
     return{...s,st}}).sort((a,b)=>(a.deliveryEnd||'').localeCompare(b.deliveryEnd||''))}
 function storage(f){
   const by={};
-  f.bins.forEach(b=>{if(!b.crop)return;const k=key(b.crop);(by[k]||(by[k]={crop:b.crop,stored:0,open:0})).stored+=n0(b.bu)});
-  f.sales.filter(s=>remaining(s)>0).forEach(s=>{const k=key(s.crop);(by[k]||(by[k]={crop:s.crop,stored:0,open:0})).open+=remaining(s)});
+  const row=(k,crop)=>by[k]||(by[k]={crop,stored:0,open:0,harvest:0});
+  f.bins.forEach(b=>{if(!b.crop)return;row(key(b.crop),b.crop).stored+=n0(b.bu)});
+  // only contracts delivered out of the bin draw on stored grain; harvest contracts go to town from the field
+  f.sales.filter(s=>remaining(s)>0).forEach(s=>{const r=row(key(s.crop),s.crop);if(fromHarvest(s))r.harvest+=remaining(s);else r.open+=remaining(s)});
   const cap=f.bins.reduce((a,b)=>a+n0(b.capacity),0),used=f.bins.reduce((a,b)=>a+n0(b.bu),0);
   return{rows:Object.values(by).map(r=>({...r,free:Math.max(0,r.stored-r.open),short:Math.max(0,r.open-r.stored)})),cap,used}}
 function alerts(f,year){
@@ -318,7 +327,7 @@ function alerts(f,year){
     if(last&&daysUntil(last)<-7)out.push({c:'neutral',t:`${s.crop} accumulator with ${s.buyer||'buyer'}: accumulated bushels last updated ${fmtDate(last)}. Update from the latest statement.`})});
   f.sales.filter(s=>+s.year===+year&&openLeg(s)).forEach(s=>out.push({c:'neutral',t:`${s.crop} ${s.type.toLowerCase()} with ${s.buyer||'buyer'} (${bu(qty(s))} bu): ${openLeg(s)} not set yet.`}));
   f.bins.forEach(b=>{if(n0(b.bu)>n0(b.capacity)&&n0(b.capacity)>0)out.push({c:'warn',t:`${b.name}: ${bu(n0(b.bu))} bu recorded is over its ${bu(n0(b.capacity))} bu capacity.`})});
-  storage(f).rows.forEach(r=>{if(r.short>0&&r.stored>0)out.push({c:'warn',t:`${r.crop}: open contracts need ${bu(r.short)} bu more than is in storage.`})});
+  storage(f).rows.forEach(r=>{if(r.short>0&&r.stored>0)out.push({c:'warn',t:`${r.crop}: contracts set to deliver from the bin need ${bu(r.short)} bu more than is in storage.`})});
   const rank={bad:0,warn:1,neutral:2};return out.sort((a,b)=>rank[a.c]-rank[b.c])}
 function years(f){const s=new Set([THIS_YEAR]);f.crops.forEach(c=>s.add(+c.year));f.sales.forEach(x=>s.add(+x.year));return[...s].filter(Boolean).sort((a,b)=>b-a)}
 
@@ -368,13 +377,14 @@ const FORMS={
     {k:'futuresMonth',label:'Futures month',type:'text',list:'months',hint:'e.g. Dec 26',show:v=>v.type!=='Cash sale'},
     {k:'buyer',label:v=>HEDGE_TYPES.includes(v.type)?'Broker':'Buyer / elevator',type:'text',list:'buyers'},
     {k:'contractNo',label:v=>HEDGE_TYPES.includes(v.type)?'Account / ticket #':'Contract #',type:'text'},
+    {k:'source',label:'Delivering from',type:'select',options:['Bin','Harvest'],hint:'Bin = stored grain. Harvest = hauled to town straight from the field.',show:hasSource},
     {k:'location',label:'Delivery location',type:'text',show:v=>DELIVERABLE.includes(v.type)},
     {k:'deliveryStart',label:'Delivery opens',type:'date',show:v=>DELIVERABLE.includes(v.type)},
     {k:'deliveryEnd',label:'Delivery closes',type:'date',show:v=>DELIVERABLE.includes(v.type)},
     {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
     {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
     {k:'notes',label:'Notes',type:'text',full:1},
-  ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false,ratePeriod:'Daily',accStart:TODAY})},
+  ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false,ratePeriod:'Daily',accStart:TODAY,source:'Bin'})},
   accupd:{title:'Accumulated bushels',fields:[
     {k:'date',label:'As of',type:'date',req:1},
     {k:'accBu',label:'Total bushels accumulated',type:'number',step:'any',req:1,hint:v=>v.sched!=null?`Schedule pace at the single rate: about ${bu(v.sched)} bu by today`:''},
@@ -507,6 +517,7 @@ function drawSale(){
     ${s.futuresMonth?fact('Futures month',esc(s.futuresMonth)):''}
     ${fact('Date made',fmtDate(s.date))}
     ${isDel?fact('Delivery window',`${fmtDate(s.deliveryStart)} – ${fmtDate(s.deliveryEnd)}`):''}
+    ${hasSource(s)?fact('Delivering from',fromHarvest(s)?'Harvest (field to town)':'Bin (stored grain)'):''}
     ${s.location?fact('Location',esc(s.location)):''}
   </dl>
   ${s.notes?`<p class="muted" style="font-size:.85rem;margin:10px 0 0">${esc(s.notes)}</p>`:''}
@@ -621,6 +632,7 @@ const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',u
 function filteredSales(f){
   const F=S.flt,q=key(F.q);
   const list=f.sales.filter(s=>+s.year===+S.year).filter(s=>(!F.crop||key(s.crop)===F.crop)
+    &&(!F.source||(hasSource(s)&&(F.source==='harvest')===fromHarvest(s)))
     &&(!F.month||(F.month==='none'?!delivMonths(s).length:delivMonths(s).includes(F.month)))&&(!F.type||s.type===F.type)&&(!F.buyer||key(s.buyer)===F.buyer)
     &&(!F.status||(F.status==='open'&&(remaining(s)>0||accActive(s)))||(F.status==='delivered'&&CONTRACT_TYPES.includes(s.type)&&remaining(s)<=0&&!accActive(s))
       ||(F.status==='unpriced'&&!!openLeg(s))||(F.status==='hedges'&&HEDGE_TYPES.includes(s.type)))
@@ -646,7 +658,7 @@ function tabSales(f){
   const all=f.sales.filter(s=>+s.year===+S.year),list=filteredSales(f);
   const opts=(arr,cur,lbl)=>`<option value="">${lbl}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`).join('');
   const crops=[...new Map(all.map(s=>[key(s.crop),s.crop]))],buyers=[...new Map(all.filter(s=>s.buyer).map(s=>[key(s.buyer),s.buyer]))];
-  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status||F.month;
+  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status||F.month||F.source;
   const months=[...new Set(all.flatMap(delivMonths))].sort(),hasNone=all.some(s=>!delivMonths(s).length);
   const sum=summarize(list,'all'),tot=sum.reduce((a,r)=>({c:a.c+r.contracted,p:a.p+r.priced,v:a.v+r.value,h:a.h+r.hedged,l:a.l+r.left}),{c:0,p:0,v:0,h:0,l:0});
   const needs=list.filter(s=>openLeg(s)).length;
@@ -661,6 +673,7 @@ function tabSales(f){
     <select id="flt_type" aria-label="Type">${opts(SALE_TYPES.map(t=>[t,t]),F.type,'All types')}</select>
     <select id="flt_buyer" aria-label="Buyer">${opts(buyers,F.buyer,'All buyers')}</select>
     <select id="flt_month" aria-label="Delivery month">${opts([...months.map(m=>[m,monthLabel(m)]),...(hasNone?[['none','No delivery date']]:[])],F.month,'All delivery months')}</select>
+    <select id="flt_source" aria-label="Delivering from">${opts([['bin','From bin'],['harvest','At harvest']],F.source,'Bin & harvest')}</select>
     <select id="flt_status" aria-label="Status">${Object.entries(STATUS_F).map(([v,l])=>`<option value="${v}" ${v===F.status?'selected':''}>${l}</option>`).join('')}</select>
     ${filtered?'<button class="link" data-act="clearflt">Clear filters</button>':''}</div>
   <div class="strip strip5">
@@ -671,12 +684,12 @@ function tabSales(f){
     <div class="stat"><div class="label">Needs pricing</div><div class="v" style="color:${needs?'var(--warn)':'inherit'}">${needs}</div><div class="s">${needs?'<button class="link" data-act="showunpriced">Show them</button>':'contracts with an open leg'}</div></div></div>`:''}
   <div class="panel" style="margin-top:16px">${list.length?`<div class="tablewrap desk"><table><thead><tr>${sh('date','Date')}${sh('crop','Crop')}<th>Type</th>${sh('buyer','Buyer')}${sh('bu','Bushels',1)}${sh('flat','Flat price',1)}${sh('delivery','Delivery')}${sh('left','Left',1)}<th>Status</th></tr></thead><tbody>
     ${list.map(s=>{const fp=flatPrice(s),isDel=DELIVERABLE.includes(s.type);
-      return`<tr class="click" data-sale="${s.id}" tabindex="0"><td style="white-space:nowrap">${fmtDate(s.date)}</td><td>${esc(s.crop)}</td><td>${esc(s.type)}${s.contractNo?`<div class="muted mono" style="font-size:.74rem">#${esc(s.contractNo)}</div>`:''}</td><td>${esc(s.buyer||'—')}</td>
+      return`<tr class="click" data-sale="${s.id}" tabindex="0"><td style="white-space:nowrap">${fmtDate(s.date)}</td><td>${esc(s.crop)}</td><td>${esc(s.type)}${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}${s.contractNo?`<div class="muted mono" style="font-size:.74rem">#${esc(s.contractNo)}</div>`:''}</td><td>${esc(s.buyer||'—')}</td>
       <td class="n">${bu(qty(s))}${isAcc(s)?`<div class="muted" style="font-size:.74rem">of ${bu(n0(s.bu))} max</div>`:''}</td><td class="n"><b>${usd(fp)}</b><div class="muted" style="font-size:.74rem">${isAcc(s)?`acc ${usd(num(s.price))} · KO ${usd(num(s.knockOut))}`:s.type==='HTA'||s.type==='Basis contract'?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:HEDGE_TYPES.includes(s.type)?`${legLabel(s,'price').toLowerCase()} ${usd(num(s.price))}`:''}</div></td>
       <td style="white-space:nowrap">${isDel&&s.deliveryEnd?`${fmtDate(s.deliveryStart)} –<br>${fmtDate(s.deliveryEnd)}`:'<span class="muted">—</span>'}</td>
       <td class="n">${isDel?(s.trackLoads?`${bu(remaining(s))}<div class="prog sm"><div style="width:${qty(s)?Math.min(100,delivered(s)/qty(s)*100):0}%"></div></div>`:bu(remaining(s))):'<span class="muted">—</span>'}</td>
       <td>${saleStatus(s)}</td></tr>`}).join('')}</tbody></table></div>
-    <ul class="cards">${list.map(s=>{const fp=flatPrice(s);return`<li data-sale="${s.id}" tabindex="0"><div class="cl"><b>${esc(s.crop)} · ${esc(s.type)}</b><span class="mono">${bu(qty(s))}${isAcc(s)?' / '+bu(n0(s.bu)):''} bu</span></div>
+    <ul class="cards">${list.map(s=>{const fp=flatPrice(s);return`<li data-sale="${s.id}" tabindex="0"><div class="cl"><b>${esc(s.crop)} · ${esc(s.type)}${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</b><span class="mono">${bu(qty(s))}${isAcc(s)?' / '+bu(n0(s.bu)):''} bu</span></div>
       <div class="cl muted"><span>${esc(s.buyer||'—')} · ${fmtDate(s.date)}</span><span class="mono">${fp!=null?usd(fp):''}</span></div>
       <div class="cl"><span>${saleStatus(s)}</span>${DELIVERABLE.includes(s.type)&&remaining(s)>0?`<span class="muted mono" style="font-size:.8rem">${bu(remaining(s))} left</span>`:''}</div></li>`}).join('')}</ul>`
     :all.length?`<div class="empty"><b>No contracts match these filters</b><button class="link" data-act="clearflt">Clear filters</button></div>`
@@ -687,7 +700,7 @@ function tabSales(f){
   <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Hedges and puts protect price but aren't sales, so they're left out of contracted and priced totals. Averages are weighted by bushels.</p></section>`}
 
 function csvSales(f){
-  const cols=[['Date','date'],['Crop year','year'],['Crop','crop'],['Type','type'],['Contract #','contractNo'],['Buyer/broker','buyer'],['Location','location'],['Bushels',s=>qty(s)],['Delivered bu',s=>delivered(s)],['Left to deliver',s=>remaining(s)],
+  const cols=[['Date','date'],['Crop year','year'],['Crop','crop'],['Type','type'],['Contract #','contractNo'],['Buyer/broker','buyer'],['Location','location'],['Delivering from',s=>hasSource(s)?(fromHarvest(s)?'Harvest':'Bin'):''],['Bushels',s=>qty(s)],['Delivered bu',s=>delivered(s)],['Left to deliver',s=>remaining(s)],
     ['Futures month','futuresMonth'],['Futures/price','price'],['Basis','basis'],['Flat price',s=>flatPrice(s)??''],['Priced value',s=>{const fp=flatPrice(s);return fp==null?'':(fp*qty(s)).toFixed(2)}],['Delivery opens','deliveryStart'],['Delivery closes','deliveryEnd'],['Status',s=>HEDGE_TYPES.includes(s.type)?'Hedge':isAcc(s)?accState(s).t:remaining(s)>0?'Open':'Delivered'],
     ['Max bushels (accumulator)',s=>isAcc(s)?n0(s.bu):''],['Knock-out',s=>isAcc(s)?s.knockOut:''],['Accumulation rate',s=>isAcc(s)&&num(s.rate)?`${s.rate} bu/${s.ratePeriod==='Weekly'?'week':'day'}`:''],
     ['Accumulation start',s=>isAcc(s)?s.accStart:''],['Expiration',s=>isAcc(s)?s.expiration:''],['Days until expiration',s=>isAcc(s)&&s.expiration?daysUntil(s.expiration):''],['Notes','notes']];
@@ -720,7 +733,7 @@ const SF_TABLES=[
   {name:'CONTRACTS',file:'contracts.csv',rows:(id,f)=>f.sales.map(s=>({id,s,fp:flatPrice(s)})),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.s.year)],['CROP','VARCHAR',r=>r.s.crop],
     ['CONTRACT_TYPE','VARCHAR',r=>r.s.type],['IS_HEDGE','BOOLEAN',r=>HEDGE_TYPES.includes(r.s.type)],['DATE_MADE','DATE',r=>r.s.date||null],
-    ['CONTRACT_NO','VARCHAR',r=>r.s.contractNo||null],['BUYER','VARCHAR',r=>r.s.buyer||null],['DELIVERY_LOCATION','VARCHAR',r=>r.s.location||null],
+    ['CONTRACT_NO','VARCHAR',r=>r.s.contractNo||null],['BUYER','VARCHAR',r=>r.s.buyer||null],['DELIVERY_LOCATION','VARCHAR',r=>r.s.location||null],['DELIVERY_SOURCE','VARCHAR',r=>hasSource(r.s)?(fromHarvest(r.s)?'Harvest':'Bin'):null],
     ['BUSHELS','NUMBER(14,2)',r=>qty(r.s)],['FUTURES_MONTH','VARCHAR',r=>r.s.futuresMonth||null],['FUTURES_OR_PRICE','NUMBER(10,4)',r=>nz(r.s.price)],
     ['BASIS','NUMBER(10,4)',r=>nz(r.s.basis)],['FLAT_PRICE','NUMBER(10,4)',r=>r.fp==null?null:+r.fp.toFixed(4)],['PRICED_VALUE','NUMBER(16,2)',r=>r.fp==null?null:+(r.fp*qty(r.s)).toFixed(2)],
     ['PREMIUM','NUMBER(10,4)',r=>nz(r.s.premium)],['NEEDS_PRICING','BOOLEAN',r=>!!openLeg(r.s)],['DELIVERY_START','DATE',r=>r.s.deliveryStart||null],['DELIVERY_END','DATE',r=>r.s.deliveryEnd||null],
@@ -835,7 +848,8 @@ function binCards(f){
       <dl class="binfacts"><dt><i style="background:var(--accent)"></i>Sold</dt><dd>${bu(b.sold)} bu</dd><dd class="muted">${b.stored?pct(b.sold/b.stored):'—'}</dd>
         <dt><i style="background:var(--grain)"></i>Unsold</dt><dd>${bu(b.unsold)} bu</dd><dd class="muted">${b.stored?pct(b.unsold/b.stored):'—'}</dd>
         <dt><i style="background:var(--soft);border:1px solid var(--line)"></i>Empty</dt><dd>${bu(b.empty)} bu</dd><dd></dd></dl>
-      ${b.short>0?`<p class="binnote">Open contracts call for ${bu(b.short)} bu more than is in storage.</p>`:''}</div></div>`).join('')}</div>
+      ${b.harvest>0?`<p class="binharvest"><span class="tag harvest">At harvest</span> ${bu(b.harvest)} bu more sold to go to town straight from the field</p>`:''}
+      ${b.short>0?`<p class="binnote">Contracts set to deliver from the bin call for ${bu(b.short)} bu more than is in storage. Change some to Harvest if they'll be hauled from the field.</p>`:''}</div></div>`).join('')}</div>
   <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Each picture combines every bin holding that crop. "Sold" is grain already committed to open contracts and not yet delivered, so it doesn't matter which bin it comes out of.</p></section>`}
 function tabStorage(f){
   const st=storage(f);
@@ -845,8 +859,8 @@ function tabStorage(f){
       <td class="n">${bu(n0(b.bu))}</td><td class="n">${bu(n0(b.capacity))}</td><td><div class="binbar"><div class="${fill>1?'over':''}" style="width:${Math.min(100,fill*100)}%"></div></div><span class="mono muted" style="font-size:.75rem">${pct(fill)}</span></td>
       <td class="n">${num(b.moisture)==null?'—':num(b.moisture).toFixed(1)+'%'}</td><td style="white-space:nowrap">${fmtDate(b.checked)}</td><td><button class="small" data-edit="bin" data-id="${b.id}">Edit</button></td></tr>`}).join('')}</tbody></table>`
     :`<div class="empty"><b>No bins added</b>Add each bin, bag or storage site with its capacity and what's in it.</div>`}</div></section>
-  <section><div class="sechead"><h2>Stored grain vs. open contracts</h2></div><div class="panel tablewrap">${st.rows.length?`<table><thead><tr><th>Crop</th><th class="n">In storage</th><th class="n">Committed to open contracts</th><th class="n">Uncommitted in storage</th><th class="n">Short to fill</th></tr></thead><tbody>
-    ${st.rows.map(r=>`<tr><td><b>${esc(r.crop)}</b></td><td class="n">${bu(r.stored)}</td><td class="n">${bu(r.open)}</td><td class="n">${bu(r.free)}</td><td class="n" style="color:${r.short?'var(--warn)':'inherit'}">${r.short?bu(r.short):'—'}</td></tr>`).join('')}</tbody></table>`
+  <section><div class="sechead"><h2>Stored grain vs. open contracts</h2></div><div class="panel tablewrap">${st.rows.length?`<table><thead><tr><th>Crop</th><th class="n">In storage</th><th class="n">Sold from bin, not delivered</th><th class="n">Uncommitted in storage</th><th class="n">Short to fill</th><th class="n">Sold for harvest delivery</th></tr></thead><tbody>
+    ${st.rows.map(r=>`<tr><td><b>${esc(r.crop)}</b></td><td class="n">${bu(r.stored)}</td><td class="n">${bu(r.open)}</td><td class="n">${bu(r.free)}</td><td class="n" style="color:${r.short?'var(--warn)':'inherit'}">${r.short?bu(r.short):'—'}</td><td class="n">${r.harvest?bu(r.harvest):'—'}</td></tr>`).join('')}</tbody></table>`
     :`<div class="empty">Add bins and open contracts to compare stored grain against what's committed.</div>`}</div></section>`}
 
 function dynCell(r){
@@ -899,7 +913,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.confirmRemove=false;render();return}
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
-  if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:''};render()}
+  if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''};render()}
   if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
     S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
   if(a==='showunpriced'){S.flt.status='unpriced';render()}
@@ -916,7 +930,7 @@ document.addEventListener('click',e=>{
     if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
 });
 document.addEventListener('change',e=>{if(e.target.id==='yearSel'){S.year=+e.target.value;render()}
-  const m=/^flt_(crop|type|buyer|status|month)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
+  const m=/^flt_(crop|type|buyer|status|month|source)$/.exec(e.target.id);if(m){S.flt[m[1]]=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id!=='flt_q')return;S.flt.q=e.target.value;const pos=e.target.selectionStart;render();
   const el=$('#flt_q');if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(_){}}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.sale&&!e.target.closest('dialog'))showSale(e.target.dataset.sale)});
