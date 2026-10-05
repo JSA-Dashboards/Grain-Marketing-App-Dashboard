@@ -127,6 +127,24 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* storage bins */
+.bingrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.bincard{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:center;padding:14px 16px}
+.binsvg{width:120px;height:auto;display:block}
+.binsvg .roof{fill:var(--soft);stroke:var(--ink);stroke-width:1.5;stroke-linejoin:round}
+.binsvg .shell{fill:var(--soft)}
+.binsvg .outline{fill:none;stroke:var(--ink);stroke-width:1.5}
+.binsvg .fill-sold{fill:var(--accent)} .binsvg .fill-unsold{fill:var(--grain)}
+.binsvg .ribs line{stroke:var(--surface);stroke-width:1;opacity:.45}
+.binsvg .ground{stroke:var(--muted);stroke-width:1.5}
+.binsvg rect[class^="fill"]:hover{opacity:.85}
+.bininfo{min-width:0}
+.binfacts{display:grid;grid-template-columns:auto auto auto;gap:4px 12px;margin:10px 0 0;font-size:.85rem;align-items:center}
+.binfacts dt{color:var(--muted);display:flex;align-items:center;gap:6px}
+.binfacts dt i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.binfacts dd{margin:0;text-align:right;font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.binnote{font-size:.78rem;color:var(--warn);margin:8px 0 0}
+@media (max-width:380px){.bincard{grid-template-columns:90px minmax(0,1fr)}.binsvg{width:90px}}
 /* sales & contracts */
 .strip5{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:900px){.strip5{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -787,9 +805,41 @@ function makeZip(files){
   e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,size,true);e.setUint32(16,off,true);
   return new Blob([...parts,...central,e],{type:'application/zip'})}
 
+// one combined bin per crop: capacity = all bins holding that crop; fill split into sold (open contracts) and unsold
+function cropBins(f){
+  const st=storage(f);
+  return st.rows.filter(r=>r.stored>0||f.bins.some(b=>key(b.crop)===key(r.crop))).map(r=>{
+    const cap=Math.max(f.bins.filter(b=>key(b.crop)===key(r.crop)).reduce((a,b)=>a+n0(b.capacity),0),r.stored)||1;
+    const sold=Math.min(r.stored,r.open);return{...r,cap,sold,unsold:r.stored-sold,empty:Math.max(0,cap-r.stored)}})}
+function binSVG(b){
+  const x0=22,x1=138,yT=58,yB=184,H=yB-yT,W=x1-x0;
+  const hs=b.sold/b.cap*H,hu=b.unsold/b.cap*H,gap=hs>0&&hu>0?2:0;
+  const ribs=Array.from({length:Math.floor(H/9)},(_,i)=>`<line x1="${x0}" x2="${x1}" y1="${yB-9*(i+1)}" y2="${yB-9*(i+1)}"/>`).join('');
+  const lbl=`${b.crop}: ${bu(b.stored)} bu stored of ${bu(b.cap)} bu capacity; ${bu(b.sold)} sold, ${bu(b.unsold)} unsold`;
+  return`<svg viewBox="0 0 160 196" class="binsvg" role="img" aria-label="${esc(lbl)}">
+    <defs><clipPath id="clip-${esc(key(b.crop))}"><rect x="${x0}" y="${yT}" width="${W}" height="${H}"/></clipPath></defs>
+    <path d="M14 ${yT} L80 22 L146 ${yT} Z" class="roof"/><rect x="72" y="14" width="16" height="9" rx="2" class="roof"/>
+    <rect x="${x0}" y="${yT}" width="${W}" height="${H}" class="shell"/>
+    <g clip-path="url(#clip-${esc(key(b.crop))})">
+      ${hs>0?`<rect class="fill-sold" x="${x0}" y="${(yB-hs).toFixed(1)}" width="${W}" height="${hs.toFixed(1)}"><title>Sold, waiting to deliver: ${bu(b.sold)} bu</title></rect>`:''}
+      ${hu>0?`<rect class="fill-unsold" x="${x0}" y="${(yB-hs-hu).toFixed(1)}" width="${W}" height="${Math.max(0,hu-gap).toFixed(1)}"><title>Unsold: ${bu(b.unsold)} bu</title></rect>`:''}
+      <g class="ribs">${ribs}</g></g>
+    <rect x="${x0}" y="${yT}" width="${W}" height="${H}" class="outline"/>
+    <line x1="10" x2="150" y1="${yB+1}" y2="${yB+1}" class="ground"/></svg>`}
+function binCards(f){
+  const list=cropBins(f);if(!list.length)return'';
+  return`<section><div class="sechead"><h2>Grain in storage by crop</h2><div class="sp"></div>
+    <div class="legend" style="padding:0"><span><i style="background:var(--accent)"></i>Sold, not yet delivered</span><span><i style="background:var(--grain)"></i>Unsold</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Empty space</span></div></div>
+  <div class="bingrid">${list.map(b=>`<div class="panel bincard">${binSVG(b)}
+    <div class="bininfo"><h3>${esc(b.crop)}</h3><div class="muted mono" style="font-size:.78rem">${bu(b.stored)} of ${bu(b.cap)} bu · ${pct(b.stored/b.cap)} full</div>
+      <dl class="binfacts"><dt><i style="background:var(--accent)"></i>Sold</dt><dd>${bu(b.sold)} bu</dd><dd class="muted">${b.stored?pct(b.sold/b.stored):'—'}</dd>
+        <dt><i style="background:var(--grain)"></i>Unsold</dt><dd>${bu(b.unsold)} bu</dd><dd class="muted">${b.stored?pct(b.unsold/b.stored):'—'}</dd>
+        <dt><i style="background:var(--soft);border:1px solid var(--line)"></i>Empty</dt><dd>${bu(b.empty)} bu</dd><dd></dd></dl>
+      ${b.short>0?`<p class="binnote">Open contracts call for ${bu(b.short)} bu more than is in storage.</p>`:''}</div></div>`).join('')}</div>
+  <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Each picture combines every bin holding that crop. "Sold" is grain already committed to open contracts and not yet delivered, so it doesn't matter which bin it comes out of.</p></section>`}
 function tabStorage(f){
   const st=storage(f);
-  return`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
+  return binCards(f)+`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
   <div class="panel tablewrap">${f.bins.length?`<table><thead><tr><th>Bin</th><th>Crop</th><th class="n">Bushels</th><th class="n">Capacity</th><th>Fill</th><th class="n">Moisture</th><th>Checked</th><th></th></tr></thead><tbody>
     ${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0;return`<tr class="click" data-edit="bin" data-id="${b.id}"><td><b>${esc(b.name)}</b><div class="muted" style="font-size:.78rem">${esc(b.location||'')}</div></td><td>${esc(b.crop||'Empty')}</td>
       <td class="n">${bu(n0(b.bu))}</td><td class="n">${bu(n0(b.capacity))}</td><td><div class="binbar"><div class="${fill>1?'over':''}" style="width:${Math.min(100,fill*100)}%"></div></div><span class="mono muted" style="font-size:.75rem">${pct(fill)}</span></td>
