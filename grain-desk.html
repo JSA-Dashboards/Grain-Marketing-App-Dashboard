@@ -585,9 +585,9 @@ function renderClients(){
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
-  const tabs=[['overview','Overview'],['production','Production'],['sales','Sales & contracts'],['storage','Storage'],['insurance','Crop insurance']];
+  const tabs=[['overview','Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['storage','Storage'],['insurance','Crop insurance']];
   if(!tabs.some(t=>t[0]===S.tab))S.tab='overview';
-  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,insurance:tabInsurance}[S.tab](f);
+  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,insurance:tabInsurance}[S.tab](f);
   return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
     <h1>${esc(f.name)} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
@@ -818,6 +818,10 @@ function makeZip(files){
   e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,size,true);e.setUint32(16,off,true);
   return new Blob([...parts,...central,e],{type:'application/zip'})}
 
+// placeholder until cash bids / futures quotes are built
+function tabQuotes(){
+  return`<section><div class="sechead"><h2>Quotes</h2></div>
+  <div class="panel"><div class="empty"><b>Coming soon</b>This is where cash bids and futures quotes for corn, soybeans and wheat will go.</div></div></section>`}
 // one combined bin per crop: capacity = all bins holding that crop; fill split into sold (open contracts) and unsold
 function cropBins(f){
   const st=storage(f);
