@@ -1051,7 +1051,10 @@ function snowflakeSQL(){
 -- track marketing progress over time. The *_CURRENT views show the latest export.
 
 -- 1) ONE-TIME SETUP ---------------------------------------------------------
-CREATE DATABASE IF NOT EXISTS GRAIN_DESK;
+-- Your admin creates the GRAIN_DESK database and the GRAIN_DESK_WH warehouse
+-- (XSMALL, auto-suspend 60s) and grants them to your role.
+USE WAREHOUSE GRAIN_DESK_WH;
+USE DATABASE GRAIN_DESK;
 CREATE SCHEMA IF NOT EXISTS GRAIN_DESK.MARKETING;
 USE SCHEMA GRAIN_DESK.MARKETING;
 
