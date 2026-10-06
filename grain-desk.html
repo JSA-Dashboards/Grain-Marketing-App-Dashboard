@@ -262,10 +262,13 @@ dialog{max-height:calc(100vh - 32px);overflow:auto}
 
 <script>
 // 'Put option' is the stored value for Premium Plus: a sold call that adds premium to the contract and doubles the bushels if futures settle at or above the strike
-const CONTRACT_TYPES=['Cash sale','Forward contract','HTA','Basis contract','Accumulator','Put option'];
+const CONTRACT_TYPES=['Cash sale','Forward contract','HTA','Basis contract','Accumulator','Put option','Min/Max'];
 const HEDGE_TYPES=['Futures hedge'];
 const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
-const DELIVERABLE=['Forward contract','HTA','Basis contract','Accumulator','Put option'];
+const DELIVERABLE=['Forward contract','HTA','Basis contract','Accumulator','Put option','Min/Max'];
+// Min/Max: futures price ends up held between a floor and a ceiling, less any net fee
+const isMM=s=>s.type==='Min/Max';
+const mmClamp=(s,v)=>v==null?null:Math.min(Math.max(v,num(s.minPrice)??-Infinity),num(s.maxPrice)??Infinity);
 const isPP=s=>s.type==='Put option';
 const ppDbl=s=>num(s.dblBu)??n0(s.bu);
 const ppDoubled=s=>isPP(s)&&s.ppOutcome==='Doubled up';
@@ -310,6 +313,7 @@ function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast
 function flatPrice(s){const p=num(s.price),b=num(s.basis);
   if(s.type==='Cash sale'||s.type==='Forward contract')return p;
   if(s.type==='HTA'||s.type==='Basis contract'||isAcc(s))return(p!=null&&b!=null)?p+b:null;
+  if(isMM(s))return(p!=null&&b!=null)?mmClamp(s,p)-n0(s.mmFee)+b:null;
   // Premium Plus: base bushels at contract price + premium; doubled bushels at the strike
   if(isPP(s)){if(p==null||b==null)return null;const base=n0(s.bu),d=ppDoubled(s)?ppDbl(s):0,st=num(s.strike)??p;
     return(base*(p+n0(s.premium))+d*st)/((base+d)||1)+b}
@@ -341,6 +345,7 @@ function openLeg(s){
   if(s.type==='Basis contract'&&num(s.price)==null)return'futures';
   if(isAcc(s)&&qty(s)>0&&num(s.basis)==null)return'basis';
   if(isPP(s)&&num(s.basis)==null)return'basis';
+  if(isMM(s))return num(s.price)==null?'futures':num(s.basis)==null?'basis':null;
   return null}
 function ppState(s){
   const days=s.ppExpiration?daysUntil(s.ppExpiration):null;
@@ -350,7 +355,12 @@ function ppState(s){
   return{t:days==null?'Double-up pending':`Double-up pending · ${days}d`,c:days!=null&&days<=14?'warn':'neutral',days}}
 // would the double-up trigger at this futures price?
 const ppTriggers=(s,fut)=>fut!=null&&num(s.strike)!=null&&fut>=num(s.strike);
-const legLabel=(s,leg)=>leg==='basis'?'Basis':isPP(s)?'Contract futures':isAcc(s)?'Accumulation level':(s.type==='Cash sale'||s.type==='Forward contract')?'Flat price':'Futures';
+function mmState(s){
+  const days=s.mmExpiration?daysUntil(s.mmExpiration):null;
+  if(num(s.price)!=null)return{t:'Final futures set',c:'neutral',days};
+  if(days!=null&&days<0)return{t:'Expired · set final futures',c:'bad',days};
+  return{t:days==null?'Range open':`Range open · ${days}d`,c:days!=null&&days<=14?'warn':'neutral',days}}
+const legLabel=(s,leg)=>leg==='basis'?'Basis':isPP(s)?'Contract futures':isMM(s)?'Final futures':isAcc(s)?'Accumulation level':(s.type==='Cash sale'||s.type==='Forward contract')?'Flat price':'Futures';
 const fmtBasis=v=>num(v)==null?'—':(num(v)<0?'−':'+')+Math.abs(num(v)).toFixed(2);
 function position(f,year){
   const rows={};
@@ -400,6 +410,9 @@ function alerts(f,year){
   });
   deliveries(f).forEach(d=>{if(d.st.c==='bad')out.push({c:'bad',t:`${d.crop} ${tl(d.type).toLowerCase()} to ${d.buyer||'buyer'}: ${bu(remaining(d))} bu still undelivered; window closed ${fmtDate(d.deliveryEnd)}.`});
     else if(d.st.c==='warn')out.push({c:'warn',t:`${d.crop} delivery to ${d.buyer||'buyer'} (${bu(remaining(d))} bu left) closes ${fmtDate(d.deliveryEnd)}.`})});
+  f.sales.filter(s=>+s.year===+year&&isMM(s)&&num(s.price)==null&&s.mmExpiration).forEach(s=>{const d=daysUntil(s.mmExpiration);
+    if(d<0)out.push({c:'bad',t:`${s.crop} Min/Max with ${s.buyer||'buyer'} expired ${fmtDate(s.mmExpiration)}. Enter the final futures price.`});
+    else if(d<=14)out.push({c:'warn',t:`${s.crop} Min/Max with ${s.buyer||'buyer'} expires ${fmtDate(s.mmExpiration)} (${d} days). Range ${usd(num(s.minPrice))}–${usd(num(s.maxPrice))}.`})});
   f.sales.filter(s=>+s.year===+year&&isPP(s)&&!s.ppOutcome).forEach(s=>{
     const d=s.ppExpiration?daysUntil(s.ppExpiration):null,pl=f.crops.find(c=>+c.year===+year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null;
     if(d!=null&&d<0)out.push({c:'bad',t:`${s.crop} Premium Plus with ${s.buyer||'buyer'} expired ${fmtDate(s.ppExpiration)}. Record whether it doubled up.`});
@@ -451,7 +464,11 @@ const FORMS={
     {k:'crop',label:'Crop',type:'select',options:v=>SALE_CROPS.includes(v.crop)||!v.crop?SALE_CROPS:[...SALE_CROPS,v.crop]},
     {k:'year',label:'Crop year',type:'number',req:1},
     {k:'bu',label:v=>isAcc(v)?'Maximum bushels':isPP(v)?'Base bushels':'Bushels',type:'number',step:'any',req:1,hint:v=>isAcc(v)?'Total the contract can accumulate, including any double-up':''},
-    {k:'price',label:v=>({'Cash sale':'Flat price ($/bu)','Forward contract':'Flat price ($/bu)','HTA':'Futures price ($/bu)','Basis contract':'Futures price, once set','Accumulator':'Accumulation level (futures $/bu)','Futures hedge':'Futures sell price','Put option':'Contract futures price ($/bu)'}[v.type]),type:'number',step:'any',hint:v=>isAcc(v)?'Futures price each accumulated bushel is sold at':isPP(v)?'Futures level of the base contract, before premium':''},
+    {k:'price',label:v=>({'Cash sale':'Flat price ($/bu)','Forward contract':'Flat price ($/bu)','HTA':'Futures price ($/bu)','Basis contract':'Futures price, once set','Accumulator':'Accumulation level (futures $/bu)','Futures hedge':'Futures sell price','Put option':'Contract futures price ($/bu)','Min/Max':'Final futures price, once set'}[v.type]),type:'number',step:'any',hint:v=>isAcc(v)?'Futures price each accumulated bushel is sold at':isPP(v)?'Futures level of the base contract, before premium':isMM(v)?'Futures at expiration. The app holds it between the min and max.':''},
+    {k:'minPrice',label:'Minimum (floor) futures ($/bu)',type:'number',step:'any',req:1,show:isMM},
+    {k:'maxPrice',label:'Maximum (ceiling) futures ($/bu)',type:'number',step:'any',req:1,show:isMM},
+    {k:'mmFee',label:'Net cost / fee ($/bu)',type:'number',step:'any',hint:'Taken off the final price. Use a negative number for a net credit. Leave blank if zero.',show:isMM},
+    {k:'mmExpiration',label:'Pricing / expiration date',type:'date',show:isMM,hint:v=>v.mmExpiration?(daysUntil(v.mmExpiration)>=0?`${daysUntil(v.mmExpiration)} days until expiration`:`Expired ${-daysUntil(v.mmExpiration)} days ago`):''},
     {k:'premium',label:'Premium received ($/bu)',type:'number',step:'any',hint:'Added to the contract price on the base bushels',show:isPP},
     {k:'strike',label:'Call strike (futures $/bu)',type:'number',step:'any',hint:'Doubles up if futures settle at or above this at expiration',show:isPP},
     {k:'ppExpiration',label:'Option expiration',type:'date',show:isPP,hint:v=>v.ppExpiration?(daysUntil(v.ppExpiration)>=0?`${daysUntil(v.ppExpiration)} days until expiration`:`Expired ${-daysUntil(v.ppExpiration)} days ago`):''},
@@ -466,7 +483,7 @@ const FORMS={
     {k:'accBu',label:'Bushels accumulated so far',type:'number',step:'any',hint:'From your latest elevator statement. Only these count as sold.',show:isAcc},
     {k:'knockedOut',label:'Knocked out',type:'check',hint:'Futures settled at or below the knock-out level and accumulation stopped',show:isAcc},
     {k:'knockOutDate',label:'Knock-out date',type:'date',show:v=>isAcc(v)&&v.knockedOut},
-    {k:'basis',label:v=>v.type==='HTA'||isAcc(v)||isPP(v)?'Basis, once set ($/bu)':'Basis ($/bu)',type:'number',step:'any',hint:'Negative under futures, e.g. -0.30',show:v=>v.type==='HTA'||v.type==='Basis contract'||isAcc(v)||isPP(v)},
+    {k:'basis',label:v=>v.type==='HTA'||isAcc(v)||isPP(v)||isMM(v)?'Basis, once set ($/bu)':'Basis ($/bu)',type:'number',step:'any',hint:'Negative under futures, e.g. -0.30',show:v=>v.type==='HTA'||v.type==='Basis contract'||isAcc(v)||isPP(v)||isMM(v)},
     {k:'futuresMonth',label:'Futures month',type:'text',list:'months',hint:'e.g. Dec 26',show:v=>v.type!=='Cash sale'},
     {k:'buyer',label:v=>HEDGE_TYPES.includes(v.type)?'Broker':'Buyer / elevator',type:'text',list:'buyers'},
     {k:'contractNo',label:v=>HEDGE_TYPES.includes(v.type)?'Account / ticket #':'Contract #',type:'text'},
@@ -548,7 +565,7 @@ function drawForm(){
   <button type="button" data-act="cancel">Cancel</button><button class="primary" type="submit">Save</button></div>`}
 $('#dlgform').addEventListener('input',e=>{
   const t=e.target;if(!t.name||!dlgCtx)return;dlgCtx.vals[t.name]=t.type==='checkbox'?t.checked:t.value;
-  if(t.tagName==='SELECT'||t.type==='checkbox'||t.name==='expiration'||t.name==='ppExpiration'){drawForm();const el=$('#f_'+t.name);el&&el.focus()}});
+  if(t.tagName==='SELECT'||t.type==='checkbox'||t.name==='expiration'||t.name==='ppExpiration'||t.name==='mmExpiration'){drawForm();const el=$('#f_'+t.name);el&&el.focus()}});
 $('#dlgform').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;const act=a.dataset.act;
   if(dlgCtx){
@@ -602,7 +619,7 @@ function drawSale(){
   $('#dlgform').innerHTML=`<div class="label">${esc(s.year)} crop · ${esc(tl(s.type))}${s.contractNo?' · #'+esc(s.contractNo):''}</div>
   <h2 style="margin-top:2px">${isAcc(s)?`${bu(qty(s))} of ${bu(n0(s.bu))} bu`:bu(qty(s))+' bu'} ${esc(s.crop)} ${isHedge?'via':'to'} ${esc(s.buyer||'—')}</h2>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${st?`<span class="pill ${st.c}">${st.t}</span>`:''}${leg?`<span class="pill warn">${leg==='basis'?'Basis':'Futures'} not set</span>`:''}${isHedge?'<span class="pill warn">Hedge, not a sale</span>':''}${fp!=null?'<span class="pill good">Fully priced</span>':''}</div>
-  ${leg?`<div class="callout"><span>${leg==='basis'?'The futures price is locked; the basis is still open.':'The basis is locked; the futures price is still open.'}</span><button type="button" class="primary small" data-act="sale-price" data-leg="${leg}">Set ${leg}</button></div>`:''}
+  ${leg?`<div class="callout"><span>${isMM(s)&&leg==='futures'?`Final futures isn't set yet. It will land between ${usd(num(s.minPrice))} and ${usd(num(s.maxPrice))}.`:leg==='basis'?'The futures price is locked; the basis is still open.':'The basis is locked; the futures price is still open.'}</span><button type="button" class="primary small" data-act="sale-price" data-leg="${leg}">Set ${leg}</button></div>`:''}
   <dl class="facts">
     ${fact(legLabel(s,'price'),usd(num(s.price)))}
     ${s.type==='HTA'||s.type==='Basis contract'||isAcc(s)||isPP(s)?fact('Basis',fmtBasis(s.basis)):''}
@@ -615,6 +632,14 @@ function drawSale(){
     ${s.location?fact('Location',esc(s.location)):''}
   </dl>
   ${s.notes?`<p class="muted" style="font-size:.85rem;margin:10px 0 0">${esc(s.notes)}</p>`:''}
+  ${isMM(s)?(()=>{const ms=mmState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null,fin=num(s.price);
+    const est=fut!=null?mmClamp(s,fut)-n0(s.mmFee):null;
+    return`<h3 class="dsub">Min/Max <span class="pill ${ms.c}" style="margin-left:6px;vertical-align:1px">${esc(ms.t)}</span></h3>
+    <dl class="facts">${fact('Minimum (floor)',usd(num(s.minPrice)))}${fact('Maximum (ceiling)',usd(num(s.maxPrice)))}${fact('Net cost / fee',num(s.mmFee)?usd(num(s.mmFee)):'None')}
+      ${fact('Expiration',fmtDate(s.mmExpiration))}${fact('Days until expiration',ms.days==null?'—':ms.days>=0?String(ms.days):'Expired')}
+      ${fin!=null?fact('Final futures',`${usd(fin)} → ${usd(mmClamp(s,fin))}`):fact("Est. at today's futures",est!=null?`${usd(est)} <span class="muted">(fut ${usd(fut)})</span>`:'—')}
+      ${fact('Futures range after fee',num(s.minPrice)!=null&&num(s.maxPrice)!=null?`${usd(num(s.minPrice)-n0(s.mmFee))} – ${usd(num(s.maxPrice)-n0(s.mmFee))}`:'—')}</dl>
+    <p class="muted" style="font-size:.78rem;margin:8px 0 0">Bushels count as sold now. The futures part is held between the min and max at expiration, less the fee, then basis is added. Until the final futures is set, Crop Overview values it at today's futures held inside the range.</p>`})():''}
   ${isPP(s)?(()=>{const ps=ppState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null,trig=ps.t.startsWith('Double-up pending')&&ppTriggers(s,fut);
     return`<h3 class="dsub">Premium Plus <span class="pill ${ps.c}" style="margin-left:6px;vertical-align:1px">${esc(ps.t)}</span></h3>
     <dl class="facts">${fact('Contract futures',usd(num(s.price)))}${fact('Premium received',num(s.premium)!=null?'+'+usd(num(s.premium)):'—')}
@@ -729,7 +754,7 @@ function cropMarket(f,r){
   // sold value: priced contracts at their flat price; open legs estimated from today's futures / est. basis
   let soldVal=0,estBu=0,missBu=0;
   sales.filter(s=>CONTRACT_TYPES.includes(s.type)).forEach(s=>{const q=qty(s),fp=flatPrice(s);if(fp!=null){soldVal+=q*fp;return}
-    const fu=num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
+    const fu=isMM(s)?(mmClamp(s,num(s.price)??fut)==null?null:mmClamp(s,num(s.price)??fut)-n0(s.mmFee)):num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
   let hedgeVal=null,itmBu=0,premium=0;
   // pending Premium Plus double-ups that would trigger at today's futures
   sales.filter(s=>isPP(s)&&!s.ppOutcome&&ppTriggers(s,fut)).forEach(s=>itmBu+=ppDbl(s));
@@ -852,7 +877,7 @@ function summarize(list,by){
 function saleStatus(s){
   if(HEDGE_TYPES.includes(s.type))return`<span class="pill neutral">Hedge</span>`;
   const leg=openLeg(s);const d=DELIVERABLE.includes(s.type)&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
-  const a=isAcc(s)?accState(s):isPP(s)?ppState(s):null;
+  const a=isAcc(s)?accState(s):isPP(s)?ppState(s):isMM(s)&&num(s.price)==null?mmState(s):null;
   return(a?`<span class="pill ${a.c}">${esc(a.t)}</span> `:'')+(leg?`<span class="pill warn">Set ${leg}</span> `:'')+(d?`<span class="pill ${d.c}">${d.t}</span>`:s.type==='Cash sale'?'<span class="pill neutral">Delivered</span>':'')}
 function tabSales(f){
   const all=f.sales.filter(s=>+s.year===+S.year),list=filteredSales(f);
@@ -885,7 +910,7 @@ function tabSales(f){
   <div class="panel" style="margin-top:16px">${list.length?`<div class="tablewrap desk"><table><thead><tr>${sh('date','Date')}${sh('crop','Crop')}<th>Type</th>${sh('buyer','Buyer')}${sh('bu','Bushels',1)}${sh('flat','Flat price',1)}${sh('delivery','Delivery')}${sh('left','Left',1)}<th>Status</th></tr></thead><tbody>
     ${list.map(s=>{const fp=flatPrice(s),isDel=DELIVERABLE.includes(s.type);
       return`<tr class="click" data-sale="${s.id}" tabindex="0"><td style="white-space:nowrap">${fmtDate(s.date)}</td><td>${esc(s.crop)}</td><td>${esc(tl(s.type))}${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}${s.contractNo?`<div class="muted mono" style="font-size:.74rem">#${esc(s.contractNo)}</div>`:''}</td><td>${esc(s.buyer||'—')}</td>
-      <td class="n">${bu(qty(s))}${isAcc(s)?`<div class="muted" style="font-size:.74rem">of ${bu(n0(s.bu))} max</div>`:''}</td><td class="n"><b>${usd(fp)}</b><div class="muted" style="font-size:.74rem">${isAcc(s)?`acc ${usd(num(s.price))} · KO ${usd(num(s.knockOut))}`:isPP(s)?`fut ${usd(num(s.price))} +${usd(n0(s.premium))} · strike ${usd(num(s.strike))}`:s.type==='HTA'||s.type==='Basis contract'?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:HEDGE_TYPES.includes(s.type)?`${legLabel(s,'price').toLowerCase()} ${usd(num(s.price))}`:''}</div></td>
+      <td class="n">${bu(qty(s))}${isAcc(s)?`<div class="muted" style="font-size:.74rem">of ${bu(n0(s.bu))} max</div>`:''}</td><td class="n"><b>${usd(fp)}</b><div class="muted" style="font-size:.74rem">${isAcc(s)?`acc ${usd(num(s.price))} · KO ${usd(num(s.knockOut))}`:isPP(s)?`fut ${usd(num(s.price))} +${usd(n0(s.premium))} · strike ${usd(num(s.strike))}`:isMM(s)?`min ${usd(num(s.minPrice))} · max ${usd(num(s.maxPrice))}`:s.type==='HTA'||s.type==='Basis contract'?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:HEDGE_TYPES.includes(s.type)?`${legLabel(s,'price').toLowerCase()} ${usd(num(s.price))}`:''}</div></td>
       <td style="white-space:nowrap">${isDel&&s.deliveryEnd?`${fmtDate(s.deliveryStart)} –<br>${fmtDate(s.deliveryEnd)}`:'<span class="muted">—</span>'}</td>
       <td class="n">${isDel?(s.trackLoads?`${bu(remaining(s))}<div class="prog sm"><div style="width:${qty(s)?Math.min(100,delivered(s)/qty(s)*100):0}%"></div></div>`:bu(remaining(s))):'<span class="muted">—</span>'}</td>
       <td>${saleStatus(s)}</td></tr>`}).join('')}</tbody></table></div>
@@ -893,18 +918,19 @@ function tabSales(f){
       <div class="cl muted"><span>${esc(s.buyer||'—')} · ${fmtDate(s.date)}</span><span class="mono">${fp!=null?usd(fp):''}</span></div>
       <div class="cl"><span>${saleStatus(s)}</span>${DELIVERABLE.includes(s.type)&&remaining(s)>0?`<span class="muted mono" style="font-size:.8rem">${bu(remaining(s))} left</span>`:''}</div></li>`}).join('')}</ul>`
     :all.length?`<div class="empty"><b>No contracts match these filters</b><button class="link" data-act="clearflt">Clear filters</button></div>`
-    :`<div class="empty"><b>No ${S.year} sales recorded</b>Add cash sales, spots, HTAs, basis contracts, accumulators, Premium Plus contracts and futures hedges.</div>`}</div>
+    :`<div class="empty"><b>No ${S.year} sales recorded</b>Add cash sales, spots, HTAs, basis contracts, accumulators, Premium Plus, Min/Max contracts and futures hedges.</div>`}</div>
   ${list.length?`<section><div class="sechead"><h2>Summary</h2><div class="seg-ctl" role="group" aria-label="Group summary by">${[['crop','By crop'],['month','By delivery month'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div></div>
     <div class="panel tablewrap"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':S.by==='month'?'Delivery month':'Type'}</th><th class="n">Contracts</th><th class="n">Contracted bu</th><th class="n">Priced bu</th><th class="n">Avg flat price</th><th class="n">Priced value</th><th class="n">Hedged bu</th><th class="n">Left to deliver</th></tr></thead><tbody>
     ${by.map(r=>`<tr><td><b>${esc(r.label)}</b></td><td class="n">${r.n}</td><td class="n">${bu(r.contracted)}</td><td class="n">${bu(r.priced)}</td><td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted" title="Mixed crops">mixed</span>':'—'}</td><td class="n">${r.value?usd(r.value,0):'—'}</td><td class="n">${r.hedged?bu(r.hedged):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
-  <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Futures hedges protect price but aren't sales, so they're left out of contracted and priced totals. Premium Plus counts as sold at contract futures + premium, plus any doubled-up bushels at the strike. Averages are weighted by bushels.</p></section>`}
+  <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Futures hedges protect price but aren't sales, so they're left out of contracted and priced totals. Premium Plus counts as sold at contract futures + premium, plus any doubled-up bushels at the strike. Min/Max counts as sold now and gets a flat price once its final futures (held between the min and max, less the fee) and basis are set. Averages are weighted by bushels.</p></section>`}
 
 function csvSales(f){
   const cols=[['Date','date'],['Crop year','year'],['Crop','crop'],['Type',s=>tl(s.type)],['Contract #','contractNo'],['Buyer/broker','buyer'],['Location','location'],['Delivering from',s=>hasSource(s)?(fromHarvest(s)?'Harvest':'Bin'):''],['Bushels',s=>qty(s)],['Delivered bu',s=>delivered(s)],['Left to deliver',s=>remaining(s)],
     ['Futures month','futuresMonth'],['Futures/price','price'],['Basis','basis'],['Flat price',s=>flatPrice(s)??''],['Priced value',s=>{const fp=flatPrice(s);return fp==null?'':(fp*qty(s)).toFixed(2)}],['Delivery opens','deliveryStart'],['Delivery closes','deliveryEnd'],['Status',s=>HEDGE_TYPES.includes(s.type)?'Hedge':isAcc(s)?accState(s).t:remaining(s)>0?'Open':'Delivered'],
     ['Max bushels (accumulator)',s=>isAcc(s)?n0(s.bu):''],['Knock-out',s=>isAcc(s)?s.knockOut:''],['Accumulation rate',s=>isAcc(s)&&num(s.rate)?`${s.rate} bu/${s.ratePeriod==='Weekly'?'week':'day'}`:''],
     ['Accumulation start',s=>isAcc(s)?s.accStart:''],['Expiration',s=>isAcc(s)?s.expiration:''],['Days until expiration',s=>isAcc(s)&&s.expiration?daysUntil(s.expiration):isPP(s)&&s.ppExpiration?daysUntil(s.ppExpiration):''],
-    ['Premium Plus strike',s=>isPP(s)?s.strike:''],['Premium Plus expiration',s=>isPP(s)?s.ppExpiration:''],['Double-up bushels',s=>isPP(s)?ppDbl(s):''],['Premium Plus outcome',s=>isPP(s)?(s.ppOutcome||'Pending'):''],['Notes','notes']];
+    ['Premium Plus strike',s=>isPP(s)?s.strike:''],['Premium Plus expiration',s=>isPP(s)?s.ppExpiration:''],['Double-up bushels',s=>isPP(s)?ppDbl(s):''],['Premium Plus outcome',s=>isPP(s)?(s.ppOutcome||'Pending'):''],
+    ['Min',s=>isMM(s)?s.minPrice:''],['Max',s=>isMM(s)?s.maxPrice:''],['Min/Max fee',s=>isMM(s)?s.mmFee??'':''],['Min/Max expiration',s=>isMM(s)?s.mmExpiration:''],['Notes','notes']];
   const cell=v=>{v=v==null?'':String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   return[cols.map(c=>c[0]).join(','),...filteredSales(f).map(s=>cols.map(([,k])=>cell(typeof k==='function'?k(s):s[k])).join(','))].join('\r\n')}
 function textSummary(f){
@@ -946,7 +972,9 @@ const SF_TABLES=[
     ['ACC_KNOCKED_OUT','BOOLEAN',r=>isAcc(r.s)?!!r.s.knockedOut:null],['ACC_KNOCK_OUT_DATE','DATE',r=>isAcc(r.s)?r.s.knockOutDate||null:null],
     ['PP_STRIKE','NUMBER(10,4)',r=>isPP(r.s)?nz(r.s.strike):null],['PP_EXPIRATION','DATE',r=>isPP(r.s)?r.s.ppExpiration||null:null],
     ['PP_DOUBLE_BU','NUMBER(14,2)',r=>isPP(r.s)?ppDbl(r.s):null],
-    ['PP_OUTCOME','VARCHAR',r=>isPP(r.s)?(r.s.ppOutcome||'Pending'):null]]},
+    ['PP_OUTCOME','VARCHAR',r=>isPP(r.s)?(r.s.ppOutcome||'Pending'):null],
+    ['MM_MIN','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.minPrice):null],['MM_MAX','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.maxPrice):null],
+    ['MM_FEE','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.mmFee):null],['MM_EXPIRATION','DATE',r=>isMM(r.s)?r.s.mmExpiration||null:null]]},
   {name:'LOADS',file:'loads.csv',rows:(id,f)=>f.sales.flatMap(s=>(s.loads||[]).map(l=>({id,s,l}))),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['LOAD_ID','VARCHAR',r=>r.l.id],['DELIVERY_DATE','DATE',r=>r.l.date||null],
     ['SCALE_TICKET','VARCHAR',r=>r.l.ticket||null],['NET_BU','NUMBER(14,2)',r=>nz(r.l.netBu)],['MOISTURE_PCT','NUMBER(5,2)',r=>nz(r.l.moisture)],
