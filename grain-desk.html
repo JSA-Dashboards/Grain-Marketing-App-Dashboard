@@ -130,6 +130,40 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* profit optimizer */
+.optgrid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:960px){.optgrid{grid-template-columns:minmax(0,1fr)}}
+.optleft{display:grid;gap:14px}
+.optbox{padding:14px 16px}
+.optbox h3{margin-bottom:4px}
+.optbox .fgrid{margin-top:8px}
+.optbox input[type=range]{padding:0;border:0;accent-color:var(--accent)}
+.optbox .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.leg{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);padding:10px 12px;margin-top:10px;display:grid;gap:6px}
+.leghead{display:flex;justify-content:space-between;align-items:center}
+.legf{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.legf label{display:flex;flex-direction:column;gap:3px;font-size:.72rem;color:var(--muted);font-weight:600}
+.legf input{padding:5px 8px}
+.addlegs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.strip4{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:0}
+@media (max-width:720px){.strip4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.strip4 .stat .v{font-size:1.2rem}
+.optchart{position:relative}
+.optchart svg{width:100%;height:auto;display:block}
+.optchart text{font:11px var(--f-data);fill:var(--muted)}
+.optchart .grid{stroke:var(--line);stroke-width:1}
+.optchart .zero{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 3;opacity:.6}
+.optchart .today{stroke:var(--grain);stroke-width:1.5;stroke-dasharray:3 3}
+.optchart .todaylbl{fill:var(--grain)}
+.optchart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.optchart .ln.cur{stroke:var(--muted)} .optchart .ln.scn{stroke:var(--accent)}
+.optchart .xh{stroke:var(--muted);stroke-width:1}
+.optchart .dot{stroke:var(--surface);stroke-width:2} .optchart .dot.cur{fill:var(--muted)} .optchart .dot.scn{fill:var(--accent)}
+.optchart .tip{position:absolute;top:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;font-size:.8rem;box-shadow:0 4px 14px rgba(0,0,0,.12);pointer-events:none;display:grid;gap:3px;min-width:180px}
+.optchart .tip i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:6px;vertical-align:3px}
+.optchart .tip i.cur{background:var(--muted)} .optchart .tip i.scn{background:var(--accent)}
+table.heat td,table.heat th{white-space:nowrap}
+table.heat td.n{font-family:var(--f-data)}
 /* crop cards (farm info / breakeven / crop values) */
 .ccards{display:grid;gap:18px;margin-top:20px}
 .ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -310,7 +344,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -703,7 +737,10 @@ function render(){
   if(S.owner&&!S.current){app.innerHTML=note+renderClients();return}
   const f=S.farms[S.current];
   if(!f){app.innerHTML=note+renderOnboard();return}
-  app.innerHTML=note+renderFarm(f)}
+  // keep the cursor where it was when a save or a live update redraws the page
+  const ae=document.activeElement,fid=ae&&ae.id&&app.contains(ae)?ae.id:null;let sel=null;try{sel=fid?[ae.selectionStart,ae.selectionEnd]:null}catch(_){}
+  app.innerHTML=note+renderFarm(f);
+  if(fid){const el=document.getElementById(fid);if(el){el.focus();try{if(sel&&sel[0]!=null)el.setSelectionRange(sel[0],sel[1])}catch(_){}}}}
 
 function renderOnboard(){return`<form class="onboard" id="onboard"><h1>Set up your farm</h1>
   <p>Track sales, contracts, storage, break-even and crop insurance in one place. Your consultant can see your records to help plan your marketing.</p>
@@ -743,9 +780,9 @@ function renderClients(){
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
-  const tabs=[['overview','Crop Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['storage','Storage'],['insurance','Crop insurance']];
+  const tabs=[['overview','Crop Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['optimizer','Profit optimizer'],['storage','Storage'],['insurance','Crop insurance']];
   if(!tabs.some(t=>t[0]===S.tab))S.tab='overview';
-  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,insurance:tabInsurance}[S.tab](f);
+  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,optimizer:tabOptimizer,insurance:tabInsurance}[S.tab](f);
   return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
     <h1>${esc(f.name)} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
@@ -771,7 +808,7 @@ function cropMarket(f,r){
   // sold value: priced contracts at their flat price; open legs estimated from today's futures / est. basis
   let soldVal=0,estBu=0,missBu=0;
   sales.filter(s=>CONTRACT_TYPES.includes(s.type)).forEach(s=>{const q=qty(s),fp=flatPrice(s);if(fp!=null){soldVal+=q*fp;return}
-    const fu=isMM(s)?(mmClamp(s,num(s.price)??fut)==null?null:mmClamp(s,num(s.price)??fut)-n0(s.mmFee)):num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
+    const fu=isMM(s)?(mmClamp(s,num(s.price)??fut)==null?null:mmClamp(s,num(s.price)??fut)-n0(s.mmFee)):isPP(s)&&num(s.price)!=null?num(s.price)+n0(s.premium):num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
   let hedgeVal=null,itmBu=0,premium=0;
   // pending Premium Plus double-ups that would trigger at today's futures
   sales.filter(s=>isPP(s)&&!s.ppOutcome&&ppTriggers(s,fut)).forEach(s=>itmBu+=ppDbl(s));
@@ -1070,6 +1107,148 @@ function makeZip(files){
   return new Blob([...parts,...central,e],{type:'application/zip'})}
 
 // placeholder until cash bids / futures quotes are built
+/* ---------- profit optimizer ---------- */
+// strategies tested on top of the current position; each returns its profit effect ($) at terminal futures F with basis b
+const LEG_TYPES={
+  put:{label:'Buy put',note:'Sets a floor. Pays a premium.',fields:[['bu','Bushels'],['strike','Strike'],['premium','Premium paid']]},
+  call:{label:'Sell call',note:'Collects premium. Gives up gains above the strike.',fields:[['bu','Bushels'],['strike','Strike'],['premium','Premium received']]},
+  pp:{label:'Premium Plus',note:'Contract + premium. Doubles at the strike if futures close at or above it.',fields:[['bu','Base bushels'],['price','Contract futures'],['premium','Premium'],['strike','Call strike']]},
+  cash:{label:'Sell cash now',note:'Locks today’s cash price on these bushels.',fields:[['bu','Bushels'],['price','Cash price']]},
+  hedge:{label:'Sell futures',note:'Locks the futures level. Basis stays open.',fields:[['bu','Bushels'],['price','Futures price']]},
+  carry:{label:'Store for carry',note:'Hold grain to capture the futures carry and basis gain, less storage and interest.',fields:[['bu','Bushels'],['months','Months stored'],['carry','Futures carry $/bu'],['basisGain','Basis gain $/bu'],['storage','Storage $/bu/mo'],['rate','Interest %/yr']]},
+};
+function legEffect(l,F,b){const q=n0(l.bu);switch(l.t){
+  case'cash':return q*(n0(l.price)-(F+b));
+  case'put':return q*(Math.max(0,n0(l.strike)-F)-n0(l.premium));
+  case'call':return q*(n0(l.premium)-Math.max(0,F-n0(l.strike)));
+  case'hedge':return q*(n0(l.price)-F);
+  case'pp':return q*(n0(l.price)+n0(l.premium)-F)+(F>=n0(l.strike)?q*(n0(l.strike)-F):0);
+  case'carry':return q*(n0(l.carry)+n0(l.basisGain)-n0(l.storage)*n0(l.months)-(F+b)*n0(l.rate)/100*n0(l.months)/12)}
+  return 0}
+const r2=v=>Math.round(v*100)/100;
+function legDefaults(t,o,prod){
+  const F=o.fut??0,b=o.basis??0,atm=Math.round(F*10)/10,q=Math.max(1000,Math.round(prod*0.1/1000)*1000);
+  return{id:uid(),t,bu:q,...({put:{strike:atm,premium:0.20},call:{strike:r2(atm+0.5),premium:0.15},pp:{price:r2(F),premium:0.20,strike:r2(atm+0.4)},
+    cash:{price:r2(F+b)},hedge:{price:r2(F)},carry:{months:4,carry:0.15,basisGain:0.20,storage:0.03,rate:7}})[t]}}
+// profit of the current position if futures finish at F, with basis b and yield at yieldPct of expected
+function baseProfit(f,plan,F,b,yieldPct){
+  const ac=n0(plan.acres),prod=ac*yieldOf(plan)*yieldPct/100,cost=ac*n0(plan.costPerAcre);
+  const sales=f.sales.filter(s=>+s.year===+plan.year&&key(s.crop)===key(plan.crop));
+  let rev=0,sold=0,hedge=0;
+  sales.forEach(s=>{
+    if(HEDGE_TYPES.includes(s.type)){hedge+=(n0(s.price)-F)*qty(s);return}
+    const q=qty(s),fp=flatPrice(s);sold+=q;
+    if(fp!=null)rev+=q*fp;
+    else{const ba=num(s.basis)??b,fu=isMM(s)?mmClamp(s,num(s.price)??F)-n0(s.mmFee):isOther(s)&&num(s.otherFlat)!=null?num(s.otherFlat)-ba:isPP(s)?(num(s.price)??F)+n0(s.premium):num(s.price)??F;rev+=q*(fu+ba)}
+    if(isPP(s)&&!s.ppOutcome&&num(s.strike)!=null&&F>=num(s.strike)){const d=ppDbl(s);sold+=d;rev+=d*(num(s.strike)+(num(s.basis)??b))}});
+  const unsold=prod-sold;// negative = more sold than produced, bought back at harvest price
+  return{profit:rev+unsold*(F+b)+hedge-cost,prod,sold,cost,ac}}
+function optState(f){
+  const plans=f.crops.filter(c=>+c.year===+S.year&&n0(c.acres));
+  if(!plans.length)return null;
+  let o=S.opt;
+  if(!o||o.farm!==S.current||o.year!==S.year||!plans.some(p=>p.id===o.planId)){const p=plans[0];
+    o=S.opt={farm:S.current,year:S.year,planId:p.id,yieldPct:100,fut:num(p.futPrice),basis:num(p.estBasis)??0,legs:[],name:'',savedId:'',confirmDel:false}}
+  return{o,plans,plan:plans.find(p=>p.id===o.planId)}}
+function tabOptimizer(f){
+  const st=optState(f);
+  if(!st)return`<section><div class="sechead"><h2>Profit optimizer</h2></div><div class="panel"><div class="empty"><b>Add a ${S.year} crop first</b>The optimizer starts from each crop's acres, yield and cost on the Production tab.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
+  const{o,plans,plan}=st,saved=(f.scenarios||[]).filter(x=>+x.year===+S.year);
+  const prod=n0(plan.acres)*yieldOf(plan);
+  return`<section><div class="sechead"><h2>Profit optimizer</h2><div class="sp"></div>
+    <label class="label" style="display:flex;gap:8px;align-items:center">Crop <select id="opt_crop" style="width:auto">${plans.map(p=>`<option value="${p.id}" ${p.id===o.planId?'selected':''}>${esc(p.crop)}</option>`).join('')}</select></label>
+    <label class="label" style="display:flex;gap:8px;align-items:center">Saved <select id="opt_saved" style="width:auto"><option value="">New scenario</option>${saved.map(x=>`<option value="${x.id}" ${x.id===o.savedId?'selected':''}>${esc(x.name)} · ${esc(plans.find(p=>p.id===x.planId)?.crop||'')}</option>`).join('')}</select></label></div>
+  <p class="muted" style="margin:0 0 14px;max-width:85ch">Start from what's already sold on this crop, then add strategies for the bushels that aren't. Results show profit if futures finish anywhere from 30% lower to 30% higher. Nothing here changes your real contracts.</p>
+  <div class="optgrid"><div class="optleft">
+    <div class="panel optbox"><h3>Assumptions</h3>
+      <div class="fgrid">
+        <label>Futures today ($/bu)<input id="opt_fut" class="optinp" type="number" step="any" value="${o.fut??''}" placeholder="e.g. ${esc(String(plan.futPrice??'4.50'))}"></label>
+        <label>Harvest basis ($/bu)<input id="opt_basis" class="optinp" type="number" step="any" value="${o.basis??''}"></label>
+        <label class="full">Yield: <span id="opt_yield_out">${o.yieldPct}% of expected · ${(yieldOf(plan)*o.yieldPct/100).toFixed(1)} bu/ac</span><input id="opt_yield" class="optinp" type="range" min="50" max="130" step="5" value="${o.yieldPct}"></label></div>
+      <dl class="facts" style="margin-top:12px">
+        <div><dt>Acres</dt><dd>${bu(n0(plan.acres))}</dd></div><div><dt>Expected bu</dt><dd>${bu(prod)}</dd></div>
+        <div><dt>Cost / acre</dt><dd>${usd(num(plan.costPerAcre))}</dd></div><div><dt>Already sold</dt><dd>${bu(position(f,S.year).find(r=>key(r.crop)===key(plan.crop))?.sold||0)}</dd></div></dl>
+      <p class="muted" style="font-size:.76rem;margin:10px 0 0">Defaults come from the crop card and Production tab. Changes here only affect this scenario.</p></div>
+    <div class="panel optbox"><h3>Strategies to test</h3>
+      ${o.legs.length?o.legs.map(l=>{const T=LEG_TYPES[l.t];return`<div class="leg"><div class="leghead"><b>${T.label}</b><button class="link danger" data-rmleg="${l.id}" style="font-size:.8rem">Remove</button></div>
+        <div class="muted" style="font-size:.76rem">${T.note}</div>
+        <div class="legf">${T.fields.map(([k,lab])=>`<label>${lab}<input class="leginp" id="leg_${l.id}_${k}" data-leg="${l.id}" data-k="${k}" type="number" step="any" value="${l[k]??''}"></label>`).join('')}</div></div>`}).join('')
+        :'<p class="muted" style="font-size:.85rem;margin:6px 0 10px">No strategies yet. Add one below to compare it with the current position.</p>'}
+      <div class="addlegs">${Object.entries(LEG_TYPES).map(([k,T])=>`<button class="small" data-addleg="${k}">+ ${T.label}</button>`).join('')}</div>
+      <p class="muted" style="font-size:.74rem;margin:10px 0 0">Premiums are placeholders. Enter real quotes from your broker.</p></div>
+    <div class="panel optbox"><h3>Save scenario</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="opt_name" value="${esc(o.name)}" placeholder="e.g. Dec puts + March carry" style="flex:1 1 180px;width:auto">
+        <button class="primary small" data-act="optsave">${o.savedId?'Update':'Save'}</button>${o.savedId?`<button class="small danger" data-act="optdel">${o.confirmDel?'Confirm delete':'Delete'}</button>`:''}</div>
+      <p class="muted" style="font-size:.74rem;margin:8px 0 0">Saved with this farm, so the producer and broker both see it.</p></div>
+  </div><div class="optright" id="optResults">${optResults(f)}</div></div></section>`}
+function optResults(f){
+  const st=optState(f);if(!st)return'';const{o,plan}=st;
+  if(o.fut==null)return`<div class="panel"><div class="empty"><b>Enter today's futures price</b>The optimizer needs a starting futures price to build the price range.</div></div>`;
+  const b=o.basis??0,F0=o.fut,ac=n0(plan.acres)||1;
+  const N=49,xs=Array.from({length:N},(_,i)=>F0*(0.7+0.6*i/(N-1)));
+  const legsAt=F=>o.legs.reduce((a,l)=>a+legEffect(l,F,b),0);
+  const cur=F=>baseProfit(f,plan,F,b,o.yieldPct).profit,scen=F=>cur(F)+legsAt(F);
+  const cv=xs.map(cur),sv=xs.map(scen);
+  const be=vals=>{for(let i=1;i<N;i++)if((vals[i-1]<0)!==(vals[i]<0)){const t=vals[i-1]/(vals[i-1]-vals[i]);return xs[i-1]+t*(xs[i]-xs[i-1])}return null};
+  const pa=v=>v/ac,sg=(v,d=2)=>`<span style="color:${v<0?'var(--bad)':'var(--good)'}">${usd(v,d)}</span>`;
+  const tile=(lab,F)=>{const c=cur(F),s=scen(F);return`<div class="stat"><div class="label">${lab}</div><div class="v">${sg(pa(s))}<span class="s"> /ac</span></div>
+    <div class="s">${o.legs.length?`now ${usd(pa(c))} · ${s-c>=0?'+':''}${usd(pa(s-c))}`:`total ${usd(s,0)}`}</div></div>`};
+  const beC=be(cv),beS=be(sv);
+  const pts=[-0.2,-0.1,0,0.1,0.2],yl=[80,90,100,110];
+  const heat=yl.map(y=>pts.map(p=>{const F=F0*(1+p),v=(baseProfit(f,plan,F,b,y).profit+legsAt(F))/ac;return v}));
+  const mx=Math.max(1,...heat.flat().map(Math.abs));
+  return`<div class="strip strip4">${tile(`Futures ${usd(F0)} (today)`,F0)}${tile(`Futures −20% (${usd(F0*0.8)})`,F0*0.8)}${tile(`Futures +20% (${usd(F0*1.2)})`,F0*1.2)}
+    <div class="stat"><div class="label">Break-even futures</div><div class="v">${beS!=null?usd(beS):sv[0]>0?'Below range':'Above range'}</div><div class="s">${o.legs.length?`now ${beC!=null?usd(beC):cv[0]>0?'below range':'above range'}`:'profit is zero here'}</div></div></div>
+  <div class="panel" style="margin-top:14px;padding:14px 16px 8px"><div class="sechead" style="margin:0 0 4px"><h3>Profit per acre by futures price at harvest</h3><div class="sp"></div>
+    <div class="legend" style="padding:0"><span><i style="background:var(--muted)"></i>Current position</span>${o.legs.length?'<span><i style="background:var(--accent)"></i>With strategies</span>':''}</div></div>
+    ${optChart(xs,[{name:'Current position',cls:'cur',vals:cv.map(pa)},...(o.legs.length?[{name:'With strategies',cls:'scn',vals:sv.map(pa)}]:[])],F0)}</div>
+  <div class="panel tablewrap" style="margin-top:14px"><table class="heat"><thead><tr><th>Yield ↓ / Futures →</th>${pts.map(p=>`<th class="n">${usd(F0*(1+p))}${p?`<div class="muted" style="font-weight:400">${p>0?'+':''}${p*100}%</div>`:'<div class="muted" style="font-weight:400">today</div>'}</th>`).join('')}</tr></thead><tbody>
+    ${yl.map((y,i)=>`<tr><td><b>${y}%</b> <span class="muted">${(yieldOf(plan)*y/100).toFixed(0)} bu/ac</span></td>${heat[i].map(v=>`<td class="n" style="background:color-mix(in srgb,${v<0?'var(--bad)':'var(--good)'} ${Math.round(Math.abs(v)/mx*28)}%,var(--surface))">${usd(v,0)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <p class="muted" style="font-size:.76rem;margin:0;padding:8px 12px 12px">Profit per acre${o.legs.length?' with strategies':''}. Short yields matter when bushels are already sold: any shortfall is bought back at the harvest price.</p></div>
+  <p class="muted" style="font-size:.76rem;margin-top:10px;max-width:90ch">How it's figured: existing priced contracts at their price; open legs at the scenario futures and basis; Premium Plus doubles if futures finish at or above the strike; accumulators count only bushels accumulated so far; unsold bushels sell at harvest futures + basis. Options are valued at expiration (no time value). Planning estimates, not trade advice.</p>`}
+function optChart(xs,series,F0){
+  const W=640,H=250,L=56,R=12,T=12,B=30,all=series.flatMap(s=>s.vals);
+  let lo=Math.min(0,...all),hi=Math.max(0,...all);const pad=(hi-lo)*0.08||10;lo-=pad;hi+=pad;
+  const step=(()=>{const raw=(hi-lo)/5,m=Math.pow(10,Math.floor(Math.log10(raw)));return[1,2,2.5,5,10].map(k=>k*m).find(k=>k>=raw)})();
+  const yt=[];for(let v=Math.ceil(lo/step)*step;v<=hi;v+=step)yt.push(v);
+  const x=v=>L+(v-xs[0])/(xs[xs.length-1]-xs[0])*(W-L-R),y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  const xt=[0.7,0.85,1,1.15,1.3].map(k=>F0*k);
+  S.chart={xs,series,L,R,W,F0};
+  return`<div class="optchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profit per acre across futures prices">
+    ${yt.map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${Math.abs(v)<1e-9?'zero':'grid'}"/><text x="${L-8}" y="${(y(v)+4).toFixed(1)}" text-anchor="end">${v<0?'−':''}$${Math.abs(v).toLocaleString('en-US',{maximumFractionDigits:0})}</text>`).join('')}
+    ${xt.map(v=>`<text x="${x(v).toFixed(1)}" y="${H-10}" text-anchor="middle">${usd(v)}</text>`).join('')}
+    <line x1="${x(F0).toFixed(1)}" x2="${x(F0).toFixed(1)}" y1="${T}" y2="${H-B}" class="today"/><text x="${(x(F0)+4).toFixed(1)}" y="${T+10}" class="todaylbl">today</text>
+    ${series.map(s=>`<polyline class="ln ${s.cls}" points="${s.vals.map((v,i)=>`${x(xs[i]).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}"/>`).join('')}
+    <g class="hover" visibility="hidden"><line class="xh" y1="${T}" y2="${H-B}"/>${series.map(s=>`<circle class="dot ${s.cls}" r="4"/>`).join('')}</g>
+    <rect class="hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg><div class="tip" hidden></div></div>`}
+function optHover(e){
+  const wrap=e.target.closest('.optchart');if(!wrap||!S.chart)return;
+  const svg=wrap.querySelector('svg'),r=svg.getBoundingClientRect(),c=S.chart,sx=(e.clientX-r.left)/r.width*c.W;
+  const i=Math.max(0,Math.min(c.xs.length-1,Math.round((sx-c.L)/(c.W-c.L-c.R)*(c.xs.length-1))));
+  const yv=svg.querySelectorAll('.ln');const g=svg.querySelector('.hover'),tip=wrap.querySelector('.tip');
+  const px=c.L+i/(c.xs.length-1)*(c.W-c.L-c.R);g.setAttribute('visibility','visible');g.querySelector('.xh').setAttribute('x1',px);g.querySelector('.xh').setAttribute('x2',px);
+  g.querySelectorAll('.dot').forEach((d,k)=>{const pts=yv[k].getAttribute('points').split(' ')[i].split(',');d.setAttribute('cx',pts[0]);d.setAttribute('cy',pts[1])});
+  tip.hidden=false;tip.innerHTML=`<b>Futures ${usd(c.xs[i])}</b>${c.series.map(s=>`<div><i class="${s.cls}"></i>${esc(s.name)} <span class="mono">${usd(s.vals[i])}/ac</span></div>`).join('')}${c.series.length>1?`<div class="muted">Difference ${usd(c.series[1].vals[i]-c.series[0].vals[i])}/ac</div>`:''}`;
+  const tx=px/c.W*r.width;tip.style.left=Math.min(Math.max(tx+12,0),r.width-tip.offsetWidth)+'px';}
+document.addEventListener('mousemove',e=>{if(e.target.closest&&e.target.closest('.optchart'))optHover(e)});
+document.addEventListener('mouseout',e=>{const w=e.target.closest&&e.target.closest('.optchart');if(w&&!w.contains(e.relatedTarget)){const g=w.querySelector('.hover');if(g)g.setAttribute('visibility','hidden');w.querySelector('.tip').hidden=true}});
+function refreshOpt(){const f=S.farms[S.current];const el=$('#optResults');if(f&&el)el.innerHTML=optResults(f)}
+document.addEventListener('input',e=>{const t=e.target;if(!S.opt)return;
+  if(t.classList.contains('leginp')){const l=S.opt.legs.find(x=>x.id===t.dataset.leg);if(l){l[t.dataset.k]=num(t.value);refreshOpt()}return}
+  if(t.id==='opt_fut'){S.opt.fut=num(t.value);refreshOpt()}
+  if(t.id==='opt_basis'){S.opt.basis=num(t.value)??0;refreshOpt()}
+  if(t.id==='opt_yield'){S.opt.yieldPct=+t.value;const f=S.farms[S.current],p=f.crops.find(c=>c.id===S.opt.planId);$('#opt_yield_out').textContent=`${t.value}% of expected · ${(yieldOf(p)*t.value/100).toFixed(1)} bu/ac`;refreshOpt()}
+  if(t.id==='opt_name')S.opt.name=t.value});
+document.addEventListener('change',e=>{const t=e.target,f=S.farms[S.current];if(!f)return;
+  if(t.id==='opt_crop'){const p=f.crops.find(c=>c.id===t.value);S.opt={...S.opt,planId:t.value,fut:num(p.futPrice),basis:num(p.estBasis)??0,legs:[],savedId:'',name:'',confirmDel:false};render()}
+  if(t.id==='opt_saved'){const x=(f.scenarios||[]).find(z=>z.id===t.value);
+    if(x)S.opt={farm:S.current,year:S.year,planId:x.planId,yieldPct:x.yieldPct??100,fut:x.fut,basis:x.basis??0,legs:clone(x.legs||[]),name:x.name,savedId:x.id,confirmDel:false};
+    else S.opt={...S.opt,savedId:'',name:'',legs:[],confirmDel:false};render()}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-addleg],[data-rmleg]');if(!t||!S.opt||t.closest('dialog'))return;
+  const f=S.farms[S.current],p=f.crops.find(c=>c.id===S.opt.planId);
+  if(t.dataset.addleg)S.opt.legs.push(legDefaults(t.dataset.addleg,S.opt,n0(p.acres)*yieldOf(p)*S.opt.yieldPct/100));
+  else S.opt.legs=S.opt.legs.filter(l=>l.id!==t.dataset.rmleg);
+  render()});
 function tabQuotes(){
   return`<section><div class="sechead"><h2>Quotes</h2></div>
   <div class="panel"><div class="empty"><b>Coming soon</b>This is where cash bids and futures quotes for corn, soybeans and wheat will go.</div></div></section>`}
@@ -1169,6 +1348,11 @@ document.addEventListener('click',e=>{
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
   if(a==='clearbroker')setBrokerF('');
+  if(a==='optsave'&&S.opt){const f=S.farms[S.current],o=S.opt,name=(o.name||'').trim()||`Scenario ${(f.scenarios||[]).length+1}`;
+    const rec={id:o.savedId||uid(),name,year:o.year,planId:o.planId,yieldPct:o.yieldPct,fut:o.fut,basis:o.basis,legs:clone(o.legs),savedAt:new Date().toISOString()};
+    f.scenarios=[...(f.scenarios||[]).filter(x=>x.id!==rec.id),rec];o.savedId=rec.id;o.name=name;persist(S.current)}
+  if(a==='optdel'&&S.opt){if(!S.opt.confirmDel){S.opt.confirmDel=true;render();return}
+    const f=S.farms[S.current];f.scenarios=(f.scenarios||[]).filter(x=>x.id!==S.opt.savedId);S.opt={...S.opt,savedId:'',name:'',confirmDel:false};persist(S.current)}
   if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''};render()}
   if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
     S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
