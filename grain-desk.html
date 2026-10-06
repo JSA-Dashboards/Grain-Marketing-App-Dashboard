@@ -1051,12 +1051,12 @@ function snowflakeSQL(){
 -- track marketing progress over time. The *_CURRENT views show the latest export.
 
 -- 1) ONE-TIME SETUP ---------------------------------------------------------
--- Your admin creates the GRAIN_DESK database and the GRAIN_DESK_WH warehouse
--- (XSMALL, auto-suspend 60s) and grants them to your role.
-USE WAREHOUSE GRAIN_DESK_WH;
-USE DATABASE GRAIN_DESK;
-CREATE SCHEMA IF NOT EXISTS GRAIN_DESK.MARKETING;
-USE SCHEMA GRAIN_DESK.MARKETING;
+-- GRAIN_MARKETING database and GRAIN_MARKETING_ROLE were set up by the JSA admin.
+USE ROLE GRAIN_MARKETING_ROLE;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE GRAIN_MARKETING;
+CREATE SCHEMA IF NOT EXISTS GRAIN_MARKETING.MARKETING;
+USE SCHEMA GRAIN_MARKETING.MARKETING;
 
 CREATE FILE FORMAT IF NOT EXISTS GRAIN_DESK_CSV
   TYPE = CSV SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '"'
@@ -1072,7 +1072,7 @@ ${t.map(x=>`CREATE OR REPLACE VIEW ${x.name}_CURRENT AS\n  SELECT * FROM ${x.nam
 --   PUT 'file://C:/path/to/export/*.csv' @GRAIN_DESK_STAGE AUTO_COMPRESS = TRUE OVERWRITE = TRUE;
 ${t.map(x=>`COPY INTO ${x.name} FROM @GRAIN_DESK_STAGE FILES = ('${x.file}.gz') FILE_FORMAT = (FORMAT_NAME = GRAIN_DESK_CSV) ON_ERROR = ABORT_STATEMENT FORCE = TRUE;`).join('\n')}
 REMOVE @GRAIN_DESK_STAGE;
--- Option B: in Snowsight, open each table under GRAIN_DESK.MARKETING, choose
+-- Option B: in Snowsight, open each table under GRAIN_MARKETING.MARKETING, choose
 -- Load Data, pick the matching CSV and the GRAIN_DESK_CSV file format.
 
 -- 3) EXAMPLE ANALYSIS: percent sold and price vs. break-even, every export --
