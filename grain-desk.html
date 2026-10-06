@@ -261,7 +261,7 @@ dialog{max-height:calc(100vh - 32px);overflow:auto}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-// 'Put option' is stored for Premium Plus: a sold option that adds premium to the contract and can double the bushels at expiration
+// 'Put option' is the stored value for Premium Plus: a sold call that adds premium to the contract and doubles the bushels if futures settle at or above the strike
 const CONTRACT_TYPES=['Cash sale','Forward contract','HTA','Basis contract','Accumulator','Put option'];
 const HEDGE_TYPES=['Futures hedge'];
 const SALE_TYPES=[...CONTRACT_TYPES,...HEDGE_TYPES];
@@ -349,7 +349,7 @@ function ppState(s){
   if(days!=null&&days<0)return{t:'Expired · record outcome',c:'bad',days};
   return{t:days==null?'Double-up pending':`Double-up pending · ${days}d`,c:days!=null&&days<=14?'warn':'neutral',days}}
 // would the double-up trigger at this futures price?
-const ppTriggers=(s,fut)=>fut!=null&&num(s.strike)!=null&&(s.ppTrigger==='Above strike'?fut>=num(s.strike):fut<num(s.strike));
+const ppTriggers=(s,fut)=>fut!=null&&num(s.strike)!=null&&fut>=num(s.strike);
 const legLabel=(s,leg)=>leg==='basis'?'Basis':isPP(s)?'Contract futures':isAcc(s)?'Accumulation level':(s.type==='Cash sale'||s.type==='Forward contract')?'Flat price':'Futures';
 const fmtBasis=v=>num(v)==null?'—':(num(v)<0?'−':'+')+Math.abs(num(v)).toFixed(2);
 function position(f,year){
@@ -453,10 +453,9 @@ const FORMS={
     {k:'bu',label:v=>isAcc(v)?'Maximum bushels':isPP(v)?'Base bushels':'Bushels',type:'number',step:'any',req:1,hint:v=>isAcc(v)?'Total the contract can accumulate, including any double-up':''},
     {k:'price',label:v=>({'Cash sale':'Flat price ($/bu)','Forward contract':'Flat price ($/bu)','HTA':'Futures price ($/bu)','Basis contract':'Futures price, once set','Accumulator':'Accumulation level (futures $/bu)','Futures hedge':'Futures sell price','Put option':'Contract futures price ($/bu)'}[v.type]),type:'number',step:'any',hint:v=>isAcc(v)?'Futures price each accumulated bushel is sold at':isPP(v)?'Futures level of the base contract, before premium':''},
     {k:'premium',label:'Premium received ($/bu)',type:'number',step:'any',hint:'Added to the contract price on the base bushels',show:isPP},
-    {k:'strike',label:'Strike price (futures $/bu)',type:'number',step:'any',show:isPP},
+    {k:'strike',label:'Call strike (futures $/bu)',type:'number',step:'any',hint:'Doubles up if futures settle at or above this at expiration',show:isPP},
     {k:'ppExpiration',label:'Option expiration',type:'date',show:isPP,hint:v=>v.ppExpiration?(daysUntil(v.ppExpiration)>=0?`${daysUntil(v.ppExpiration)} days until expiration`:`Expired ${-daysUntil(v.ppExpiration)} days ago`):''},
     {k:'dblBu',label:'Double-up bushels',type:'number',step:'any',hint:'Extra bushels sold at the strike if it triggers. Leave blank to match the base bushels.',show:isPP},
-    {k:'ppTrigger',label:'Doubles up if futures settle',type:'select',options:['Below strike','Above strike'],hint:'Sold put: below the strike. Some elevator offers use a sold call and double above.',show:isPP},
     {k:'ppOutcome',label:'Outcome at expiration',type:'select',options:[['','Pending'],['Doubled up','Doubled up'],['No double-up','Expired, no double-up']],show:isPP},
     {k:'knockOut',label:'Knock-out level (futures $/bu)',type:'number',step:'any',hint:'Accumulation stops if futures settle at or below this',show:isAcc},
     {k:'rate',label:'Bushels accumulated per period',type:'number',step:'any',show:isAcc},
@@ -478,7 +477,7 @@ const FORMS={
     {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
     {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
     {k:'notes',label:'Notes',type:'text',full:1},
-  ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false,ratePeriod:'Daily',accStart:TODAY,source:'Bin',ppTrigger:'Below strike'})},
+  ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false,ratePeriod:'Daily',accStart:TODAY,source:'Bin'})},
   accupd:{title:'Accumulated bushels',fields:[
     {k:'date',label:'As of',type:'date',req:1},
     {k:'accBu',label:'Total bushels accumulated',type:'number',step:'any',req:1,hint:v=>v.sched!=null?`Schedule pace at the single rate: about ${bu(v.sched)} bu by today`:''},
@@ -619,9 +618,9 @@ function drawSale(){
   ${isPP(s)?(()=>{const ps=ppState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null,trig=ps.t.startsWith('Double-up pending')&&ppTriggers(s,fut);
     return`<h3 class="dsub">Premium Plus <span class="pill ${ps.c}" style="margin-left:6px;vertical-align:1px">${esc(ps.t)}</span></h3>
     <dl class="facts">${fact('Contract futures',usd(num(s.price)))}${fact('Premium received',num(s.premium)!=null?'+'+usd(num(s.premium)):'—')}
-      ${fact('Contract + premium',num(s.price)!=null?usd(num(s.price)+n0(s.premium)):'—')}${fact('Strike',usd(num(s.strike)))}
+      ${fact('Contract + premium',num(s.price)!=null?usd(num(s.price)+n0(s.premium)):'—')}${fact('Call strike',usd(num(s.strike)))}
       ${fact('Expiration',fmtDate(s.ppExpiration))}${fact('Days until expiration',ps.days==null?'—':ps.days>=0?String(ps.days):'Expired')}
-      ${fact('Base bushels',bu(n0(s.bu)))}${fact('Double-up bushels',bu(ppDbl(s)))}${fact('Doubles if futures',(s.ppTrigger==='Above strike'?'≥ ':'< ')+usd(num(s.strike)))}</dl>
+      ${fact('Base bushels',bu(n0(s.bu)))}${fact('Double-up bushels',bu(ppDbl(s)))}${fact('Doubles if futures','≥ '+usd(num(s.strike)))}</dl>
     ${trig?`<p class="binnote">At today's futures (${usd(fut)}) this would double up: ${bu(ppDbl(s))} more bu sold at ${usd(num(s.strike))}.</p>`:''}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">${s.ppOutcome?`<span class="muted" style="font-size:.85rem">Outcome recorded.</span><button type="button" class="link" data-act="pp-reset" style="font-size:.85rem">Reset outcome</button>`
       :`<button type="button" class="small" data-act="pp-double">Record double-up</button><button type="button" class="small" data-act="pp-none">Expired, no double-up</button>`}</div>
@@ -946,7 +945,7 @@ const SF_TABLES=[
     ['ACC_DOUBLE_UP','BOOLEAN',r=>isAcc(r.s)?!!r.s.doubleUp:null],['ACC_START','DATE',r=>isAcc(r.s)?r.s.accStart||null:null],['ACC_EXPIRATION','DATE',r=>isAcc(r.s)?r.s.expiration||null:null],
     ['ACC_KNOCKED_OUT','BOOLEAN',r=>isAcc(r.s)?!!r.s.knockedOut:null],['ACC_KNOCK_OUT_DATE','DATE',r=>isAcc(r.s)?r.s.knockOutDate||null:null],
     ['PP_STRIKE','NUMBER(10,4)',r=>isPP(r.s)?nz(r.s.strike):null],['PP_EXPIRATION','DATE',r=>isPP(r.s)?r.s.ppExpiration||null:null],
-    ['PP_DOUBLE_BU','NUMBER(14,2)',r=>isPP(r.s)?ppDbl(r.s):null],['PP_TRIGGER','VARCHAR',r=>isPP(r.s)?(r.s.ppTrigger||'Below strike'):null],
+    ['PP_DOUBLE_BU','NUMBER(14,2)',r=>isPP(r.s)?ppDbl(r.s):null],
     ['PP_OUTCOME','VARCHAR',r=>isPP(r.s)?(r.s.ppOutcome||'Pending'):null]]},
   {name:'LOADS',file:'loads.csv',rows:(id,f)=>f.sales.flatMap(s=>(s.loads||[]).map(l=>({id,s,l}))),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['LOAD_ID','VARCHAR',r=>r.l.id],['DELIVERY_DATE','DATE',r=>r.l.date||null],
@@ -1175,7 +1174,7 @@ const PREVIEW={name:'Prairie Ridge Farms',sample:true,
     {id:'s2',year:THIS_YEAR,crop:'Corn',type:'HTA',date:THIS_YEAR+'-05-20',bu:30000,price:4.70,futuresMonth:'Dec 26',contractNo:'RE-5531',buyer:'Riverside Ethanol',deliveryStart:THIS_YEAR+'-11-01',deliveryEnd:THIS_YEAR+'-11-30',status:'Open',
       pricing:[{id:'p2',date:THIS_YEAR+'-05-20',leg:'Futures',value:4.70,month:'Dec 26'}]},
     {id:'s3',year:THIS_YEAR,crop:'Corn',type:'Basis contract',date:THIS_YEAR+'-08-02',bu:20000,basis:-0.28,buyer:'Valley Grain Co-op',deliveryStart:(THIS_YEAR+1)+'-01-05',deliveryEnd:(THIS_YEAR+1)+'-01-31',status:'Open'},
-    {id:'s4',year:THIS_YEAR,crop:'Corn',type:'Put option',date:THIS_YEAR+'-06-10',bu:10000,price:4.70,premium:0.20,strike:4.40,ppExpiration:THIS_YEAR+'-11-20',ppTrigger:'Below strike',futuresMonth:'Dec 26',buyer:'Valley Grain Co-op',deliveryStart:THIS_YEAR+'-12-01',deliveryEnd:THIS_YEAR+'-12-31',status:'Open',source:'Bin'},
+    {id:'s4',year:THIS_YEAR,crop:'Corn',type:'Put option',date:THIS_YEAR+'-06-10',bu:10000,price:4.70,premium:0.20,strike:5.00,ppExpiration:THIS_YEAR+'-11-20',futuresMonth:'Dec 26',buyer:'Valley Grain Co-op',deliveryStart:THIS_YEAR+'-12-01',deliveryEnd:THIS_YEAR+'-12-31',status:'Open',source:'Bin'},
     {id:'s5',year:THIS_YEAR,crop:'Corn',type:'Cash sale',date:THIS_YEAR+'-09-28',bu:15000,price:4.21,buyer:'Valley Grain Co-op'},
     {id:'s6',year:THIS_YEAR,crop:'Soybeans',type:'Forward contract',date:THIS_YEAR+'-04-15',bu:15000,price:10.35,buyer:'Bayside Processing',deliveryStart:THIS_YEAR+'-10-05',deliveryEnd:THIS_YEAR+'-10-20',status:'Open'},
     {id:'s7',year:THIS_YEAR,crop:'Soybeans',type:'Cash sale',date:THIS_YEAR+'-09-30',bu:8000,price:10.05,buyer:'Bayside Processing'},
