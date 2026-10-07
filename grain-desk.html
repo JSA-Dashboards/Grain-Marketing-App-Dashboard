@@ -130,6 +130,11 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* quotes: futures board */
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.qcard{border-top:4px solid var(--crop);overflow:hidden}
+.qcard h3{padding:12px 16px 6px}
+.qcard tr.qused td{background:color-mix(in srgb,var(--crop) 12%,var(--surface))}
 /* profit optimizer */
 .optgrid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:960px){.optgrid{grid-template-columns:minmax(0,1fr)}}
@@ -376,6 +381,23 @@ function accScheduled(s){
   const days=businessDays(s.accStart,end),n=s.ratePeriod==='Weekly'?Math.ceil(days/5):days;
   return Math.min(n*n0(s.rate),n0(s.bu)||Infinity)}
 const yieldOf=p=>num(p.expectedYield)??n0(p.aph);
+// CME futures from the daily sync (market/futures): symbols like ZCZ26 = corn Dec 2026, prices in $/bu
+const MCODE='FGHJKMNQUVXZ',MNAME=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ROOT={corn:'ZC',soybeans:'ZS',wheat:'ZW'},NEWCROP={ZC:'Z',ZS:'X',ZW:'N'};
+const symLabel=s=>{const m=MCODE.indexOf(s[2]);return m<0?s:`${MNAME[m]} ${s.slice(3)}`};
+const symOrder=s=>(2000+ +s.slice(3))*12+MCODE.indexOf(s[2]);
+function marketSyms(crop){const r=ROOT[key(crop)],p=(S.market&&S.market.prices)||{};
+  return r?Object.keys(p).filter(s=>s.startsWith(r)&&s.length===5).sort((a,b)=>symOrder(a)-symOrder(b)):[]}
+// default contract: the crop year's new-crop month, or the next one still trading
+function defaultSym(plan){const r=ROOT[key(plan.crop)];if(!r)return null;
+  const want=r+NEWCROP[r]+String(plan.year).slice(2),syms=marketSyms(plan.crop);
+  return syms.includes(want)?want:syms.find(s=>symOrder(s)>=symOrder(want))||syms[syms.length-1]||null}
+function futFor(plan){
+  if(!plan)return{price:null};
+  if(plan.futManual&&num(plan.futPrice)!=null)return{price:num(plan.futPrice),source:'manual',asOf:plan.priceDate};
+  const sym=plan.futSymbol||defaultSym(plan),p=sym&&S.market&&S.market.prices?S.market.prices[sym]:null;
+  if(p!=null)return{price:p,source:'market',symbol:sym,asOf:S.market.asOf};
+  return{price:num(plan.futPrice),source:num(plan.futPrice)!=null?'manual':null,asOf:plan.priceDate}}
 const loadsBu=s=>(s.loads||[]).reduce((a,l)=>a+n0(l.netBu),0);
 function delivered(s){
   if(s.type==='Cash sale')return qty(s);
@@ -460,7 +482,7 @@ function alerts(f,year){
     if(d<0)out.push({c:'bad',t:`${s.crop} Min/Max with ${s.buyer||'buyer'} expired ${fmtDate(s.mmExpiration)}. Enter the final futures price.`});
     else if(d<=14)out.push({c:'warn',t:`${s.crop} Min/Max with ${s.buyer||'buyer'} expires ${fmtDate(s.mmExpiration)} (${d} days). Range ${usd(num(s.minPrice))}–${usd(num(s.maxPrice))}.`})});
   f.sales.filter(s=>+s.year===+year&&isPP(s)&&!s.ppOutcome).forEach(s=>{
-    const d=s.ppExpiration?daysUntil(s.ppExpiration):null,pl=f.crops.find(c=>+c.year===+year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null;
+    const d=s.ppExpiration?daysUntil(s.ppExpiration):null,pl=f.crops.find(c=>+c.year===+year&&key(c.crop)===key(s.crop)),fut=pl?futFor(pl).price:null;
     if(d!=null&&d<0)out.push({c:'bad',t:`${s.crop} Premium Plus with ${s.buyer||'buyer'} expired ${fmtDate(s.ppExpiration)}. Record whether it doubled up.`});
     else if(d!=null&&d<=14)out.push({c:'warn',t:`${s.crop} Premium Plus with ${s.buyer||'buyer'} expires ${fmtDate(s.ppExpiration)} (${d} days). Could add ${bu(ppDbl(s))} bu at ${usd(num(s.strike))}.`});
     if((d==null||d>=0)&&ppTriggers(s,fut))out.push({c:'warn',t:`${s.crop} Premium Plus: at today's futures (${usd(fut)}) it would double up ${bu(ppDbl(s))} bu at ${usd(num(s.strike))}.`})});
@@ -493,10 +515,14 @@ const FORMS={
     {k:'expectedYield',label:'Expected yield (bu/ac)',type:'number',step:'any',hint:'Your yield estimate this year. Leave blank to use APH.'},
     {k:'costPerAcre',label:'Total cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, insurance, overhead'},
   ],blank:()=>({year:S.year,crop:'Corn'})},
-  mkt:{title:'Market prices',fields:[
-    {k:'futPrice',label:'Futures price ($/bu)',type:'number',step:'any',hint:'Current futures for this crop year. The Quotes tab will fill this in later.'},
+  mkt:{title:'Futures & basis',fields:[
+    {k:'futSymbol',label:'Futures contract',type:'select',full:1,show:v=>!v.futManual&&marketSyms(v.crop).length>0,
+      options:v=>[['',`Default: ${defaultSym(v)?symLabel(defaultSym(v)):'new crop'}`],...marketSyms(v.crop).map(s=>[s,`${symLabel(s)} · ${usd(S.market.prices[s],4)}`])],
+      hint:()=>S.market&&S.market.asOf?`CME prices as of ${fmtDate(S.market.asOf)}, updated each evening from JSA.`:''},
+    {k:'futManual',label:'Enter the futures price by hand instead',type:'check',show:v=>marketSyms(v.crop).length>0},
+    {k:'futPrice',label:'Futures price ($/bu)',type:'number',step:'any',show:v=>v.futManual||!marketSyms(v.crop).length,hint:'Used instead of the daily CME price'},
+    {k:'priceDate',label:'Price as of',type:'date',show:v=>v.futManual||!marketSyms(v.crop).length},
     {k:'estBasis',label:'Estimated basis ($/bu)',type:'number',step:'any',hint:'Negative under futures, e.g. -0.70'},
-    {k:'priceDate',label:'Prices as of',type:'date'},
   ]},
   ins:{title:'Crop insurance',fields:[
     {k:'insType',label:'Insurance plan',type:'select',options:INS_TYPES,hint:'RP = Revenue Protection, RP-HPE = harvest price exclusion, YP = Yield Protection'},
@@ -686,7 +712,7 @@ function drawSale(){
     <dl class="facts">${fact('Contract name',esc(s.specialtyName||'—'))}${fact('Key date',fmtDate(s.otherDate))}${fact('Flat price (entered)',usd(num(s.otherFlat)))}</dl>
     ${s.terms?`<p style="font-size:.88rem;margin:10px 0 0;white-space:pre-wrap">${esc(s.terms)}</p>`:'<p class="muted" style="font-size:.85rem;margin:10px 0 0">No terms written down yet. Use Edit to add them.</p>'}
     <p class="muted" style="font-size:.78rem;margin:8px 0 0">Counts as sold bushels. Priced by the flat price if entered, otherwise futures + basis once both are set.</p>`:''}
-  ${isMM(s)?(()=>{const ms=mmState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null,fin=num(s.price);
+  ${isMM(s)?(()=>{const ms=mmState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?futFor(pl).price:null,fin=num(s.price);
     const est=fut!=null?mmClamp(s,fut)-n0(s.mmFee):null;
     return`<h3 class="dsub">Min/Max <span class="pill ${ms.c}" style="margin-left:6px;vertical-align:1px">${esc(ms.t)}</span></h3>
     <dl class="facts">${fact('Minimum (floor)',usd(num(s.minPrice)))}${fact('Maximum (ceiling)',usd(num(s.maxPrice)))}${fact('Net cost / fee',num(s.mmFee)?usd(num(s.mmFee)):'None')}
@@ -694,7 +720,7 @@ function drawSale(){
       ${fin!=null?fact('Final futures',`${usd(fin)} → ${usd(mmClamp(s,fin))}`):fact("Est. at today's futures",est!=null?`${usd(est)} <span class="muted">(fut ${usd(fut)})</span>`:'—')}
       ${fact('Futures range after fee',num(s.minPrice)!=null&&num(s.maxPrice)!=null?`${usd(num(s.minPrice)-n0(s.mmFee))} – ${usd(num(s.maxPrice)-n0(s.mmFee))}`:'—')}</dl>
     <p class="muted" style="font-size:.78rem;margin:8px 0 0">Bushels count as sold now. The futures part is held between the min and max at expiration, less the fee, then basis is added. Until the final futures is set, Crop Overview values it at today's futures held inside the range.</p>`})():''}
-  ${isPP(s)?(()=>{const ps=ppState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?num(pl.futPrice):null,trig=ps.t.startsWith('Double-up pending')&&ppTriggers(s,fut);
+  ${isPP(s)?(()=>{const ps=ppState(s),pl=f.crops.find(c=>+c.year===+s.year&&key(c.crop)===key(s.crop)),fut=pl?futFor(pl).price:null,trig=ps.t.startsWith('Double-up pending')&&ppTriggers(s,fut);
     return`<h3 class="dsub">Premium Plus <span class="pill ${ps.c}" style="margin-left:6px;vertical-align:1px">${esc(ps.t)}</span></h3>
     <dl class="facts">${fact('Contract futures',usd(num(s.price)))}${fact('Premium received',num(s.premium)!=null?'+'+usd(num(s.premium)):'—')}
       ${fact('Contract + premium',num(s.price)!=null?usd(num(s.price)+n0(s.premium)):'—')}${fact('Call strike',usd(num(s.strike)))}
@@ -805,7 +831,7 @@ function pieSVG(segs,label){
   return`<svg viewBox="0 0 120 120" class="pie" role="img" aria-label="${esc(label)}">${parts.join('')}</svg>`}
 // one card per crop, laid out like the KD Farm Operations sheet: Farm info / Breakeven / Crop values
 function cropMarket(f,r){
-  const pl=r.plan||{},fut=num(pl.futPrice),basis=num(pl.estBasis),mkt=fut!=null?fut+(basis??0):null;
+  const pl=r.plan||{},fi=futFor(r.plan),fut=fi.price,basis=num(pl.estBasis),mkt=fut!=null?fut+(basis??0):null;
   const prod=r.expected,sold=r.sold,unsold=Math.max(0,prod-sold),hedged=r.hedged,unpriced=Math.max(0,unsold-hedged);
   const sales=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop));
   // sold value: priced contracts at their flat price; open legs estimated from today's futures / est. basis
@@ -820,7 +846,7 @@ function cropMarket(f,r){
   const unsoldVal=mkt!=null?unsold*mkt:null,unpricedVal=mkt!=null?unpriced*mkt:null;
   // with a market price: everything valued (sold + unsold + hedges − put premiums − cost); without: profit on priced bushels only
   const profit=cost==null?null:mkt!=null&&!missBu?soldVal+unsoldVal+(hedgeVal||0)-premium-cost:(r.be!=null?r.pricedRev-r.be*r.pricedBu:null);
-  return{pl,fut,basis,mkt,prod,sold,unsold,hedged,unpriced,soldVal,estBu,missBu,hedgeVal,itmBu,premium,cost,unsoldVal,unpricedVal,profit,
+  return{pl,fi,fut,basis,mkt,prod,sold,unsold,hedged,unpriced,soldVal,estBu,missBu,hedgeVal,itmBu,premium,cost,unsoldVal,unpricedVal,profit,
     ppa:profit!=null&&n0(pl.acres)?profit/n0(pl.acres):null,full:mkt!=null&&!missBu}}
 function cropCard(f,r){
   const m=cropMarket(f,r),pl=m.pl,n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
@@ -832,19 +858,19 @@ function cropCard(f,r){
   const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)];
   return`<article class="ccard" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
     <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2><span class="cdot"></span>${esc(r.crop)} ${S.year}</h2></div>
-      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Update prices':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
+      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Futures & basis':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
     <div class="crow"><div class="clabel">Farm info</div><div class="ccells">
       ${cell('Acres',n1(pl.acres))}${cell('APH',n1(pl.aph))}${cell('Est. yield',n1(r.yld||null))}${cell('Production goal',n1(m.prod))}
       ${cell('Cost / acre',usd(num(pl.costPerAcre)))}${cell('Total farm cost',usd(m.cost))}${cell('Net profit / acre',signed(m.ppa),pnl(m.ppa))}${cell('Total profit',signed(m.profit,0),pnl(m.profit))}</div></div>
     <div class="crow"><div class="clabel">Breakeven</div><div class="ccells">
       ${cell('Est. basis',m.basis==null?'—':`<span class="${m.basis<0?'neg':''}">${m.basis<0?'−':''}${Math.abs(m.basis).toFixed(2)}</span>`)}${cell('Initial B/E',usd(r.be,4))}${cell('Dynamic B/E',dyn)}</div></div>
     <div class="crow"><div class="clabel">Crop values</div><div class="ccells">
-      ${pair('Total bushels',n1(m.prod),'Futures price',m.fut==null?'—':usd(m.fut,4))}
+      ${pair('Total bushels',n1(m.prod),`Futures price${m.fi.symbol?` <em>(${symLabel(m.fi.symbol)})</em>`:m.fi.source==='manual'?' <em>(entered)</em>':''}`,m.fut==null?'—':usd(m.fut,4))}
       ${pair('Unsold bushels',n1(m.unsold),'Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
       ${pair('Sold bushels',`<span class="pos">${n1(m.sold)}</span>`,'Value of sold',`<span class="pos">${usd(m.soldVal,0)}</span>`,'t-good')}
       ${pair(`Hedged bushels${m.itmBu?` <em>(${n1(m.itmBu)} bu Premium Plus would double up)</em>`:''}`,`<span class="warn">${n1(m.hedged)}</span>`,'Value of hedges',m.hedgeVal==null?'—':signed(m.hedgeVal,0),'t-warn')}
       ${pair('Unpriced bushels',`<span class="neg">${n1(m.unpriced)}</span>`,'Value of unpriced',m.unpricedVal==null?'—':`<span class="neg">${usd(m.unpricedVal,0)}</span>`,'t-bad')}</div></div>
-    <footer class="muted">${m.full?`Profit values unsold bushels at futures ${m.basis!=null?'+ est. basis ':''}(${usd(m.mkt)})${pl.priceDate?` as of ${fmtDate(pl.priceDate)}`:''}, includes futures hedge value.`
+    <footer class="muted">${m.full?`Profit values unsold bushels at ${m.fi.source==='market'?`${symLabel(m.fi.symbol)} futures`:'futures'} ${m.basis!=null?'+ est. basis ':''}(${usd(m.mkt)})${m.fi.asOf?` as of ${fmtDate(m.fi.asOf)}`:''}${m.fi.source==='market'?' (CME, daily from JSA)':''}, includes futures hedge value.`
       :`Profit counts only priced sold bushels. Add a futures price and est. basis to value unsold bushels.`}${m.estBu?` Value of sold estimates ${n1(m.estBu)} bu whose basis or futures isn't set yet.`:''}</footer></article>`}
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
 function farmSummary(p){
@@ -1155,7 +1181,7 @@ function optState(f){
   if(!plans.length)return null;
   let o=S.opt;
   if(!o||o.farm!==S.current||o.year!==S.year||!plans.some(p=>p.id===o.planId)){const p=plans[0];
-    o=S.opt={farm:S.current,year:S.year,planId:p.id,yieldPct:100,fut:num(p.futPrice),basis:num(p.estBasis)??0,legs:[],name:'',savedId:'',confirmDel:false}}
+    o=S.opt={farm:S.current,year:S.year,planId:p.id,yieldPct:100,fut:futFor(p).price,basis:num(p.estBasis)??0,legs:[],name:'',savedId:'',confirmDel:false}}
   return{o,plans,plan:plans.find(p=>p.id===o.planId)}}
 function tabOptimizer(f){
   const st=optState(f);
@@ -1247,7 +1273,7 @@ document.addEventListener('input',e=>{const t=e.target;if(!S.opt)return;
   if(t.id==='opt_yield'){S.opt.yieldPct=+t.value;const f=S.farms[S.current],p=f.crops.find(c=>c.id===S.opt.planId);$('#opt_yield_out').textContent=`${t.value}% of expected · ${(yieldOf(p)*t.value/100).toFixed(1)} bu/ac`;refreshOpt()}
   if(t.id==='opt_name')S.opt.name=t.value});
 document.addEventListener('change',e=>{const t=e.target,f=S.farms[S.current];if(!f)return;
-  if(t.id==='opt_crop'){const p=f.crops.find(c=>c.id===t.value);S.opt={...S.opt,planId:t.value,fut:num(p.futPrice),basis:num(p.estBasis)??0,legs:[],savedId:'',name:'',confirmDel:false};render()}
+  if(t.id==='opt_crop'){const p=f.crops.find(c=>c.id===t.value);S.opt={...S.opt,planId:t.value,fut:futFor(p).price,basis:num(p.estBasis)??0,legs:[],savedId:'',name:'',confirmDel:false};render()}
   if(t.id==='opt_saved'){const x=(f.scenarios||[]).find(z=>z.id===t.value);
     if(x)S.opt={farm:S.current,year:S.year,planId:x.planId,yieldPct:x.yieldPct??100,fut:x.fut,basis:x.basis??0,legs:clone(x.legs||[]),name:x.name,savedId:x.id,confirmDel:false};
     else S.opt={...S.opt,savedId:'',name:'',legs:[],confirmDel:false};render()}});
@@ -1256,9 +1282,18 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-addleg],[d
   if(t.dataset.addleg)S.opt.legs.push(legDefaults(t.dataset.addleg,S.opt,n0(p.acres)*yieldOf(p)*S.opt.yieldPct/100));
   else S.opt.legs=S.opt.legs.filter(l=>l.id!==t.dataset.rmleg);
   render()});
-function tabQuotes(){
-  return`<section><div class="sechead"><h2>Quotes</h2></div>
-  <div class="panel"><div class="empty"><b>Coming soon</b>This is where cash bids and futures quotes for corn, soybeans and wheat will go.</div></div></section>`}
+function tabQuotes(f){
+  const m=S.market,crops=[['Corn','ZC','corn'],['Soybeans','ZS','soy'],['Wheat','ZW','wheat']];
+  const board=!m||!m.prices?`<div class="panel"><div class="empty"><b>Futures haven't loaded yet</b>CME corn, soybean and wheat prices update each evening from JSA's Snowflake data.</div></div>`
+    :`<div class="qgrid">${crops.map(([name,root,ck])=>{const syms=marketSyms(name);const plan=f&&f.crops.find(c=>+c.year===+S.year&&key(c.crop)===key(name));const used=plan?futFor(plan).symbol:null;
+      return`<div class="panel qcard" style="--crop:var(--c-${ck})"><h3><span class="cdot"></span>${name}</h3>${syms.length?`<table><thead><tr><th>Contract</th><th class="n">Price</th><th class="n">Change</th></tr></thead><tbody>
+      ${syms.map(s=>{const p=m.prices[s],pv=m.prev&&m.prev[s],ch=pv!=null?p-pv:null;
+        return`<tr${s===used?' class="qused"':''}><td>${symLabel(s)} <span class="muted mono" style="font-size:.72rem">${s}</span>${s===used?' <span class="tag bin">Your crop card</span>':''}</td><td class="n mono">${usd(p,4)}</td>
+        <td class="n mono" style="color:${ch==null||Math.abs(ch)<1e-9?'var(--muted)':ch>0?'var(--good)':'var(--bad)'}">${ch==null?'—':(ch>0?'▲ ':ch<0?'▼ ':'')+(Math.abs(ch)*100).toFixed(2)+'¢'}</td></tr>`}).join('')}</tbody></table>`:'<p class="muted" style="padding:0 16px">No contracts in today’s data.</p>'}</div>`}).join('')}</div>`;
+  return`<section><div class="sechead"><h2>Futures</h2><div class="sp"></div>${m&&m.asOf?`<span class="muted" style="font-size:.85rem">CME prices as of <b style="color:var(--ink)">${fmtDate(m.asOf)}</b>${m.prevDate?` · change vs ${fmtDate(m.prevDate)}`:''}</span>`:''}</div>
+  ${board}
+  <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Updated once each evening from JSA's Snowflake futures data, so these are end-of-day prices, not live quotes. Each crop card uses its crop year's new-crop month unless you pick another one under Futures & basis.</p></section>
+  <section><div class="sechead"><h2>Cash bids</h2></div><div class="panel"><div class="empty"><b>Coming soon</b>Elevator and processor cash bids will go here.</div></div></section>`}
 // one combined bin per crop: capacity = all bins holding that crop; fill split into sold (open contracts) and unsold
 function cropBins(f){
   const st=storage(f);
@@ -1438,6 +1473,8 @@ async function boot(){
   S.mode='live';
   const me=await user.me();$('#who').textContent=S.owner?'Consultant · '+(me.name||'you'):(me.name||'');
   const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
+  // shared futures prices written by the evening sync; everyone reads, only the owner writes
+  db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   if(S.owner){
     db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
       S.farms=next;if(S.current&&!next[S.current])S.current=null;if(!$('#dlg').open)render()},onErr);
