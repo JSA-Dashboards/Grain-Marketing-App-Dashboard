@@ -878,7 +878,8 @@ function renderClients(){
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
-  const tabs=[['overview','Crop Overview'],['production','Production'],['sales','Sales & contracts'],['quotes','Quotes'],['optimizer','Profit optimizer'],['storage','Storage'],['insurance','Crop insurance']];
+  // tabs follow the season: plan it, store it, sell it, then tools
+  const tabs=[['overview','Crop Overview'],['production','Production'],['storage','Storage'],['sales','Sales & contracts'],['quotes','Quotes'],['optimizer','Profit optimizer'],['insurance','Crop insurance']];
   if(!tabs.some(t=>t[0]===S.tab))S.tab='overview';
   const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,optimizer:tabOptimizer,insurance:tabInsurance}[S.tab](f);
   return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
