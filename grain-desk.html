@@ -1004,13 +1004,12 @@ function openShared(id){
     onDelete:id?()=>saveShared(items.filter(x=>x.id!==id)):null})}
 // next occurrence of a yearly date (MM-DD) on or after today
 const nextDate=d=>{const y=+TODAY.slice(0,4),md=d.slice(5);let n=`${y}-${md}`;return n<TODAY?`${y+1}-${md}`:n};
-// everything with a date coming up: program deadlines (shared), the farm's own, and contract dates the app already knows
+// everything with a date coming up: program deadlines (shared), the farm's own, and contract expirations (delivery windows are left out on purpose)
 function deadlinesFor(f){
   const out=[],add=x=>{if(x.d)out.push(x)};
   ((S.deadlines&&S.deadlines.items)||[]).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,src:x.agency||'Program',note:x.note,kind:'shared',id:x.id}));
   (f.deadlines||[]).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,src:x.category||'Your farm',note:x.note,kind:'farm',id:x.id}));
   f.sales.forEach(s=>{const who=s.buyer||'buyer',c={kind:'contract',sid:s.id,src:typeName(s)};
-    if(DELIVERABLE.includes(s.type)&&s.deliveryEnd&&remaining(s)>0)add({...c,d:s.deliveryEnd,title:`${s.crop} delivery window closes · ${bu(remaining(s))} bu to ${who}`});
     if(isAcc(s)&&accActive(s))add({...c,d:s.expiration,title:`${s.crop} accumulator with ${who} expires`});
     if(isPP(s)&&!s.ppOutcome)add({...c,d:s.ppExpiration,title:`${s.crop} Premium Plus with ${who} expires`});
     if(isMM(s)&&num(s.price)==null)add({...c,d:s.mmExpiration,title:`${s.crop} Min/Max with ${who} expires`});
@@ -1025,7 +1024,7 @@ function deadlinePanel(f){
   <div class="panel">${list.length?`<ul class="dllist">${list.map(x=>`<li class="click" ${x.kind==='contract'?`data-sale="${x.sid}"`:x.kind==='farm'?`data-dl="${x.id}"`:S.owner?`data-sdl="${x.id}"`:''} tabindex="0">
       ${badge(x.d)}<div class="dltext"><b>${esc(x.title)}</b><span>${esc(x.src)}${x.note?` · ${esc(x.note)}`:''}</span></div></li>`).join('')}</ul>
     ${all.length>6?`<div style="padding:8px 16px 12px"><button class="link" data-act="dlall">${S.dlAll?'Show fewer':`Show all ${all.length}`}</button></div>`:''}`
-    :`<div class="empty"><b>Nothing due in the next year</b>Contract delivery windows and expirations show here automatically. Add your own with + Add deadline.</div>`}</div></section>`}
+    :`<div class="empty"><b>Nothing due in the next year</b>Program deadlines and contract expirations show here automatically. Add your own with + Add deadline.</div>`}</div></section>`}
 
 const monthLabel=k=>k==='none'?'No delivery date':new Date(k+'-15T12:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'});
 // months a contract delivers in: every month its delivery window touches; cash sales use the sale date
