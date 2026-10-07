@@ -130,6 +130,18 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* deadlines to watch */
+.dllist{list-style:none;margin:0;padding:6px 0}
+.dllist li{display:flex;gap:14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.dllist li:last-child{border-bottom:0}
+.dlbadge{flex:none;width:70px;text-align:center;border-radius:8px;padding:6px 4px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));display:grid;gap:1px}
+.dlbadge b{font:700 .95rem var(--f-display);color:var(--accent)}
+.dlbadge span{font:500 .78rem var(--f-data);color:var(--muted)}
+.dlbadge.soon{background:color-mix(in srgb,var(--warn) 16%,var(--surface))}
+.dlbadge.soon b{color:var(--warn)}
+.dltext{display:grid;gap:2px;min-width:0}
+.dltext b{font-weight:600}
+.dltext span{font-size:.8rem;color:var(--muted)}
 /* budget vs actual, year over year */
 table.bva td:first-child{white-space:nowrap}
 table.bva tr.grp td{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600;padding-top:14px;padding-bottom:6px}
@@ -371,7 +383,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -554,6 +566,20 @@ const FORMS={
     {k:'actualCostPerAcre',label:'Actual cost per acre ($)',type:'number',step:'any',hint:'After harvest. Itemized crops enter actuals in the cost breakdown instead.',show:v=>!costItemsOf(v).length},
     {k:'costPerAcre',label:'Budget cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, insurance, overhead. Or use Break it down on the Production tab.',show:v=>!costItemsOf(v).length},
   ],blank:()=>({year:S.year,crop:'Corn'})},
+  deadline:{title:'Deadline',fields:[
+    {k:'title',label:'What is due',type:'text',req:1,full:1,hint:'e.g. Cash rent due to landlord, Operating loan review'},
+    {k:'date',label:'Date',type:'date',req:1},
+    {k:'category',label:'Type',type:'select',options:['Your farm','Landlord','Lender','Crop insurance','FSA','Other']},
+    {k:'recurring',label:'Repeats every year on this date',type:'check'},
+    {k:'note',label:'Note',type:'text',full:1},
+  ],blank:()=>({date:TODAY,category:'Your farm',recurring:false})},
+  sdeadline:{title:'Program deadline',fields:[
+    {k:'title',label:'Deadline',type:'text',req:1,full:1,hint:'e.g. Spring crops sales closing date'},
+    {k:'date',label:'Date',type:'date',req:1},
+    {k:'agency',label:'Program',type:'select',options:['Crop insurance','FSA','FSA / RMA','Tax','Other']},
+    {k:'recurring',label:'Same date every year',type:'check'},
+    {k:'note',label:'Note',type:'text',full:1,hint:'e.g. Dates vary by state and county; check your policy'},
+  ],blank:()=>({date:TODAY,agency:'Crop insurance',recurring:true})},
   mkt:{title:'Futures & basis',fields:[
     {k:'futSymbol',label:'Futures contract',type:'select',full:1,show:v=>!v.futManual&&marketSyms(v.crop).length>0,
       options:v=>[['',`Default: ${defaultSym(v)?symLabel(defaultSym(v)):'new crop'}`],...marketSyms(v.crop).map(s=>[s,`${symLabel(s)} · ${usd(S.market.prices[s],4)}`])],
@@ -643,7 +669,7 @@ const FORMS={
     {k:'checked',label:'Last checked',type:'date'},
   ],blank:()=>({checked:TODAY})},
 };
-const LISTS={sale:'sales',crop:'crops',ins:'crops',mkt:'crops',bin:'bins'};
+const LISTS={deadline:'deadlines',sale:'sales',crop:'crops',ins:'crops',mkt:'crops',bin:'bins'};
 let dlgCtx=null,detail=null;
 function listSave(kind,id){return rec=>{const f=S.farms[S.current],list=LISTS[kind];
   f[list]=id?f[list].map(r=>r.id===id?rec:r):[...f[list],rec];if(rec.year)S.year=+rec.year;persist(S.current)}}
@@ -655,11 +681,11 @@ function saleSave(id){return rec=>{
   listSave('sale',id)(rec)}}
 function openForm(kind,id,opts={}){
   const f=S.farms[S.current];const spec=FORMS[kind];
-  const base=id&&LISTS[kind]?f[LISTS[kind]].find(r=>r.id===id):null;
+  const base=opts.base||(id&&LISTS[kind]?f[LISTS[kind]].find(r=>r.id===id):null);
   detail=opts.back?detail:null;
   dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,
     onSave:opts.onSave||(kind==='sale'?saleSave(id):listSave(kind,id)),
-    onDelete:id&&LISTS[kind]&&kind!=='ins'&&kind!=='mkt'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null};
+    onDelete:opts.onDelete||(id&&LISTS[kind]&&kind!=='ins'&&kind!=='mkt'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null)};
   drawForm();if(!$('#dlg').open)$('#dlg').showModal()}
 function drawForm(){
   const {kind,id,vals}=dlgCtx;const spec=FORMS[kind];
@@ -965,7 +991,41 @@ function tabOverview(f){
   return strip+`<section><div class="sechead"><h2>Marketing position</h2><div class="sp"></div><button class="small" data-add="sale">Add sale</button></div>
     <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span></div>`:''}<div class="pos">${bars}</div></div></section>
   <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, deliveries and storage line up for ${S.year}.</div>`}</div></section>
-  <section><div class="sechead"><h2>Upcoming deliveries</h2></div><div class="panel">${ups.length?`<ul class="alerts">${ups.map(d=>`<li class="click" data-sale="${d.id}" tabindex="0"><span style="flex:1"><b>${esc(d.crop)}</b> · ${bu(remaining(d))} bu to ${esc(d.buyer||'buyer')}<div class="muted" style="font-size:.8rem">${esc(d.type)} · window ${fmtDate(d.deliveryStart)} – ${fmtDate(d.deliveryEnd)}</div></span><span class="pill ${d.st.c}">${d.st.t}</span></li>`).join('')}</ul>`:`<div class="empty"><b>No open deliveries</b>Forward, HTA and basis contracts with delivery dates show here.</div>`}</div></section></div>`}
+  ${deadlinePanel(f)}</div>`}
+// program deadlines live in market/deadlines: the consultant edits them once and every client sees them
+function saveShared(items){
+  S.deadlines={...(S.deadlines||{}),items,updatedAt:new Date().toISOString()};render();
+  if(S.mode!=='live'){toast('Preview only — not saved');return}
+  S.db.doc('market/deadlines').set(clone(S.deadlines)).then(()=>toast('Saved for all clients')).catch(()=>toast("Couldn't save that deadline. Try again.",true))}
+function openShared(id){
+  const items=(S.deadlines&&S.deadlines.items)||[],base=id?items.find(x=>x.id===id):null;
+  openForm('sdeadline',id||null,{base,title:id?'Edit program deadline (all clients)':'Add program deadline (all clients)',
+    onSave:rec=>saveShared(id?items.map(x=>x.id===id?rec:x):[...items,rec]),
+    onDelete:id?()=>saveShared(items.filter(x=>x.id!==id)):null})}
+// next occurrence of a yearly date (MM-DD) on or after today
+const nextDate=d=>{const y=+TODAY.slice(0,4),md=d.slice(5);let n=`${y}-${md}`;return n<TODAY?`${y+1}-${md}`:n};
+// everything with a date coming up: program deadlines (shared), the farm's own, and contract dates the app already knows
+function deadlinesFor(f){
+  const out=[],add=x=>{if(x.d)out.push(x)};
+  ((S.deadlines&&S.deadlines.items)||[]).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,src:x.agency||'Program',note:x.note,kind:'shared',id:x.id}));
+  (f.deadlines||[]).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,src:x.category||'Your farm',note:x.note,kind:'farm',id:x.id}));
+  f.sales.forEach(s=>{const who=s.buyer||'buyer',c={kind:'contract',sid:s.id,src:typeName(s)};
+    if(DELIVERABLE.includes(s.type)&&s.deliveryEnd&&remaining(s)>0)add({...c,d:s.deliveryEnd,title:`${s.crop} delivery window closes · ${bu(remaining(s))} bu to ${who}`});
+    if(isAcc(s)&&accActive(s))add({...c,d:s.expiration,title:`${s.crop} accumulator with ${who} expires`});
+    if(isPP(s)&&!s.ppOutcome)add({...c,d:s.ppExpiration,title:`${s.crop} Premium Plus with ${who} expires`});
+    if(isMM(s)&&num(s.price)==null)add({...c,d:s.mmExpiration,title:`${s.crop} Min/Max with ${who} expires`});
+    if(isOther(s)&&flatPrice(s)==null)add({...c,d:s.otherDate,title:`${typeName(s)} key date · ${s.crop} with ${who}`})});
+  return out.filter(x=>x.d>=TODAY&&daysUntil(x.d)<=366).sort((a,b)=>a.d.localeCompare(b.d)||a.title.localeCompare(b.title))}
+function deadlinePanel(f){
+  const all=deadlinesFor(f),list=S.dlAll?all:all.slice(0,6);
+  const badge=d=>{const t=new Date(d+'T12:00:00'),n=daysUntil(d);
+    return`<div class="dlbadge ${n<=14?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div>`};
+  return`<section><div class="sechead"><h2>Deadlines to watch</h2><div class="sp"></div>
+    ${S.owner?'<button class="small" data-sdladd="1" title="Shown to every client">+ Program deadline</button>':''}<button class="small" data-dladd="1">+ Add deadline</button></div>
+  <div class="panel">${list.length?`<ul class="dllist">${list.map(x=>`<li class="click" ${x.kind==='contract'?`data-sale="${x.sid}"`:x.kind==='farm'?`data-dl="${x.id}"`:S.owner?`data-sdl="${x.id}"`:''} tabindex="0">
+      ${badge(x.d)}<div class="dltext"><b>${esc(x.title)}</b><span>${esc(x.src)}${x.note?` · ${esc(x.note)}`:''}</span></div></li>`).join('')}</ul>
+    ${all.length>6?`<div style="padding:8px 16px 12px"><button class="link" data-act="dlall">${S.dlAll?'Show fewer':`Show all ${all.length}`}</button></div>`:''}`
+    :`<div class="empty"><b>Nothing due in the next year</b>Contract delivery windows and expirations show here automatically. Add your own with + Add deadline.</div>`}</div></section>`}
 
 const monthLabel=k=>k==='none'?'No delivery date':new Date(k+'-15T12:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'});
 // months a contract delivers in: every month its delivery window touches; cash sales use the sale date
@@ -1537,8 +1597,11 @@ function tabInsurance(f){
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  const t=e.target.closest('[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
   if(t.dataset.cost){e.stopPropagation();openCost(t.dataset.cost);return}
+  if(t.dataset.dladd){openForm('deadline');return}
+  if(t.dataset.dl){openForm('deadline',t.dataset.dl);return}
+  if(t.dataset.sdladd||t.dataset.sdl){openShared(t.dataset.sdl);return}
   if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
   if(t.dataset.sale){showSale(t.dataset.sale);return}
   if(t.dataset.sort){const k=t.dataset.sort;S.sort=S.sort.k===k?{k,dir:-S.sort.dir}:{k,dir:k==='date'||k==='bu'?-1:1};render();return}
@@ -1549,6 +1612,7 @@ document.addEventListener('click',e=>{
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
   if(a==='clearbroker')setBrokerF('');
+  if(a==='dlall'){S.dlAll=!S.dlAll;render()}
   if(a==='optsave'&&S.opt){const f=S.farms[S.current],o=S.opt,name=(o.name||'').trim()||`Scenario ${(f.scenarios||[]).length+1}`;
     const rec={id:o.savedId||uid(),name,year:o.year,planId:o.planId,yieldPct:o.yieldPct,fut:o.fut,basis:o.basis,legs:clone(o.legs),savedAt:new Date().toISOString()};
     f.scenarios=[...(f.scenarios||[]).filter(x=>x.id!==rec.id),rec];o.savedId=rec.id;o.name=name;persist(S.current)}
@@ -1634,6 +1698,7 @@ async function boot(){
   const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
   // shared futures prices written by the evening sync; everyone reads, only the owner writes
   db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
+  db.doc('market/deadlines').onSnapshot(d=>{S.deadlines=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   if(S.owner){
     db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
       S.farms=next;if(S.current&&!next[S.current])S.current=null;if(!$('#dlg').open)render()},onErr);
