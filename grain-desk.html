@@ -152,6 +152,15 @@ tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)
 .mkt>div.p-gain{background:color-mix(in srgb,var(--good) 16%,var(--surface))}
 .mkt>div.p-loss{background:color-mix(in srgb,var(--bad) 14%,var(--surface))}
 @media (max-width:480px){.calc{padding:18px 16px}.bebig{font-size:2.8rem}}
+.mkt>div.p-warn{background:color-mix(in srgb,var(--warn) 16%,var(--surface))}
+.chip.sm{padding:5px 12px;font-size:.82rem}
+/* storage: bin cards */
+.bingrid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.bincard2{padding:16px 18px;border-radius:14px;border-top:4px solid var(--crop)}
+.bc2head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.bc2head b{font-family:var(--f-display);font-size:1.05rem}
+.pgrid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pgrid3 .pf input{font-size:1rem;padding:8px 10px}
 /* deadlines to watch */
 .dllist{list-style:none;margin:0;padding:6px 0}
 .dllist li{display:flex;gap:14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
@@ -1459,17 +1468,27 @@ function binCards(f){
       ${b.harvest>0?`<p class="binharvest"><span class="tag harvest">At harvest</span> ${bu(b.harvest)} bu more sold to go to town straight from the field</p>`:''}
       ${b.short>0?`<p class="binnote">Contracts set to deliver from the bin call for ${bu(b.short)} bu more than is in storage. Change some to Harvest if they'll be hauled from the field.</p>`:''}</div></div>`).join('')}</div>
   <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Each picture combines every bin holding that crop. "Sold" is grain already committed to open contracts and not yet delivered, so it doesn't matter which bin it comes out of.</p></section>`}
+// Storage: crop bin pictures, then one editable card per bin (type bushels, capacity, moisture in place)
 function tabStorage(f){
-  const st=storage(f);
+  const cropChoices=[...SALE_CROPS,''];
   return binCards(f)+`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
-  <div class="panel tablewrap">${f.bins.length?`<table><thead><tr><th>Bin</th><th>Crop</th><th class="n">Bushels</th><th class="n">Capacity</th><th>Fill</th><th class="n">Moisture</th><th>Checked</th><th></th></tr></thead><tbody>
-    ${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0;return`<tr class="click" data-edit="bin" data-id="${b.id}"><td><b>${esc(b.name)}</b><div class="muted" style="font-size:.78rem">${esc(b.location||'')}</div></td><td>${esc(b.crop||'Empty')}</td>
-      <td class="n">${bu(n0(b.bu))}</td><td class="n">${bu(n0(b.capacity))}</td><td><div class="binbar"><div class="${fill>1?'over':''}" style="width:${Math.min(100,fill*100)}%"></div></div><span class="mono muted" style="font-size:.75rem">${pct(fill)}</span></td>
-      <td class="n">${num(b.moisture)==null?'—':num(b.moisture).toFixed(1)+'%'}</td><td style="white-space:nowrap">${fmtDate(b.checked)}</td><td><button class="small" data-edit="bin" data-id="${b.id}">Edit</button></td></tr>`}).join('')}</tbody></table>`
-    :`<div class="empty"><b>No bins added</b>Add each bin, bag or storage site with its capacity and what's in it.</div>`}</div></section>
-  <section><div class="sechead"><h2>Stored grain vs. open contracts</h2></div><div class="panel tablewrap">${st.rows.length?`<table><thead><tr><th>Crop</th><th class="n">In storage</th><th class="n">Sold from bin, not delivered</th><th class="n">Uncommitted in storage</th><th class="n">Short to fill</th><th class="n">Sold for harvest delivery</th></tr></thead><tbody>
-    ${st.rows.map(r=>`<tr><td><b>${esc(r.crop)}</b></td><td class="n">${bu(r.stored)}</td><td class="n">${bu(r.open)}</td><td class="n">${bu(r.free)}</td><td class="n" style="color:${r.short?'var(--warn)':'inherit'}">${r.short?bu(r.short):'—'}</td><td class="n">${r.harvest?bu(r.harvest):'—'}</td></tr>`).join('')}</tbody></table>`
-    :`<div class="empty">Add bins and open contracts to compare stored grain against what's committed.</div>`}</div></section>`}
+  ${f.bins.length?`<div class="bingrid2">${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0,ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(b.crop)];
+    const fld=(k,label,step='any')=>`<label class="pf"><span>${label}</span><input class="binp" id="bi_${b.id}_${k}" data-bin="${b.id}" data-k="${k}" type="number" step="${step}" inputmode="decimal" value="${b[k]??''}"></label>`;
+    return`<div class="panel bincard2" style="--crop:${ck?`var(--c-${ck})`:'var(--line)'}">
+      <div class="bc2head"><div><b>${esc(b.name)}</b><div class="muted" style="font-size:.78rem">${esc(b.location||'')}${b.checked?`${b.location?' · ':''}checked ${fmtDate(b.checked)}`:''}</div></div>
+        <button class="link" data-edit="bin" data-id="${b.id}" style="font-size:.8rem">Edit</button></div>
+      <div class="chips" style="margin:10px 0 12px">${cropChoices.map(c=>`<button class="chip sm" data-bincrop="${b.id}" data-v="${esc(c)}" aria-pressed="${key(b.crop)===key(c)}">${c||'Empty'}</button>`).join('')}</div>
+      <div class="pgrid3">${fld('bu','Bushels')}${fld('capacity','Capacity')}${fld('moisture','Moisture %','0.1')}</div>
+      <div class="binbar" style="margin-top:12px;height:10px"><div class="${fill>1?'over':''}" style="width:${Math.min(100,fill*100)}%"></div></div>
+      <div class="muted mono" style="font-size:.76rem;margin-top:4px">${pct(fill)} full · ${bu(Math.max(0,n0(b.capacity)-n0(b.bu)))} bu space left</div></div>`}).join('')}</div>`
+    :`<div class="panel"><div class="empty"><b>No bins added</b>Add each bin, bag or storage site with its capacity and what's in it.</div></div>`}</section>`}
+// bin edits save when you leave the box; changing bushels also stamps today as last checked
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('binp'))return;
+  const f=S.farms[S.current],b=f&&f.bins.find(x=>x.id===t.dataset.bin);if(!b)return;const v=num(t.value);
+  if(v==null)delete b[t.dataset.k];else b[t.dataset.k]=v;if(t.dataset.k==='bu')b.checked=TODAY;S.binDirty=true});
+document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('binp')&&S.binDirty){S.binDirty=false;persist(S.current)}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-bincrop]');if(!t||t.closest('dialog'))return;
+  const f=S.farms[S.current],b=f&&f.bins.find(x=>x.id===t.dataset.bincrop);if(!b)return;b.crop=t.dataset.v;b.checked=TODAY;persist(S.current)});
 
 function dynCell(r){
   if(!r.plan||!n0(costOf(r.plan)))return'<span class="muted">Add cost per acre</span>';
@@ -1642,22 +1661,50 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!(t.clas
   S.prodDirty=true;refreshProd()});
 document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('pinp')&&S.prodDirty){S.prodDirty=false;persist(S.current)}});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-prodcrop]');if(!t)return;S.prodCrop=t.dataset.prodcrop;render()});
+// Crop insurance: calculator card per crop; plan and coverage are buttons, prices edit in place
 function tabInsurance(f){
-  const list=f.crops.filter(c=>+c.year===+S.year),p=position(f,S.year);
-  const rowFor=c=>p.find(x=>key(x.crop)===key(c.crop))||{};
-  const rev=list.reduce((a,c)=>a+(rowFor(c).revGuar||0),0);
-  return`<section><div class="sechead"><h2>${S.year} crop insurance</h2><div class="sp"></div>${rev?`<span class="muted">Total revenue guarantee <b class="mono" style="color:var(--ink)">${usd(rev,0)}</b></span>`:''}</div>
-  <div class="panel tablewrap">${list.length?`<table><thead><tr><th>Crop</th><th>Plan</th><th class="n">APH</th><th class="n">Insured bu</th><th class="n">Contracted bu</th><th>Contracted vs insured</th><th class="n">Projected price</th><th class="n">Harvest price</th><th class="n">Revenue guarantee</th><th></th></tr></thead><tbody>
-    ${list.map(c=>{const r=rowFor(c),has=c.insType&&c.insType!=='None',sh=r.insured?r.sold/r.insured:null;
-      return`<tr class="click" data-edit="ins" data-id="${c.id}"><td><b>${esc(c.crop)}</b><div class="muted" style="font-size:.74rem">${bu(n0(c.acres))} ac</div></td>
-      <td>${has?`${esc(c.insType)} · ${n0(c.coverage)}%`:'<span class="pill warn">Not set</span>'}</td><td class="n">${n0(c.aph)}</td><td class="n">${r.insured?bu(r.insured):'—'}</td><td class="n">${bu(r.sold||0)}</td>
-      <td>${sh==null?(r.sold?'<span class="pill bad">Uninsured sales</span>':'—'):`<span class="pill ${sh>1?'bad':sh>0.8?'warn':'good'}">${pct(sh)} of insured</span>`}</td>
-      <td class="n">${has?usd(num(c.projPrice)):'—'}</td><td class="n">${c.insType==='RP'?usd(num(c.harvestPrice)):'—'}</td>
-      <td class="n">${r.revGuar?`<b>${usd(r.revGuar,0)}</b><div class="muted" style="font-size:.74rem">at ${usd(r.insPrice)}/bu</div>`:'—'}</td>
-      <td><button class="small" data-edit="ins" data-id="${c.id}">${has?'Edit':'Add'}</button></td></tr>`}).join('')}</tbody></table>`
-    :`<div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then record insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div>`}</div>
+  const list=f.crops.filter(c=>+c.year===+S.year);
+  if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div><div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
+  const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None';
+  const p=position(f,S.year),tot=list.reduce((a,c)=>a+((p.find(x=>key(x.crop)===key(c.crop))||{}).revGuar||0),0);
+  const chip=(k,v,label)=>`<button class="chip" data-ichip="${k}" data-v="${v}" aria-pressed="${String(sel[k]??'')===String(v)}">${label}</button>`;
+  const fld=(k,label,ph='')=>`<label class="pf"><span>${label}</span><input class="iinp" id="ii_${sel.id}_${k}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${sel[k]??''}" placeholder="${ph}"></label>`;
+  return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(sel.crop)} · revenue guarantee</div></div><div class="sp"></div>
+    ${tot?`<span class="muted" style="font-size:.82rem">All crops: ${usd(tot,0)} guaranteed</span>`:''}</div>
+  <div class="panel calc">
+    <div class="clab">Crop</div>
+    <div class="chips">${list.map(c=>`<button class="chip" data-inscrop="${c.id}" aria-pressed="${c.id===sel.id}">${esc(c.crop)}</button>`).join('')}</div>
+    <div class="clab">Plan</div>
+    <div class="chips">${[['RP','Revenue Protection'],['RP-HPE','RP · harvest price excl.'],['YP','Yield Protection'],['None','No insurance']].map(([v,l])=>chip('insType',v,l)).join('')}</div>
+    ${has?`<div class="clab">Coverage level</div>
+    <div class="chips">${[50,55,60,65,70,75,80,85].map(v=>chip('coverage',v,v+'%')).join('')}</div>
+    <div class="pgrid">${fld('acres','Acres')}${fld('aph','APH (bu/ac)')}${fld('projPrice','Projected price ($/bu)','RMA projected')}${sel.insType==='RP'?fld('harvestPrice','Harvest price ($/bu)','once published'):''}</div>
+    <div id="insResult">${insResult(f,sel)}</div>`
+    :`<p class="muted" style="margin:4px 0 0">No insurance recorded for ${esc(sel.crop)}. Pick a plan above to set it up.</p>`}
+  </div></section>
   <div class="explain"><p><b>Insured bushels</b> = acres × APH × coverage level. Contracting more than this means a short crop could leave contracts you can't fill with insured bushels.</p>
-  <p><b>Revenue guarantee</b> = insured bushels × guarantee price. For RP, that is the higher of the projected and harvest price; RP-HPE and YP use the projected price. These are planning estimates, not policy terms.</p></div></section>`}
+  <p><b>Revenue guarantee</b> = insured bushels × guarantee price. For RP that is the higher of the projected and harvest price; RP-HPE and YP use the projected price. Planning estimates, not policy terms.</p></div>`}
+function insResult(f,sel){
+  const r=position(f,S.year).find(x=>key(x.crop)===key(sel.crop))||{},ac=n0(sel.acres),cpa=costOf(sel);
+  const perAc=ac?r.revGuar/ac:null,costShare=cpa&&perAc!=null?perAc/cpa:null,sh=r.insured?r.sold/r.insured:null;
+  const tone=sh==null?'':sh>1?'p-loss':sh>0.8?'p-warn':'p-gain';
+  return`<div class="beresult"><div class="clab" style="text-align:center">Your revenue guarantee</div>
+    <div class="bebig">${r.revGuar?usd(r.revGuar,0):'—'}</div><div class="muted" style="text-align:center">${r.revGuar?`${usd(perAc)} per acre · at ${usd(r.insPrice)}/bu`:'Enter APH, coverage and projected price'}</div>
+    <div class="bestats"><div><span>Insured bushels</span><b>${r.insured?bu(r.insured):'—'}</b></div><div><span>Guaranteed bu/acre</span><b>${ac&&r.insured?(r.insured/ac).toFixed(1):'—'}</b></div>
+      <div><span>Guarantee price</span><b>${r.insPrice?usd(r.insPrice):'—'}</b></div><div><span>Covers of cost/acre</span><b>${costShare==null?'—':pct(costShare)}</b></div></div></div>
+  <div class="clab" style="margin-top:20px">Compare to what's sold</div>
+  <div class="mkt"><div><span>Contracted bushels</span><b>${bu(r.sold||0)}</b></div><div><span>Insured bushels</span><b>${r.insured?bu(r.insured):'—'}</b></div>
+    <div class="${tone}"><span>Contracted vs insured</span><b>${sh==null?'—':pct(sh)}</b></div></div>
+  <p class="muted" style="font-size:.76rem;margin:6px 0 0">${sh!=null&&sh>1?'More is contracted than insured. A short crop could leave contracts unfilled.':sh!=null&&sh>0.8?'Contracts are close to the insured bushels.':'Contracts are within insured bushels.'}</p>`}
+function insSel(){const f=S.farms[S.current];return f&&(f.crops.find(c=>c.id===S.insCrop)||f.crops.filter(c=>+c.year===+S.year)[0])}
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('iinp'))return;const sel=insSel();if(!sel)return;
+  const v=num(t.value);if(v==null)delete sel[t.dataset.k];else sel[t.dataset.k]=v;S.insDirty=true;
+  const el=$('#insResult');if(el)el.innerHTML=insResult(S.farms[S.current],sel)});
+document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('iinp')&&S.insDirty){S.insDirty=false;persist(S.current)}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.inscrop){S.insCrop=t.dataset.inscrop;render();return}
+  const sel=insSel();if(!sel)return;const k=t.dataset.ichip,v=k==='coverage'?+t.dataset.v:t.dataset.v;
+  sel[k]=v;if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;persist(S.current)});
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
