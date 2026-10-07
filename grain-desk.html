@@ -130,6 +130,16 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* break-even detail */
+.bed{padding:14px 16px}
+.bebar{display:flex;height:22px;border-radius:4px;overflow:hidden;gap:2px;background:var(--surface)}
+.bebar div{min-width:3px}
+table.costtab{margin-top:12px;font-size:.85rem}
+table.costtab td{padding:4px 6px}
+table.costtab input,table.costtab select{padding:5px 7px;font-size:.85rem}
+table.costtab input.num{width:96px;text-align:right}
+table.costtab td:first-child{min-width:170px}
+dialog:has(.costtab){width:min(760px,calc(100vw - 32px))}
 /* quotes: futures board */
 .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .qcard{border-top:4px solid var(--crop);overflow:hidden}
@@ -381,6 +391,16 @@ function accScheduled(s){
   const days=businessDays(s.accStart,end),n=s.ratePeriod==='Weekly'?Math.ceil(days/5):days;
   return Math.min(n*n0(s.rate),n0(s.bu)||Infinity)}
 const yieldOf=p=>num(p.expectedYield)??n0(p.aph);
+// cost per acre: from the itemized breakdown when there is one (per-bushel lines scale with yield), else the single number
+const costItemsOf=p=>(p&&p.costItems||[]).filter(i=>num(i.amount)!=null);
+function costOf(p,yld){if(!p)return null;const it=costItemsOf(p);
+  if(it.length){const y=yld??yieldOf(p);return it.reduce((a,i)=>a+(i.unit==='bu'?n0(i.amount)*y:n0(i.amount)),0)}
+  return num(p.costPerAcre)}
+// standard lines offered when a producer starts a breakdown; amounts left blank
+const COST_TEMPLATE=[['Seed','acre','Seed & seed treatment'],['Fertilizer','acre','N, P, K, lime'],['Chemicals','acre','Herbicide, insecticide, fungicide'],
+  ['Crop insurance','acre','Premium'],['Fuel, oil & repairs','acre',''],['Machinery & equipment','acre','Depreciation, interest, custom hire'],
+  ['Land rent','acre','Cash rent or ownership cost'],['Labor','acre','Hired and family'],['Operating interest','acre',''],['Overhead & other','acre','Utilities, fees, accounting'],
+  ['Drying','bu',''],['Trucking & hauling','bu',''],['Storage','bu','']];
 // CME futures from the daily sync (market/futures): symbols like ZCZ26 = corn Dec 2026, prices in $/bu
 const MCODE='FGHJKMNQUVXZ',MNAME=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const ROOT={corn:'ZC',soybeans:'ZS',wheat:'ZW'},NEWCROP={ZC:'Z',ZS:'X',ZW:'N'};
@@ -439,16 +459,16 @@ function position(f,year){
     const priced=r.sales.filter(s=>flatPrice(s)!=null);
     const pricedBu=priced.reduce((a,s)=>a+qty(s),0);
     const avg=pricedBu?priced.reduce((a,s)=>a+qty(s)*flatPrice(s),0)/pricedBu:null;
-    const be=p&&yld?n0(p.costPerAcre)/yld:null;
+    const be=p&&yld?n0(costOf(p))/yld:null;
     const insured=p&&p.insType&&p.insType!=='None'?n0(p.acres)*n0(p.aph)*n0(p.coverage)/100:0;
     const insPrice=p?(p.insType==='RP'?Math.max(n0(p.projPrice),n0(p.harvestPrice)):n0(p.projPrice)):0;
     const revGuar=insured*insPrice;
     // break-even on the bushels not yet priced, after counting revenue already locked in
     const premiums=0;// Premium Plus premium is received and already in its price
-    const totalCost=p?n0(p.acres)*n0(p.costPerAcre)+premiums:0;
+    const totalCost=p?n0(p.acres)*n0(costOf(p))+premiums:0;
     const pricedRev=priced.reduce((a,s)=>a+qty(s)*flatPrice(s),0);
     const restBu=expected-pricedBu;
-    const dynBe=p&&n0(p.costPerAcre)&&restBu>0?(totalCost-pricedRev)/restBu:null;
+    const dynBe=p&&n0(costOf(p))&&restBu>0?(totalCost-pricedRev)/restBu:null;
     return{crop:r.crop,plan:p,yld,expected,sold,hedged,pricedBu,avg,be,insured,insPrice,revGuar,premiums,totalCost,pricedRev,restBu,dynBe,
       unpriced:Math.max(0,expected-sold-hedged)}
   }).sort((a,b)=>b.expected-a.expected)}
@@ -513,7 +533,7 @@ const FORMS={
     {k:'acres',label:'Planted acres',type:'number',step:'any',req:1},
     {k:'aph',label:'APH yield (bu/ac)',type:'number',step:'any',req:1,hint:'Actual production history, used for crop insurance'},
     {k:'expectedYield',label:'Expected yield (bu/ac)',type:'number',step:'any',hint:'Your yield estimate this year. Leave blank to use APH.'},
-    {k:'costPerAcre',label:'Total cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, insurance, overhead'},
+    {k:'costPerAcre',label:'Total cost per acre ($)',type:'number',step:'any',hint:'Land, inputs, machinery, insurance, overhead. Or use Break it down on the Production tab.',show:v=>!costItemsOf(v).length},
   ],blank:()=>({year:S.year,crop:'Corn'})},
   mkt:{title:'Futures & basis',fields:[
     {k:'futSymbol',label:'Futures contract',type:'select',full:1,show:v=>!v.futManual&&marketSyms(v.crop).length>0,
@@ -842,7 +862,7 @@ function cropMarket(f,r){
   // pending Premium Plus double-ups that would trigger at today's futures
   sales.filter(s=>isPP(s)&&!s.ppOutcome&&ppTriggers(s,fut)).forEach(s=>itmBu+=ppDbl(s));
   if(fut!=null){hedgeVal=0;sales.filter(s=>HEDGE_TYPES.includes(s.type)).forEach(s=>{hedgeVal+=(n0(s.price)-fut)*qty(s)})}
-  const cost=r.plan&&num(pl.costPerAcre)!=null?n0(pl.acres)*n0(pl.costPerAcre):null;
+  const cost=r.plan&&costOf(pl)!=null?n0(pl.acres)*costOf(pl):null;
   const unsoldVal=mkt!=null?unsold*mkt:null,unpricedVal=mkt!=null?unpriced*mkt:null;
   // with a market price: everything valued (sold + unsold + hedges − put premiums − cost); without: profit on priced bushels only
   const profit=cost==null?null:mkt!=null&&!missBu?soldVal+unsoldVal+(hedgeVal||0)-premium-cost:(r.be!=null?r.pricedRev-r.be*r.pricedBu:null);
@@ -854,14 +874,14 @@ function cropCard(f,r){
   const pnl=v=>v==null?'':v<0?'p-loss':'p-gain';// whole profit square turns green or red
   const cell=(l,v,cls='')=>`<div class="kv ${cls}"><span>${l}</span><b>${v}</b></div>`;
   const pair=(l1,v1,l2,v2,tone='')=>`<div class="kv2 ${tone}"><div><span>${l1}</span><b>${v1}</b></div><div><span>${l2}</span><b>${v2}</b></div></div>`;
-  const dyn=!r.plan||!n0(pl.costPerAcre)?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':`<span class="${r.be!=null&&r.dynBe>r.be?'neg':'pos'}">${usd(r.dynBe,4)}</span>`;
+  const dyn=!r.plan||!n0(costOf(pl))?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':`<span class="${r.be!=null&&r.dynBe>r.be?'neg':'pos'}">${usd(r.dynBe,4)}</span>`;
   const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)];
   return`<article class="ccard" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
     <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2><span class="cdot"></span>${esc(r.crop)} ${S.year}</h2></div>
       ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Futures & basis':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
     <div class="crow"><div class="clabel">Farm info</div><div class="ccells">
       ${cell('Acres',n1(pl.acres))}${cell('APH',n1(pl.aph))}${cell('Est. yield',n1(r.yld||null))}${cell('Production goal',n1(m.prod))}
-      ${cell('Cost / acre',usd(num(pl.costPerAcre)))}${cell('Total farm cost',usd(m.cost))}${cell('Net profit / acre',signed(m.ppa),pnl(m.ppa))}${cell('Total profit',signed(m.profit,0),pnl(m.profit))}</div></div>
+      ${cell('Cost / acre',usd(costOf(pl)))}${cell('Total farm cost',usd(m.cost))}${cell('Net profit / acre',signed(m.ppa),pnl(m.ppa))}${cell('Total profit',signed(m.profit,0),pnl(m.profit))}</div></div>
     <div class="crow"><div class="clabel">Breakeven</div><div class="ccells">
       ${cell('Est. basis',m.basis==null?'—':`<span class="${m.basis<0?'neg':''}">${m.basis<0?'−':''}${Math.abs(m.basis).toFixed(2)}</span>`)}${cell('Initial B/E',usd(r.be,4))}${cell('Dynamic B/E',dyn)}</div></div>
     <div class="crow"><div class="clabel">Crop values</div><div class="ccells">
@@ -875,13 +895,13 @@ function cropCard(f,r){
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
 function farmSummary(p){
   if(!p.length)return'';
-  const c=p.map(r=>{const ac=r.plan?n0(r.plan.acres):0,cpa=r.plan?num(r.plan.costPerAcre):null,cost=cpa!=null?ac*cpa:null;
+  const c=p.map(r=>{const ac=r.plan?n0(r.plan.acres):0,cpa=r.plan?costOf(r.plan):null,cost=cpa!=null?ac*cpa:null;
     const profit=r.be!=null?r.pricedRev-r.be*r.pricedBu:null;
     return{r,ac,yld:r.plan?r.yld:null,prod:r.expected,cpa,cost,be:r.be,sold:r.sold,unsold:Math.max(0,r.expected-r.sold),value:r.pricedRev,notPriced:Math.max(0,r.sold-r.pricedBu),profit,ppa:profit!=null&&ac?profit/ac:null}});
   const sum=k=>c.reduce((a,x)=>a+(x[k]||0),0),T={ac:sum('ac'),prod:sum('prod'),cost:c.some(x=>x.cost!=null)?sum('cost'):null,sold:sum('sold'),unsold:sum('unsold'),value:sum('value'),notPriced:sum('notPriced'),profit:c.some(x=>x.profit!=null)?sum('profit'):null};
   T.cpa=T.cost!=null&&T.ac?T.cost/T.ac:null;T.ppa=T.profit!=null&&T.ac?T.profit/T.ac:null;
   const money=(v,d)=>v==null?'—':`<span style="color:${v<0?'var(--bad)':'var(--good)'}">${usd(v,d)}</span>`;
-  const dyn=r=>!r.plan||!n0(r.plan.costPerAcre)?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':usd(r.dynBe);
+  const dyn=r=>!r.plan||!n0(costOf(r.plan))?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':usd(r.dynBe);
   const rows=[
     ['Production'],
     ['Acres',x=>x.ac?bu(x.ac):'—',bu(T.ac)],
@@ -1037,7 +1057,7 @@ const SF_TABLES=[
     ['FARM_ID','VARCHAR',r=>r.id],['FARM_NAME','VARCHAR',r=>r.f.name],['BROKER','VARCHAR',r=>r.f.broker||null],['IS_SAMPLE','BOOLEAN',r=>r.f.sample],['UPDATED_AT','TIMESTAMP_TZ',r=>r.f.updatedAt?r.f.updatedAt.replace('Z','+00:00'):null]]},
   {name:'CROP_PLANS',file:'crop_plans.csv',rows:(id,f)=>f.crops.map(c=>({id,c,r:position(f,c.year).find(x=>key(x.crop)===key(c.crop))||{}})),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CROP_PLAN_ID','VARCHAR',r=>r.c.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.c.year)],['CROP','VARCHAR',r=>r.c.crop],
-    ['ACRES','NUMBER(12,2)',r=>nz(r.c.acres)],['APH_YIELD','NUMBER(10,2)',r=>nz(r.c.aph)],['EXPECTED_YIELD','NUMBER(10,2)',r=>r.r.yld??null],['COST_PER_ACRE','NUMBER(12,2)',r=>nz(r.c.costPerAcre)],
+    ['ACRES','NUMBER(12,2)',r=>nz(r.c.acres)],['APH_YIELD','NUMBER(10,2)',r=>nz(r.c.aph)],['EXPECTED_YIELD','NUMBER(10,2)',r=>r.r.yld??null],['COST_PER_ACRE','NUMBER(12,2)',r=>costOf(r.c)],
     ['INSURANCE_PLAN','VARCHAR',r=>r.c.insType||null],['COVERAGE_PCT','NUMBER(5,2)',r=>nz(r.c.coverage)],['PROJECTED_PRICE','NUMBER(10,4)',r=>nz(r.c.projPrice)],['HARVEST_PRICE','NUMBER(10,4)',r=>nz(r.c.harvestPrice)],
     ['EXPECTED_BU','NUMBER(14,2)',r=>r.r.expected??null],['TOTAL_COST','NUMBER(16,2)',r=>r.r.totalCost==null?null:+r.r.totalCost.toFixed(2)],
     ['BREAKEVEN_PER_BU','NUMBER(10,4)',r=>r.r.be==null?null:+r.r.be.toFixed(4)],['DYNAMIC_BREAKEVEN','NUMBER(10,4)',r=>r.r.dynBe==null?null:+r.r.dynBe.toFixed(4)],
@@ -1165,7 +1185,7 @@ function legDefaults(t,o,prod){
     cash:{price:r2(F+b)},hedge:{price:r2(F)},carry:{months:4,carry:0.15,basisGain:0.20,storage:0.03,rate:7}})[t]}}
 // profit of the current position if futures finish at F, with basis b and yield at yieldPct of expected
 function baseProfit(f,plan,F,b,yieldPct){
-  const ac=n0(plan.acres),prod=ac*yieldOf(plan)*yieldPct/100,cost=ac*n0(plan.costPerAcre);
+  const ac=n0(plan.acres),prod=ac*yieldOf(plan)*yieldPct/100,cost=ac*n0(costOf(plan,yieldOf(plan)*yieldPct/100));
   const sales=f.sales.filter(s=>+s.year===+plan.year&&key(s.crop)===key(plan.crop));
   let rev=0,sold=0,hedge=0;
   sales.forEach(s=>{
@@ -1200,7 +1220,7 @@ function tabOptimizer(f){
         <label class="full">Yield: <span id="opt_yield_out">${o.yieldPct}% of expected · ${(yieldOf(plan)*o.yieldPct/100).toFixed(1)} bu/ac</span><input id="opt_yield" class="optinp" type="range" min="50" max="130" step="5" value="${o.yieldPct}"></label></div>
       <dl class="facts" style="margin-top:12px">
         <div><dt>Acres</dt><dd>${bu(n0(plan.acres))}</dd></div><div><dt>Expected bu</dt><dd>${bu(prod)}</dd></div>
-        <div><dt>Cost / acre</dt><dd>${usd(num(plan.costPerAcre))}</dd></div><div><dt>Already sold</dt><dd>${bu(position(f,S.year).find(r=>key(r.crop)===key(plan.crop))?.sold||0)}</dd></div></dl>
+        <div><dt>Cost / acre</dt><dd>${usd(costOf(plan))}</dd></div><div><dt>Already sold</dt><dd>${bu(position(f,S.year).find(r=>key(r.crop)===key(plan.crop))?.sold||0)}</dd></div></dl>
       <p class="muted" style="font-size:.76rem;margin:10px 0 0">Defaults come from the crop card and Production tab. Changes here only affect this scenario.</p></div>
     <div class="panel optbox"><h3>Strategies to test</h3>
       ${o.legs.length?o.legs.map(l=>{const T=LEG_TYPES[l.t];return`<div class="leg"><div class="leghead"><b>${T.label}</b><button class="link danger" data-rmleg="${l.id}" style="font-size:.8rem">Remove</button></div>
@@ -1340,11 +1360,66 @@ function tabStorage(f){
     :`<div class="empty">Add bins and open contracts to compare stored grain against what's committed.</div>`}</div></section>`}
 
 function dynCell(r){
-  if(!r.plan||!n0(r.plan.costPerAcre))return'<span class="muted">Add cost per acre</span>';
+  if(!r.plan||!n0(costOf(r.plan)))return'<span class="muted">Add cost per acre</span>';
   if(r.restBu<=0){const m=r.pricedRev-r.totalCost;return`<span class="pill ${m>=0?'good':'bad'}">All priced</span><div class="muted" style="font-size:.74rem">${m>=0?'profit':'loss'} ${usd(Math.abs(m),0)}</div>`}
   if(r.dynBe<=0)return`<span class="pill good">Costs covered</span><div class="muted" style="font-size:.74rem">by sales already priced</div>`;
   const d=r.be!=null?r.dynBe-r.be:0,c=d<-0.005?'var(--good)':d>0.005?'var(--bad)':'var(--muted)';
   return`<b>${usd(r.dynBe)}</b> <span style="color:${c};font-size:.78rem;white-space:nowrap">${Math.abs(d)<0.005?'no change':(d<0?'▼ ':'▲ ')+usd(Math.abs(d))}</span><div class="muted" style="font-size:.74rem">on ${bu(r.restBu)} unpriced bu</div>`}
+// itemized break-even: each cost line as $/acre and $/bu, largest first, with a stacked bar of the break-even
+const BE_COLORS=['var(--accent)','var(--grain)','var(--c-soy)','var(--c-wheat)','var(--c-corn)','var(--muted)'];
+function beLines(c){const y=yieldOf(c),it=costItemsOf(c);
+  const rows=it.map(i=>{const pa=i.unit==='bu'?n0(i.amount)*y:n0(i.amount);return{...i,pa,pb:y?pa/y:null}}).sort((a,b)=>b.pa-a.pa);
+  const tot=rows.reduce((a,r)=>a+r.pa,0);return{rows,tot,y}}
+function beDetail(c,r){
+  const{rows,tot,y}=beLines(c);if(!rows.length||!tot)return'';
+  const top=rows.slice(0,5),rest=rows.slice(5),segs=[...top,...(rest.length?[{name:`${rest.length} more`,pa:rest.reduce((a,x)=>a+x.pa,0)}]:[])];
+  return`<section><div class="sechead"><h2>${esc(c.crop)} break-even detail</h2><div class="sp"></div><button class="small" data-cost="${c.id}">Edit costs</button></div>
+  <div class="panel bed"><div class="bebar" role="img" aria-label="${esc(c.crop)} break-even ${usd(r.be)} per bushel by cost">${segs.map((s,i)=>`<div style="flex:${s.pa};background:${BE_COLORS[i%BE_COLORS.length]}" title="${esc(s.name)}: ${usd(y?s.pa/y:0)}/bu"></div>`).join('')}</div>
+    <div class="legend" style="padding:8px 0 0">${segs.map((s,i)=>`<span><i style="background:${BE_COLORS[i%BE_COLORS.length]}"></i>${esc(s.name)} ${usd(y?s.pa/y:0)}</span>`).join('')}</div>
+    <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Cost</th><th class="n">Entered</th><th class="n">$/acre</th><th class="n">$/bu</th><th class="n">Share</th></tr></thead><tbody>
+    ${rows.map(x=>`<tr><td>${esc(x.name||'Unnamed')}${x.note?`<div class="muted" style="font-size:.72rem">${esc(x.note)}</div>`:''}</td><td class="n mono">${usd(n0(x.amount))}/${x.unit==='bu'?'bu':'ac'}</td><td class="n mono">${usd(x.pa)}</td><td class="n mono">${usd(x.pb)}</td><td class="n mono">${pct(x.pa/tot)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td><b>Total</b></td><td></td><td class="n mono"><b>${usd(tot)}</b></td><td class="n mono"><b>${usd(r.be)}</b></td><td class="n mono">100%</td></tr></tfoot></table></div>
+    <p class="muted" style="font-size:.76rem;margin:8px 0 0">$/bu = $/acre ÷ ${y.toLocaleString('en-US',{maximumFractionDigits:1})} bu expected yield. Per-bushel costs like drying and hauling scale with yield.</p></div></section>`}
+// cost breakdown editor (dialog)
+let CE=null;
+function openCost(planId){const f=S.farms[S.current],c=f.crops.find(x=>x.id===planId);if(!c)return;
+  dlgCtx=null;detail=null;
+  CE={planId,items:costItemsOf(c).length?clone(c.costItems):COST_TEMPLATE.map(([name,unit,note])=>({id:uid(),name,unit,note,amount:null})),fresh:!costItemsOf(c).length,confirmRm:false};
+  drawCost();if(!$('#dlg').open)$('#dlg').showModal()}
+function costCalc(){const f=S.farms[S.current],c=f.crops.find(x=>x.id===CE.planId),y=yieldOf(c);
+  const rows=CE.items.map(i=>{const pa=num(i.amount)==null?0:i.unit==='bu'?n0(i.amount)*y:n0(i.amount);return{id:i.id,pa}});
+  const tot=rows.reduce((a,r)=>a+r.pa,0);return{c,y,rows,tot}}
+function drawCost(){const{c,y}=costCalc();
+  $('#dlgform').innerHTML=`<h2>Break-even detail · ${esc(c.crop)} ${esc(c.year)}</h2>
+  <p class="muted" style="font-size:.85rem;margin:6px 0 0">Enter each cost per acre, or per bushel for things like drying and hauling. Expected yield ${y.toLocaleString('en-US',{maximumFractionDigits:1})} bu/ac on ${bu(n0(c.acres))} acres.
+    ${CE.fresh&&num(c.costPerAcre)!=null?` Your current total is <b>${usd(num(c.costPerAcre))}/acre</b>; saving the breakdown replaces it.`:''} Leave a line blank to skip it.</p>
+  <div class="tablewrap"><table class="costtab"><thead><tr><th>Cost</th><th class="n">Amount ($)</th><th>Per</th><th class="n">$/acre</th><th class="n">$/bu</th><th class="n">Share</th><th></th></tr></thead><tbody>
+  ${CE.items.map(i=>`<tr><td><input class="ceinp" id="ce_${i.id}_name" data-i="${i.id}" data-k="name" value="${esc(i.name||'')}" placeholder="Cost name"></td>
+    <td class="n"><input class="ceinp num" id="ce_${i.id}_amount" data-i="${i.id}" data-k="amount" type="number" step="any" value="${i.amount??''}"></td>
+    <td><select class="ceinp" id="ce_${i.id}_unit" data-i="${i.id}" data-k="unit"><option value="acre" ${i.unit!=='bu'?'selected':''}>acre</option><option value="bu" ${i.unit==='bu'?'selected':''}>bushel</option></select></td>
+    <td class="n mono" id="ce_${i.id}_pa"></td><td class="n mono" id="ce_${i.id}_pb"></td><td class="n mono" id="ce_${i.id}_pct"></td>
+    <td><button type="button" class="link danger" data-ce="rm" data-i="${i.id}" aria-label="Remove ${esc(i.name||'line')}">✕</button></td></tr>`).join('')}</tbody>
+  <tfoot><tr><td><b>Total</b></td><td></td><td></td><td class="n mono" id="ce_tot_pa"></td><td class="n mono" id="ce_tot_pb"></td><td></td><td></td></tr></tfoot></table></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"><button type="button" class="small" data-ce="add">+ Add a cost</button>${CE.items.length?'':'<button type="button" class="small" data-ce="template">Use standard list</button>'}</div>
+  <p class="mono" id="ce_summary" style="margin:12px 0 0;font-size:.9rem"></p>
+  <div class="dlgfoot">${costItemsOf(c).length?`<button type="button" class="danger" data-ce="clear">${CE.confirmRm?'Confirm: back to one number':'Remove breakdown'}</button>`:''}<div class="sp"></div>
+    <button type="button" data-ce="cancel">Cancel</button><button type="button" class="primary" data-ce="save">Save</button></div>`;
+  refreshCost()}
+function refreshCost(){if(!CE)return;const{c,y,rows,tot}=costCalc();
+  rows.forEach(r=>{const set=(k,v)=>{const el=$('#ce_'+r.id+'_'+k);if(el)el.textContent=v};set('pa',r.pa?usd(r.pa):'—');set('pb',r.pa&&y?usd(r.pa/y):'—');set('pct',r.pa&&tot?pct(r.pa/tot):'—')});
+  $('#ce_tot_pa').textContent=usd(tot);$('#ce_tot_pb').textContent=y?usd(tot/y):'—';
+  $('#ce_summary').textContent=`Cost ${usd(tot)}/acre × ${bu(n0(c.acres))} acres = ${usd(tot*n0(c.acres),0)} total · break-even ${y?usd(tot/y):'—'}/bu`}
+$('#dlgform').addEventListener('input',e=>{const t=e.target;if(!CE||!t.classList.contains('ceinp'))return;
+  const i=CE.items.find(x=>x.id===t.dataset.i);if(!i)return;i[t.dataset.k]=t.dataset.k==='amount'?num(t.value):t.value;refreshCost()});
+$('#dlgform').addEventListener('click',e=>{const b=e.target.closest('[data-ce]');if(!b||!CE)return;const a=b.dataset.ce,f=S.farms[S.current],c=f.crops.find(x=>x.id===CE.planId);
+  if(a==='rm'){CE.items=CE.items.filter(x=>x.id!==b.dataset.i);drawCost()}
+  if(a==='add'){const id=uid();CE.items.push({id,name:'',unit:'acre',amount:null});drawCost();const el=$('#ce_'+id+'_name');el&&el.focus()}
+  if(a==='template'){CE.items=COST_TEMPLATE.map(([name,unit,note])=>({id:uid(),name,unit,note,amount:null}));drawCost()}
+  if(a==='cancel'){$('#dlg').close()}
+  if(a==='save'){const items=CE.items.filter(x=>num(x.amount)!=null).map(x=>({id:x.id,name:(x.name||'').trim()||'Other',unit:x.unit==='bu'?'bu':'acre',amount:num(x.amount),...(x.note?{note:x.note}:{})}));
+    c.costItems=items;if(items.length)c.costPerAcre=+costOf(c).toFixed(2);CE=null;$('#dlg').close();persist(S.current)}
+  if(a==='clear'){if(!CE.confirmRm){CE.confirmRm=true;drawCost();return}
+    c.costPerAcre=+(costOf(c)||0).toFixed(2);delete c.costItems;CE=null;$('#dlg').close();persist(S.current)}});
 function tabProduction(f){
   const list=f.crops.filter(c=>+c.year===+S.year),p=position(f,S.year);
   const rowFor=c=>p.find(x=>key(x.crop)===key(c.crop))||{};
@@ -1353,12 +1428,13 @@ function tabProduction(f){
   <div class="panel tablewrap">${list.length?`<table><thead><tr><th>Crop</th><th class="n">Acres</th><th class="n">APH</th><th class="n">Expected yield</th><th class="n">Expected bu</th><th class="n">Cost / acre</th><th class="n">Break-even</th><th class="n">Priced so far</th><th>Dynamic break-even</th><th></th></tr></thead><tbody>
     ${list.map(c=>{const r=rowFor(c);return`<tr class="click" data-edit="crop" data-id="${c.id}"><td><b>${esc(c.crop)}</b></td><td class="n">${bu(n0(c.acres))}</td><td class="n">${n0(c.aph)}</td>
       <td class="n">${r.yld?r.yld.toLocaleString('en-US',{maximumFractionDigits:1}):'—'}${num(c.expectedYield)==null?'<div class="muted" style="font-size:.72rem">= APH</div>':''}</td><td class="n">${bu(r.expected||0)}</td>
-      <td class="n">${usd(num(c.costPerAcre))}</td><td class="n"><b>${usd(r.be)}</b></td>
+      <td class="n">${usd(costOf(c))}<div><button class="link" data-cost="${c.id}" style="font-size:.74rem">${costItemsOf(c).length?`Itemized · ${costItemsOf(c).length} lines`:"Break it down"}</button></div></td><td class="n"><b>${usd(r.be)}</b></td>
       <td class="n">${r.pricedBu?`${bu(r.pricedBu)} bu<div class="muted" style="font-size:.74rem">avg ${usd(r.avg)}</div>`:'—'}</td>
       <td>${dynCell(r)}</td><td><button class="small" data-edit="crop" data-id="${c.id}">Edit</button></td></tr>`}).join('')}</tbody>
     <tfoot><tr><td><b>Total</b></td><td class="n"><b>${bu(tot.ac)}</b></td><td></td><td></td><td class="n"><b>${bu(tot.exp)}</b></td><td></td><td></td><td></td><td class="muted" style="font-size:.8rem">Total cost ${usd(tot.cost,0)}</td><td></td></tr></tfoot></table>`
     :`<div class="empty"><b>No ${S.year} crops yet</b>Add each crop's acres, APH, expected yield and cost per acre to calculate break-even.</div>`}</div>
-  <div class="explain"><p><b>Break-even</b> = cost per acre ÷ expected yield. This is the average price you need across every bushel to cover costs.</p>
+  ${list.filter(c=>costItemsOf(c).length).map(c=>beDetail(c,rowFor(c))).join('')}
+  <div class="explain"><p><b>Break-even</b> = cost per acre ÷ expected yield. This is the average price you need across every bushel to cover costs. Use <b>Break it down</b> on any crop to build cost per acre from individual costs.</p>
   <p><b>Dynamic break-even</b> updates as you price grain. It is the price you still need on the bushels not yet priced: (total cost − revenue from priced sales) ÷ unpriced bushels. Selling above break-even pulls it down (▼); selling below pushes it up (▲). Premium Plus premiums are included in that contract's price. HTA and basis contracts count once both parts of the price are set.</p></div></section>`}
 function tabInsurance(f){
   const list=f.crops.filter(c=>+c.year===+S.year),p=position(f,S.year);
@@ -1379,7 +1455,8 @@ function tabInsurance(f){
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  const t=e.target.closest('[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.cost){e.stopPropagation();openCost(t.dataset.cost);return}
   if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
   if(t.dataset.sale){showSale(t.dataset.sale);return}
   if(t.dataset.sort){const k=t.dataset.sort;S.sort=S.sort.k===k?{k,dir:-S.sort.dir}:{k,dir:k==='date'||k==='bu'?-1:1};render();return}
@@ -1434,7 +1511,7 @@ function nameDialog(title,val,done,broker){
     let b=withBroker?$('#nd_broker').value.trim():undefined;
     if(b){const match=brokerList().find(x=>key(x)===key(b));if(match)b=match}
     dlg.close();done(v,b)}}
-$('#dlg').addEventListener('close',()=>{dlgCtx=null;detail=null;render()});
+$('#dlg').addEventListener('close',()=>{dlgCtx=null;detail=null;CE=null;render()});
 
 /* ---------- boot ---------- */
 const PREVIEW={name:'Prairie Ridge Farms',sample:true,
