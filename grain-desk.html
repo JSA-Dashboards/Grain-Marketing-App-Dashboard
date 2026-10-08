@@ -211,6 +211,22 @@ table.costtab input,table.costtab select{padding:5px 7px;font-size:.85rem}
 table.costtab input.num{width:96px;text-align:right}
 table.costtab td:first-child{min-width:170px}
 dialog:has(.costtab){width:min(760px,calc(100vw - 32px))}
+/* intel */
+.intelgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start;margin-top:20px}
+@media (max-width:900px){.intelgrid{grid-template-columns:minmax(0,1fr)}}
+.ipost{padding:16px 18px;border-radius:14px;margin-top:12px}
+.ipost.pinned{border-left:4px solid var(--grain)}
+.ipmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ipost h3{font-size:1.15rem;margin:8px 0 6px}
+.ipbody{line-height:1.55;max-width:72ch}
+.ipbody.clamp{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.ipfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.tag.icat{background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent)}
+.tag.icat[data-cat="Action item"]{background:color-mix(in srgb,var(--bad) 14%,var(--surface));color:var(--bad)}
+.tag.icat[data-cat="Weather"]{background:color-mix(in srgb,var(--c-soy) 16%,var(--surface));color:var(--c-soy)}
+.tag.icat[data-cat="Policy & programs"]{background:color-mix(in srgb,var(--grain) 16%,var(--surface));color:var(--warn)}
+.draftbox{margin-top:12px;padding:12px;border-radius:10px;background:var(--soft)}
+.draftbox textarea,#ip_body{font:inherit;width:100%}
 /* quotes: board styled after the reference app */
 .qhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:26px 0 12px;padding-left:12px;border-left:4px solid var(--accent)}
 .qhead h2{font-size:1.35rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
@@ -645,7 +661,7 @@ const FORMS={
   sdeadline:{title:'Program deadline',fields:[
     {k:'title',label:'Deadline',type:'text',req:1,full:1,hint:'e.g. Spring crops sales closing date'},
     {k:'date',label:'Date',type:'date',req:1},
-    {k:'agency',label:'Program',type:'select',options:['Crop insurance','FSA','FSA / RMA','Tax','Other']},
+    {k:'agency',label:'Program',type:'select',options:['Crop insurance','FSA','FSA / RMA','USDA report','Tax','Other']},
     {k:'state',label:'State',type:'select',options:()=>[['','All states'],...STATES.map(s=>[s,s])],hint:'Leave on All states for national dates'},
     {k:'county',label:'County',type:'text',hint:'Optional. Only farms in this county see it.',show:v=>!!v.state},
     {k:'recurring',label:'Same date every year',type:'check'},
@@ -992,13 +1008,12 @@ function homeScreen(f){
     ['insurance','Crop insurance','Coverage, insured bushels and your revenue guarantee.',ins?`<b>${usd(ins,0)}</b> guaranteed`:'Set up coverage for each crop'],
     ['quotes','Quotes','Daily corn, soybean and wheat futures. Cash bids coming soon.',cfi&&cfi.price!=null?`Corn ${cfi.symbol?symLabel(cfi.symbol):''} <b>${usd(cfi.price,4)}</b>`:'Futures prices'],
     ['weather','Weather','Forecast and conditions for your farm.','Coming soon'],
-    ['intel','Intel','Market updates and insights from your advisor.','Coming soon']];
+    ['intel','Intel','Market updates and insights from your advisor.',(()=>{const ps=intelFor(f),n=intelNewCount(f);return ps.length?`${n?`<b>${n} new</b> · `:''}${esc(ps[0].title)}`:'No updates yet'})()]];
   return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
       <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
       <span class="htitle">${t}</span><span class="hdesc">${d}</span><span class="hstat">${stat}</span></button>`).join('')}</div>
   ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}`}
 function tabWeather(f){return`<section><div class="panel"><div class="empty"><b>Weather is coming soon</b>${locLabel(f)?`Forecasts for ${esc(locLabel(f))} will show here.`:'Add your county and state under Farm details so forecasts can be local.'}</div></div></section>`}
-function tabIntel(){return`<section><div class="panel"><div class="empty"><b>Intel is coming soon</b>Market updates and insights from your advisor will show here.</div></div></section>`}
 
 // pie of part-to-whole; slices start at 12 o'clock and run clockwise, separated by a 2px surface gap
 function pieSVG(segs,label){
@@ -1113,9 +1128,10 @@ function saveShared(items){
   S.deadlines={...(S.deadlines||{}),items,updatedAt:new Date().toISOString()};render();
   if(S.mode!=='live'){toast('Preview only — not saved');return}
   S.db.doc('market/deadlines').set(clone(S.deadlines)).then(()=>toast('Saved for all clients')).catch(()=>toast("Couldn't save that deadline. Try again.",true))}
-function openShared(id){
-  const items=(S.deadlines&&S.deadlines.items)||[],base=id?items.find(x=>x.id===id):null;
-  openForm('sdeadline',id||null,{base,title:id?'Edit program deadline (all clients)':'Add program deadline (all clients)',
+function openShared(id,preset){
+  const items=(S.deadlines&&S.deadlines.items)||[],base=id?items.find(x=>x.id===id):null,isRep=preset&&preset.agency==='USDA report'||base&&base.agency==='USDA report';
+  openForm('sdeadline',id||null,{base,vals:!base&&preset?{...FORMS.sdeadline.blank(),...preset}:undefined,
+    title:isRep?(id?'Edit report date':'Add a USDA report date'):id?'Edit program deadline (all clients)':'Add program deadline (all clients)',
     onSave:rec=>saveShared(id?items.map(x=>x.id===id?rec:x):[...items,rec]),
     onDelete:id?()=>saveShared(items.filter(x=>x.id!==id)):null})}
 // next occurrence of a yearly date (MM-DD) on or after today
@@ -1125,7 +1141,7 @@ function deadlinesFor(f){
   const out=[],add=x=>{if(x.d)out.push(x)};
   // program deadlines apply nationally, to one state, or to one county in a state
   const applies=x=>(!x.state||x.state===f.state)&&(!x.county||key(String(x.county).replace(/\s+county$/i,''))===key(f.county));
-  ((S.deadlines&&S.deadlines.items)||[]).filter(applies).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,
+  ((S.deadlines&&S.deadlines.items)||[]).filter(x=>x.agency!=='USDA report'&&applies(x)).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,
     src:(x.agency||'Program')+(x.state?` · ${locLabel({state:x.state,county:x.county?String(x.county).replace(/\s+county$/i,''):''})}`:''),note:x.note,kind:'shared',id:x.id}));
   (f.deadlines||[]).forEach(x=>add({d:x.recurring?nextDate(x.date):x.date,title:x.title,src:x.category||'Your farm',note:x.note,kind:'farm',id:x.id}));
   f.sales.forEach(s=>{const who=s.buyer||'buyer',c={kind:'contract',sid:s.id,src:typeName(s)};
@@ -1834,6 +1850,99 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   const sel=insSel();if(!sel)return;const k=t.dataset.ichip,v=k==='coverage'?+t.dataset.v:t.dataset.v;
   sel[k]=v;if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;persist(S.current)});
 
+/* ---------- intel: advisor posts ---------- */
+// posts live in market/intel (everyone reads, only the consultant writes); each post targets all clients, one state, or one broker's clients
+const INTEL_CATS=['Market update','Marketing tip','Weather','Policy & programs','Action item'];
+const intelPosts=()=>((S.intel&&S.intel.posts)||[]).slice();
+const intelFor=f=>intelPosts().filter(p=>{const a=p.audience||{};return!a.type||a.type==='all'||(a.type==='state'&&a.value===f.state)||(a.type==='broker'&&key(a.value)===key(f.broker))})
+  .sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||String(b.date).localeCompare(String(a.date)));
+// "new" = posted since this viewer last opened Intel (kept in this browser only)
+const intelSeenKey=()=>'gd.intelSeen.'+(S.current||'');
+const intelSeen=()=>{try{return localStorage.getItem(intelSeenKey())||''}catch(_){return''}};
+const intelNewCount=f=>{const seen=intelSeen();return intelFor(f).filter(p=>String(p.date)>seen).length};
+function audienceLabel(a){return!a||!a.type||a.type==='all'?'All clients':a.type==='state'?`Clients in ${a.value}`:`${a.value}'s clients`}
+function tabIntel(f){
+  try{localStorage.setItem(intelSeenKey(),new Date().toISOString())}catch(_){}
+  const cat=S.intelCat||'',all=intelFor(f),list=cat?all.filter(p=>p.category===cat):all;
+  const reports=((S.deadlines&&S.deadlines.items)||[]).filter(x=>x.agency==='USDA report').map(x=>({...x,d:x.recurring?nextDate(x.date):x.date}))
+    .filter(x=>x.d>=TODAY).sort((a,b)=>a.d.localeCompare(b.d)).slice(0,6);
+  const post=p=>{const long=(p.body||'').length>420,open=S.intelOpen===p.id;
+    return`<article class="panel ipost${p.pinned?' pinned':''}">
+      <div class="ipmeta"><span class="tag icat" data-cat="${esc(p.category||'')}">${esc(p.category||'Update')}</span>${p.pinned?'<span class="tag bin">Pinned</span>':''}
+        ${(p.crops||[]).map(c=>`<span class="tag bin">${esc(c)}</span>`).join('')}<span class="sp" style="flex:1"></span><span class="muted" style="font-size:.78rem">${fmtDate(String(p.date).slice(0,10))}</span></div>
+      <h3>${esc(p.title)}</h3>
+      <div class="ipbody${long&&!open?' clamp':''}">${esc(p.body||'').replace(/\n/g,'<br>')}</div>
+      <div class="ipfoot">${long?`<button class="link" data-intelopen="${p.id}">${open?'Show less':'Read more'}</button>`:'<span></span>'}
+        <span class="muted" style="font-size:.76rem">From your advisor${S.owner?` · ${esc(audienceLabel(p.audience))}`:''}</span>
+        ${S.owner?`<button class="link" data-intelpost="${p.id}" style="font-size:.8rem">Edit</button>`:''}</div></article>`};
+  return`<div class="intelgrid"><section style="margin-top:0"><div class="sechead"><h2>From your advisor</h2><div class="sp"></div>${S.owner?'<button class="primary small" data-intelpost="new">+ New post</button>':''}</div>
+    <div class="chips">${[['','All'],...INTEL_CATS.map(c=>[c,c])].map(([v,l])=>`<button class="chip sm" data-intelcat="${esc(v)}" aria-pressed="${cat===v}">${esc(l)}</button>`).join('')}</div>
+    ${list.length?list.map(post).join(''):`<div class="panel"><div class="empty"><b>${cat?`No ${esc(cat.toLowerCase())} posts yet`:'No updates yet'}</b>${S.owner?'Use + New post to share market updates, marketing tips and action items with your clients.':'Market updates and insights from your advisor will show up here.'}</div></div>`}</section>
+  <aside><div class="sechead"><h2>Upcoming reports</h2><div class="sp"></div>${S.owner?'<button class="small" data-act="addreport">+ Add</button>':''}</div>
+    <div class="panel">${reports.length?`<ul class="dllist">${reports.map(x=>{const t=new Date(x.d+'T12:00:00'),n=daysUntil(x.d);
+      return`<li${S.owner?` class="click" data-sdl="${x.id}"`:''}><div class="dlbadge ${n<=3?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div><div class="dltext"><b>${esc(x.title)}</b>${x.note?`<span>${esc(x.note)}</span>`:''}</div></li>`}).join('')}</ul>`
+      :`<div class="empty" style="padding:18px"><b>No reports listed</b>${S.owner?'Add USDA report dates (WASDE, Crop Progress, Grain Stocks) with + Add.':'Your advisor will list upcoming USDA reports here.'}</div>`}</div></aside></div>`}
+// post editor (consultant only)
+let IP=null;
+function openPost(id){
+  const p=id&&id!=='new'?intelPosts().find(x=>x.id===id):null;dlgCtx=null;detail=null;CE=null;
+  IP={id:p?p.id:null,title:p?p.title:'',body:p?p.body:'',category:p?p.category:'Market update',crops:p?(p.crops||[]).slice():[],
+    pinned:!!(p&&p.pinned),aType:p&&p.audience?p.audience.type:'all',aVal:p&&p.audience?p.audience.value||'':'',notes:'',confirmDel:false,busy:false};
+  drawPost();if(!$('#dlg').open)$('#dlg').showModal()}
+function drawPost(){
+  const states=[...new Set(Object.values(S.farms).map(x=>x.state).filter(Boolean))].sort(),brokers=brokerList();
+  $('#dlgform').innerHTML=`<h2>${IP.id?'Edit post':'New post for your clients'}</h2>
+  ${S.sample?`<div class="draftbox"><label class="pf"><span>Notes for Claude (optional)</span><textarea id="ip_notes" rows="3" placeholder="e.g. corn up on export demand, basis firming, consider pricing 10% more if Dec hits 5.10">${esc(IP.notes)}</textarea></label>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button type="button" class="small" data-ip="draft" ${IP.busy?'disabled':''}>${IP.busy?'Writing…':'Draft with Claude'}</button><span class="muted" style="font-size:.76rem">Claude writes a draft from your notes and today's futures. You edit before posting.</span></div></div>`:''}
+  <div class="fgrid">
+    <label class="full">Title<input id="ip_title" value="${esc(IP.title)}" required></label>
+    <label class="full">Post<textarea id="ip_body" rows="9">${esc(IP.body)}</textarea></label>
+    <label>Category<select id="ip_cat">${INTEL_CATS.map(c=>`<option ${c===IP.category?'selected':''}>${c}</option>`).join('')}</select></label>
+    <label>Who sees it<select id="ip_aType"><option value="all" ${IP.aType==='all'?'selected':''}>All clients</option>${states.length?`<option value="state" ${IP.aType==='state'?'selected':''}>Clients in one state</option>`:''}${brokers.length?`<option value="broker" ${IP.aType==='broker'?'selected':''}>One broker's clients</option>`:''}</select></label>
+    ${IP.aType==='state'?`<label>State<select id="ip_aVal">${states.map(s=>`<option ${s===IP.aVal?'selected':''}>${s}</option>`).join('')}</select></label>`:''}
+    ${IP.aType==='broker'?`<label>Broker<select id="ip_aVal">${brokers.map(b=>`<option ${b===IP.aVal?'selected':''}>${esc(b)}</option>`).join('')}</select></label>`:''}
+    <label class="full check"><span>Crops</span><span style="display:flex;gap:14px;flex-wrap:wrap;font-weight:400">${SALE_CROPS.map(c=>`<label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" class="ip_crop" value="${c}" ${IP.crops.includes(c)?'checked':''}> ${c}</label>`).join('')}</span></label>
+    <label class="full check"><span><input type="checkbox" id="ip_pin" ${IP.pinned?'checked':''}> Pin to the top</span></label></div>
+  <p class="muted" style="font-size:.74rem;margin:10px 0 0">Until the app is hosted, every client's copy of the app can technically load all posts, so keep farm-specific or private details out of posts.</p>
+  <div class="dlgfoot">${IP.id?`<button type="button" class="danger" data-ip="del">${IP.confirmDel?'Confirm delete':'Delete'}</button>`:''}<div class="sp"></div>
+    <button type="button" data-ip="cancel">Cancel</button><button type="button" class="primary" data-ip="save">${IP.id?'Save':'Post'}</button></div>`}
+function readPost(){const g=id=>$('#'+id);IP.title=g('ip_title').value;IP.body=g('ip_body').value;IP.category=g('ip_cat').value;IP.aType=g('ip_aType').value;
+  IP.aVal=g('ip_aVal')?g('ip_aVal').value:'';IP.crops=[...document.querySelectorAll('.ip_crop:checked')].map(x=>x.value);IP.pinned=g('ip_pin').checked;if(g('ip_notes'))IP.notes=g('ip_notes').value}
+function saveIntel(posts){S.intel={...(S.intel||{}),posts,updatedAt:new Date().toISOString()};render();
+  if(S.mode!=='live'){toast('Preview only — not saved');return}
+  S.db.doc('market/intel').set(clone(S.intel)).then(()=>toast('Posted to your clients')).catch(()=>toast("Couldn't save the post. Try again.",true))}
+// a compact view of today's futures for Claude's drafts
+function marketBrief(){const m=S.market;if(!m||!m.prices)return'No futures data available.';
+  return GRAINS.map(([name])=>{const s=marketSyms(name)[0];if(!s)return'';const p=m.prices[s],pv=m.prev&&m.prev[s];
+    return`${name} ${symLabel(s)}: ${cbot(p)}${pv!=null?` (${cbotChg(p-pv)} vs prior day)`:''}`}).filter(Boolean).join('; ')+(m.asOf?` — as of ${m.asOf}`:'')}
+$('#dlgform').addEventListener('change',e=>{if(IP&&e.target.id==='ip_aType'){readPost();IP.aVal='';drawPost()}});
+$('#dlgform').addEventListener('click',async e=>{const b=e.target.closest('[data-ip]');if(!b||!IP)return;const a=b.dataset.ip;
+  if(a==='cancel'){IP=null;$('#dlg').close();return}
+  readPost();
+  if(a==='draft'){if(!IP.notes.trim()&&!IP.title.trim()){toast('Add a few notes for Claude first.',true);return}
+    IP.busy=true;drawPost();
+    try{const d=await S.sample.json(`You help a grain marketing and risk management consultant write short updates for farmer clients (corn, soybeans, wheat). Write in plain, practical language a farmer reads on a phone: no jargon without a quick explanation, no hype, no guarantees, no specific trade instructions beyond what the consultant's notes say.
+Consultant's notes: ${IP.notes||IP.title}
+Category: ${IP.category}
+Today's futures for context (use only if relevant; do not invent other numbers): ${marketBrief()}
+Reply with ONLY a JSON object: {"title": "headline under 70 characters", "body": "the update, 80-180 words, short paragraphs separated by blank lines, ending with one clear takeaway"}`,{cache:false});
+      if(IP){IP.title=String(d.title||IP.title);IP.body=String(d.body||IP.body)}}
+    catch(err){if(err&&['not_granted','sampling_disabled','not_declared'].includes(err.code)){S.sample=null}
+      toast(err&&err.code==='rate_limited'?'Claude is busy or your usage limit was reached. Try again shortly.':"Couldn't draft that. Try again, or write it yourself.",true)}
+    if(IP){IP.busy=false;drawPost()}return}
+  if(a==='save'){if(!IP.title.trim()){toast('Add a title first.',true);return}
+    const posts=intelPosts(),old=IP.id?posts.find(x=>x.id===IP.id):null;
+    const rec={id:IP.id||uid(),date:old?old.date:new Date().toISOString(),title:IP.title.trim(),body:IP.body.trim(),category:IP.category,crops:IP.crops,pinned:IP.pinned,
+      audience:IP.aType==='all'||!IP.aVal?{type:'all'}:{type:IP.aType,value:IP.aVal}};
+    // keep the newest 150 posts so the feed stays fast
+    const next=(old?posts.map(x=>x.id===rec.id?rec:x):[rec,...posts]).sort((x,y)=>String(y.date).localeCompare(String(x.date))).slice(0,150);
+    IP=null;$('#dlg').close();saveIntel(next);return}
+  if(a==='del'){if(!IP.confirmDel){IP.confirmDel=true;drawPost();return}const id=IP.id;IP=null;$('#dlg').close();saveIntel(intelPosts().filter(x=>x.id!==id))}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-intelcat],[data-intelopen],[data-intelpost]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.intelpost){openPost(t.dataset.intelpost);return}
+  if(t.dataset.intelopen)S.intelOpen=S.intelOpen===t.dataset.intelopen?null:t.dataset.intelopen;
+  if(t.dataset.intelcat!==undefined)S.intelCat=t.dataset.intelcat;render()});
+
 /* ---------- contract scanning ---------- */
 // open the phone camera / file picker; must be called from a click
 function pickPhoto(cb){const inp=document.createElement('input');inp.type='file';
@@ -1944,6 +2053,7 @@ document.addEventListener('click',e=>{
   if(a==='home'){S.section='home';render();window.scrollTo(0,0)}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
+  if(a==='addreport')openShared(null,{agency:'USDA report',recurring:false,title:''});
   if(a==='scan'){
     // say why scanning is off in this view instead of hiding the button
     const why=!S.sample?"Scanning needs Claude, and this view of the app can't reach it. Open the app at claude.ai in a web browser (Chrome, Edge or Safari), signed in, and try again."
@@ -2007,7 +2117,7 @@ $('#dlg').addEventListener('close',()=>{
   // a scanned contract closed without saving: drop its photo instead of leaving it stored
   if(S.pendingPhoto){if(S.assets)S.assets.delete(S.pendingPhoto).catch(()=>{});S.pendingPhoto=null}
   if(scanCtl&&!scanCtl.signal.aborted)scanCtl.abort();
-  dlgCtx=null;detail=null;CE=null;render()});
+  dlgCtx=null;detail=null;CE=null;IP=null;render()});
 
 /* ---------- boot ---------- */
 const PREVIEW={name:'Prairie Ridge Farms',sample:true,
@@ -2052,6 +2162,7 @@ async function boot(){
   // shared futures prices written by the evening sync; everyone reads, only the owner writes
   db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   db.doc('market/bids').onSnapshot(d=>{S.bids=d.exists?clone(d.data()):null;if(!$('#dlg').open&&S.section==='quotes')render()},onErr);
+  db.doc('market/intel').onSnapshot(d=>{S.intel=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   db.doc('market/deadlines').onSnapshot(d=>{S.deadlines=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   if(S.owner){
     db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
