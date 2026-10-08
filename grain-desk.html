@@ -211,6 +211,25 @@ table.costtab input,table.costtab select{padding:5px 7px;font-size:.85rem}
 table.costtab input.num{width:96px;text-align:right}
 table.costtab td:first-child{min-width:170px}
 dialog:has(.costtab){width:min(760px,calc(100vw - 32px))}
+/* quotes: board styled after the reference app */
+.qhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:26px 0 12px;padding-left:12px;border-left:4px solid var(--accent)}
+.qhead h2{font-size:1.35rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+.qhead span{display:block;font-size:.85rem;color:var(--muted);margin-top:2px}
+.qex{color:var(--accent);font-family:var(--f-display);font-size:1rem}
+.qboard{border-radius:16px;padding:4px 18px}
+.qrow{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(90px,auto);gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.qrow:last-child{border-bottom:0}
+.qrow>div:first-child b{display:block;font-size:1.08rem;font-weight:650}
+.qrow>div:first-child span{font-size:.85rem;color:var(--muted)}
+.qrow.bid{grid-template-columns:minmax(0,1fr) 0 auto}
+.qpx{text-align:right;display:grid;gap:2px}
+.qpx b{font:600 1.2rem var(--f-data);font-variant-numeric:tabular-nums}
+.qpx span{font:500 .88rem var(--f-data);color:var(--muted)}
+.qpx .up{color:var(--good)} .qpx .dn{color:var(--bad)}
+.spark{width:110px;height:30px;display:block}
+.spark polyline{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.qnote{font-size:.8rem;color:var(--muted);padding:12px 0}
+@media (max-width:480px){.qrow{grid-template-columns:minmax(0,1fr) 72px auto;gap:10px}.spark{width:72px}}
 /* quotes: futures board */
 .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .qcard{border-top:4px solid var(--crop);overflow:hidden}
@@ -433,7 +452,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',bidHome:d.bidHome||null,sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -1484,18 +1503,66 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-addleg],[d
   if(t.dataset.addleg)S.opt.legs.push(legDefaults(t.dataset.addleg,S.opt,n0(p.acres)*yieldOf(p)*S.opt.yieldPct/100));
   else S.opt.legs=S.opt.legs.filter(l=>l.id!==t.dataset.rmleg);
   render()});
+// Quotes: grain futures board (front months or one crop), cash bids near the farm, other markets
+// CBOT grain prices in dollars with quarter-cent fractions: 5.0225 -> "5.02¼"
+const FRAC={0:'',25:'¼',50:'½',75:'¾'};
+function cbot(p){if(p==null)return'—';const q=Math.round(p*400);const d=Math.floor(q/400),c=(q-d*400)/4,w=Math.floor(c),fr=Math.round((c-w)*100);return`${d}.${String(w).padStart(2,'0')}${FRAC[fr]??''}`}
+function cbotChg(ch){if(ch==null)return'—';const q=Math.round(Math.abs(ch)*400)/4,w=Math.floor(q),fr=Math.round((q-w)*100);return`${ch>0?'+':ch<0?'−':''}${w}${FRAC[fr]??''}¢`}
+function spark(vals,up){if(!vals||vals.length<2)return'';const W=110,H=30,lo=Math.min(...vals),hi=Math.max(...vals),r=hi-lo||1;
+  return`<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><polyline points="${vals.map((v,i)=>`${(i/(vals.length-1)*W).toFixed(1)},${(H-2-(v-lo)/r*(H-4)).toFixed(1)}`).join(' ')}" style="stroke:${up?'var(--good)':'var(--bad)'}"/></svg>`}
+const GRAINS=[['Corn','ZC','corn'],['Soybeans','ZS','soy'],['Wheat','ZW','wheat']];
+// distance in miles between two lat/lon points
+function miles(a,b){const R=3958.8,r=x=>x*Math.PI/180,dl=r(b[0]-a[0]),dn=r(b[1]-a[1]);
+  const h=Math.sin(dl/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+const ymLabel=ym=>{const[y,m]=ym.split('-');return`${MNAME[+m-1]} '${y.slice(2)}`};
 function tabQuotes(f){
-  const m=S.market,crops=[['Corn','ZC','corn'],['Soybeans','ZS','soy'],['Wheat','ZW','wheat']];
-  const board=!m||!m.prices?`<div class="panel"><div class="empty"><b>Futures haven't loaded yet</b>CME corn, soybean and wheat prices update each evening from JSA's Snowflake data.</div></div>`
-    :`<div class="qgrid">${crops.map(([name,root,ck])=>{const syms=marketSyms(name);const plan=f&&f.crops.find(c=>+c.year===+S.year&&key(c.crop)===key(name));const used=plan?futFor(plan).symbol:null;
-      return`<div class="panel qcard" style="--crop:var(--c-${ck})"><h3><span class="cdot"></span>${name}</h3>${syms.length?`<table><thead><tr><th>Contract</th><th class="n">Price</th><th class="n">Change</th></tr></thead><tbody>
-      ${syms.map(s=>{const p=m.prices[s],pv=m.prev&&m.prev[s],ch=pv!=null?p-pv:null;
-        return`<tr${s===used?' class="qused"':''}><td>${symLabel(s)} <span class="muted mono" style="font-size:.72rem">${s}</span>${s===used?' <span class="tag bin">Your crop card</span>':''}</td><td class="n mono">${usd(p,4)}</td>
-        <td class="n mono" style="color:${ch==null||Math.abs(ch)<1e-9?'var(--muted)':ch>0?'var(--good)':'var(--bad)'}">${ch==null?'—':(ch>0?'▲ ':ch<0?'▼ ':'')+(Math.abs(ch)*100).toFixed(2)+'¢'}</td></tr>`}).join('')}</tbody></table>`:'<p class="muted" style="padding:0 16px">No contracts in today’s data.</p>'}</div>`}).join('')}</div>`;
-  return`<section><div class="sechead"><h2>Futures</h2><div class="sp"></div>${m&&m.asOf?`<span class="muted" style="font-size:.85rem">CME prices as of <b style="color:var(--ink)">${fmtDate(m.asOf)}</b>${m.prevDate?` · change vs ${fmtDate(m.prevDate)}`:''}</span>`:''}</div>
-  ${board}
-  <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Updated once each evening from JSA's Snowflake futures data, so these are end-of-day prices, not live quotes. Each crop card uses its crop year's new-crop month unless you pick another one under Futures & basis.</p></section>
-  <section><div class="sechead"><h2>Cash bids</h2></div><div class="panel"><div class="empty"><b>Coming soon</b>Elevator and processor cash bids will go here.</div></div></section>`}
+  const m=S.market,chip=S.qChip||'front';
+  const qrow=(sym,title,sub,withSpark)=>{const p=m.prices[sym],pv=m.prev&&m.prev[sym],ch=pv!=null?p-pv:null;
+    return`<div class="qrow"><div><b>${title}</b><span>${sub}</span></div>${withSpark?spark(m.hist&&m.hist[sym],ch==null||ch>=0):'<i></i>'}
+      <div class="qpx"><b>${cbot(p)}</b><span class="${ch>0?'up':ch<0?'dn':''}">${cbotChg(ch)}</span></div></div>`};
+  let board;
+  if(!m||!m.prices)board=`<div class="empty"><b>Futures haven't loaded yet</b>Corn, soybean and wheat futures update each evening from JSA's data.</div>`;
+  else if(chip==='front')board=GRAINS.map(([name,root])=>{const syms=marketSyms(name);if(!syms.length)return'';
+      const near=syms[0],yy=+near.slice(3),nc=syms.find(s=>s[2]===NEWCROP[root]&&+s.slice(3)===yy+1);
+      return qrow(near,name,symLabel(near).replace(' ',' \''),true)+(nc&&nc!==near?qrow(nc,symLabel(nc).replace(' ',' \''),'New crop',false):'')}).join('');
+  else{const g=GRAINS.find(x=>x[2]===chip);board=marketSyms(g[0]).map((s,i)=>qrow(s,symLabel(s).replace(' ',' \''),i===0?'Nearby':s[2]===NEWCROP[g[1]]?'New crop':'',i===0)).join('')}
+  return`<section><div class="qhead"><div><h2>Grain futures</h2><span>${m&&m.asOf?`Settle/close · ${fmtDate(m.asOf)}`:'End of day'}</span></div><b class="qex">CBOT</b></div>
+    <div class="chips">${[['front','Front months'],['corn','Corn'],['soy','Soybeans'],['wheat','Wheat']].map(([k,l])=>`<button class="chip" data-qchip="${k}" aria-pressed="${chip===k}">${l}</button>`).join('')}</div>
+    <div class="panel qboard">${board}</div></section>
+  ${cashBids(f)}
+  <section><div class="qhead"><div><h2>Livestock & other markets</h2><span>CME · end of day</span></div><b class="qex">CME</b></div>
+    <div class="panel qboard">${m&&m.fci?(()=>{const x=m.fci,ch=x.prev!=null?x.value-x.prev:null;
+      return`<div class="qrow"><div><b>Feeder Cattle Index</b><span>CME · ${fmtDate(x.asOf)}</span></div>${spark(x.hist,ch==null||ch>=0)}
+        <div class="qpx"><b>${x.value.toFixed(2)}</b><span class="${ch>0?'up':ch<0?'dn':''}">${ch==null?'—':(ch>0?'+':ch<0?'−':'')+Math.abs(ch).toFixed(2)}</span></div></div>`})():''}
+      <div class="qnote">Live cattle, lean hogs, crude oil, the Dow and the S&amp;P 500 need a market data feed that isn't connected yet.</div></div></section>`}
+function cashBids(f){
+  const B=S.bids,crop=S.bidCrop||'C',rad=S.bidRadius||50,home=f.bidHome;
+  const head=`<div class="qhead"><div><h2>Cash bids near you</h2><span>${home?`${esc(home.label)} · best bids first`:'Pick your location to see nearby bids'}</span></div></div>`;
+  if(!B||!B.locs)return`<section>${head}<div class="panel"><div class="empty"><b>Cash bids haven't loaded yet</b>Elevator and processor bids update each evening from JSA's basis tracker.</div></div></section>`;
+  // location picker: bid towns, the farm's state first
+  const towns=[...new Map(B.locs.map(l=>[l[1],l])).values()].sort((a,b)=>(a[2]===f.state?0:1)-(b[2]===f.state?0:1)||a[2].localeCompare(b[2])||a[1].localeCompare(b[1]));
+  const picker=`<label class="label" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${home?'Change location':'Your location'} <select id="bidHome" style="width:auto;max-width:100%">
+      <option value="">${home?esc(home.label):'Choose the nearest town'}</option>${towns.map(l=>`<option value="${esc(l[1])}">${esc(l[1])}</option>`).join('')}</select></label>`;
+  let list='';
+  if(home){const here=[home.lat,home.lon];
+    const best={};// nearest delivery month per location for this grain
+    B.bids.forEach(b=>{if(b[1]!==crop)return;const fp=S.market&&S.market.prices?S.market.prices[b[4]]:null;if(fp==null)return;
+      const cur=best[b[0]];if(!cur||b[3]<cur[3])best[b[0]]=b});
+    const rows=Object.values(best).map(b=>{const l=B.locs[b[0]],d=miles(here,[l[3],l[4]]);return{l,b,d,cash:S.market.prices[b[4]]+b[5]/100}})
+      .filter(x=>x.d<=rad).sort((a,b)=>b.cash-a.cash).slice(0,25);
+    list=rows.length?rows.map(x=>`<div class="qrow bid"><div><b>${esc(x.l[0])}</b><span>${esc(x.l[1])} · ${x.d<1?'here':Math.round(x.d)+' miles away'}${x.b[2]?` · ${esc(x.b[2])}`:''}</span></div><i></i>
+        <div class="qpx"><b>${usd(x.cash)}</b><span>${x.b[5]>0?'+':x.b[5]<0?'−':''}${Math.abs(x.b[5])}¢ ${ymLabel(x.b[3])}</span></div></div>`).join('')
+      :`<div class="empty"><b>No ${({C:'corn',S:'soybean',W:'wheat'})[crop]} bids within ${rad} miles</b>Try a wider distance.</div>`}
+  return`<section>${head}
+    <div style="margin:0 0 10px">${picker}</div>
+    ${home?`<div class="chips">${[['C','Corn'],['S','Soybeans'],['W','Wheat']].map(([k,l])=>`<button class="chip" data-bidcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}</div>
+    <div class="chips">${[25,50,100].map(r=>`<button class="chip sm" data-bidrad="${r}" aria-pressed="${rad===r}">${r} mi</button>`).join('')}</div>
+    <div class="panel qboard">${list}</div><p class="muted" style="font-size:.74rem;margin:6px 0 0">Cash price = ${S.market&&S.market.asOf?fmtDate(S.market.asOf)+' ':''}futures + each elevator's posted basis for its nearest delivery month. Bids as of ${fmtDate(B.asOf)}; confirm with the elevator before selling.</p>`
+      :`<div class="panel"><div class="empty"><b>Where's your farm?</b>Choose the nearest town above. Bids are sorted best price first within 25, 50 or 100 miles.</div></div>`}</section>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-qchip],[data-bidcrop],[data-bidrad]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.qchip)S.qChip=t.dataset.qchip;if(t.dataset.bidcrop)S.bidCrop=t.dataset.bidcrop;if(t.dataset.bidrad)S.bidRadius=+t.dataset.bidrad;render()});
+document.addEventListener('change',e=>{if(e.target.id!=='bidHome'||!e.target.value)return;const f=S.farms[S.current],l=S.bids&&S.bids.locs.find(x=>x[1]===e.target.value);
+  if(!f||!l)return;f.bidHome={label:l[1],lat:l[3],lon:l[4]};persist(S.current)});
 // one combined bin per crop: capacity = all bins holding that crop; fill split into sold (open contracts) and unsold
 function cropBins(f){
   const st=storage(f);
@@ -1984,6 +2051,7 @@ async function boot(){
   const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
   // shared futures prices written by the evening sync; everyone reads, only the owner writes
   db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
+  db.doc('market/bids').onSnapshot(d=>{S.bids=d.exists?clone(d.data()):null;if(!$('#dlg').open&&S.section==='quotes')render()},onErr);
   db.doc('market/deadlines').onSnapshot(d=>{S.deadlines=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   if(S.owner){
     db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
