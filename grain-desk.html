@@ -389,6 +389,17 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 @media (max-width:720px){.okpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .okpi b small{font-size:.72rem;font-weight:500;color:var(--muted);margin-left:2px}
 .okpi em{font-style:normal;font-size:.74rem;color:var(--muted)}
+.ikpi{margin-bottom:14px} .ikpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){.ikpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ikpi>div:last-child{grid-column:1/-1}}
+.ivtabs{margin-bottom:12px}
+.pf:has(input[type=range]) span{white-space:normal}
+@media (max-width:560px){.pgrid2.iest{grid-template-columns:minmax(0,1fr)}}
+details.ipol{margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+details.ipol summary{cursor:pointer;font-weight:600;color:var(--muted);font-size:.9rem;margin-bottom:12px}
+.pf input.itxt{font:500 1rem var(--f-body)}
+table.ilv td,table.ilv th{padding:8px 10px} table.ilv tr.cur td{background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.dllist.idl{margin:0;padding:0} .dllist.idl li{padding-left:0}
+.mkt>div>span+span{font-size:.72rem}
 .optchart .tip[hidden]{display:none}
 .tabs{scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -1941,49 +1952,184 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!(t.clas
 document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('pinp')&&S.prodDirty){S.prodDirty=false;persist(S.current)}});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-prodcrop]');if(!t)return;S.prodCrop=t.dataset.prodcrop;render()});
 // Crop insurance: calculator card per crop; plan and coverage are buttons, prices edit in place
+/* ---------- crop insurance (policy, coverage levels, payout estimator, SCO/ECO) and FSA ARC/PLC ---------- */
+// planning estimates only: each crop is treated as one unit; premiums are the farmer-paid $/ac from the agent's quote
+const FSA_REF={corn:4.10,soybeans:10.00,wheat:6.35},FSA_LOAN={corn:2.42,soybeans:6.82,wheat:3.72}; // 2025 law: statutory reference prices, 2026+ loan rates
+const INS_VIEWS=[['policy','Policy'],['levels','Coverage levels'],['pays','What it pays'],['addons','SCO / ECO'],['fsa','ARC / PLC']];
+const scoTop=c=>num(c.scoTop)??(+c.year>=2027?90:86); // SCO covers up to 90% starting 2027, 86% before
+// o: {cov, harvest, yield (bu/ac), cntyPct (county revenue or yield as a share of expected)}
+function insCalc(c,o={}){
+  const t=c.insType,ac=n0(c.acres),aph=n0(c.aph),cov=num(o.cov)??n0(c.coverage),p=n0(c.projPrice);
+  if(!t||t==='None'||!ac||!aph||!p||!cov)return null;
+  const h=num(o.harvest)??num(c.harvestPrice)??p,y=num(o.yield)??aph,cp=num(o.cntyPct)??y/aph;
+  const gBu=ac*aph*cov/100,gPrice=t==='RP'?Math.max(p,h):p,guar=gBu*gPrice;
+  const base=t==='YP'?Math.max(0,gBu-ac*y)*p:Math.max(0,guar-ac*y*h);
+  // SCO and ECO pay on the county's loss, not the farm's: band from the lower to the upper coverage level
+  const ratio=t==='YP'?cp:cp*h/gPrice,value=ac*aph*gPrice;
+  const band=(top,bot)=>{const w=(top-bot)/100;if(w<=0)return{liab:0,pay:0};return{liab:value*w,pay:value*w*Math.min(1,Math.max(0,(top/100-ratio)/w))}};
+  const st=scoTop(c),sco=c.sco?band(st,cov):{liab:0,pay:0},eco=n0(c.eco)?band(n0(c.eco),Math.max(st,cov)):{liab:0,pay:0};
+  const pb=c.premBy||{},prem=ac*(n0(pb[cov])+(c.sco?n0(c.scoPrem):0)+(n0(c.eco)?n0(c.ecoPrem):0)),pay=base+sco.pay+eco.pay;
+  return{ac,aph,cov,p,h,y,gBu,gPrice,guar,base,sco:sco.pay,eco:eco.pay,scoLiab:sco.liab,ecoLiab:eco.liab,pay,prem,net:pay-prem,crop:ac*y*h}}
+// FSA: PLC pays when the marketing-year price falls below the reference price; ARC-CO when county revenue falls below 90% of benchmark (capped at 12%)
+function fsaCalc(c){
+  const k=key(c.crop),ba=n0(c.baseAcres),ref=num(c.refPrice)??FSA_REF[k]??null,loan=num(c.loanRate)??FSA_LOAN[k]??0;
+  const est=futFor(c).price!=null?futFor(c).price+n0(c.estBasis):null,mya=num(c.myaPrice)??est;
+  if(!ba||mya==null||ref==null)return{ba,ref,loan,mya,est};
+  const pr=Math.max(mya,loan),plcRate=Math.max(0,ref-pr),plc=num(c.plcYield)!=null?plcRate*n0(c.plcYield)*ba*.85:null;
+  const bmY=num(c.arcBmYield),bmP=num(c.arcBmPrice)??ref,cy=num(c.arcCntyYield);
+  let arc=null,arcRate=null,bm=null,act=null;
+  if(bmY!=null&&cy!=null){bm=bmY*bmP;act=cy*pr;arcRate=Math.min(.12*bm,Math.max(0,.9*bm-act));arc=arcRate*ba*.85}
+  return{ba,ref,loan,mya,est,pr,plcRate,plc,bm,act,arcRate,arc}}
+
 function tabInsurance(f){
   const list=f.crops.filter(c=>+c.year===+S.year);
   if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div><div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
-  const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None';
-  const p=position(f,S.year),tot=list.reduce((a,c)=>a+((p.find(x=>key(x.crop)===key(c.crop))||{}).revGuar||0),0);
+  const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None',view=S.insView||'policy',cov=n0(sel.coverage);
+  if(!S.insEst||S.insEst.id!==sel.id){const p=num(sel.projPrice),h=num(sel.harvestPrice);S.insEst={id:sel.id,y:100,h:p&&h?Math.max(-40,Math.min(40,Math.round((h/p-1)*20)*5)):0,c:null}}
   const chip=(k,v,label)=>`<button class="chip" data-ichip="${k}" data-v="${v}" aria-pressed="${String(sel[k]??'')===String(v)}">${label}</button>`;
-  const fld=(k,label,ph='')=>`<label class="pf"><span>${label}</span><input class="iinp" id="ii_${sel.id}_${k}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${sel[k]??''}" placeholder="${ph}"></label>`;
-  return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(sel.crop)} · revenue guarantee</div></div><div class="sp"></div>
-    ${tot?`<span class="muted" style="font-size:.82rem">All crops: ${usd(tot,0)} guaranteed</span>`:''}</div>
-  <div class="panel calc">
-    <div class="clab">Crop</div>
-    <div class="chips">${list.map(c=>`<button class="chip" data-inscrop="${c.id}" aria-pressed="${c.id===sel.id}">${esc(c.crop)}</button>`).join('')}</div>
-    <div class="clab">Plan</div>
+  const fld=(k,label,ph='')=>{const v=k.includes('.')?(sel[k.split('.')[0]]||{})[k.split('.')[1]]:sel[k];
+    return`<label class="pf"><span>${label}</span><input class="iinp" id="ii_${sel.id}_${k.replace('.','_')}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${v??''}" placeholder="${ph}"></label>`};
+  const tfld=(k,label,ph='')=>`<label class="pf"><span>${label}</span><input class="itxt" id="it_${sel.id}_${k}" data-k="${k}" value="${esc(sel[k]||'')}" placeholder="${ph}"></label>`;
+  const need=`<p class="muted" style="margin:4px 0 0">Set up ${esc(sel.crop)}'s policy first (plan, coverage, acres, APH and projected price). <button class="link" data-insview="policy">Go to Policy</button></p>`;
+  let body='';
+  if(view==='policy'){
+    const dates=deadlinesFor(f).filter(x=>/^(Crop insurance|FSA)/.test(x.src)).slice(0,5);
+    body=`<div class="clab">Plan</div>
     <div class="chips">${[['RP','Revenue Protection'],['RP-HPE','RP · harvest price excl.'],['YP','Yield Protection'],['None','No insurance']].map(([v,l])=>chip('insType',v,l)).join('')}</div>
     ${has?`<div class="clab">Coverage level</div>
     <div class="chips">${[50,55,60,65,70,75,80,85].map(v=>chip('coverage',v,v+'%')).join('')}</div>
-    <div class="pgrid">${fld('acres','Acres')}${fld('aph','APH (bu/ac)')}${fld('projPrice','Projected price ($/bu)','RMA projected')}${sel.insType==='RP'?fld('harvestPrice','Harvest price ($/bu)','once published'):''}</div>
-    <div id="insResult">${insResult(f,sel)}</div>`
+    <div class="clab">Units</div>
+    <div class="chips">${['Basic','Optional','Enterprise'].map(v=>chip('unitType',v,v)).join('')}</div>
+    <div class="pgrid">${fld('acres','Acres')}${fld('aph','APH (bu/ac)')}${fld('projPrice','Projected price ($/bu)','RMA projected')}${sel.insType!=='YP'?fld('harvestPrice','Harvest price ($/bu)','once published'):''}
+      ${fld('premBy.'+cov,`Premium at ${cov}% ($/ac)`,'your cost')}</div>
+    <div id="insResult">${insResult(f,sel)}</div>
+    <details class="ipol"${sel.insCompany||sel.insAgent||sel.policyNo?'':' open'}><summary>Policy details${sel.insCompany?` · ${esc(sel.insCompany)}`:''}${sel.policyNo?` · #${esc(sel.policyNo)}`:''}</summary>
+      <div class="pgrid">${tfld('insCompany','Insurance company')}${tfld('insAgent','Agent','name and phone')}${tfld('policyNo','Policy number')}</div></details>`
     :`<p class="muted" style="margin:4px 0 0">No insurance recorded for ${esc(sel.crop)}. Pick a plan above to set it up.</p>`}
-  </div></section>
-  <div class="explain"><p><b>Insured bushels</b> = acres × APH × coverage level. Contracting more than this means a short crop could leave contracts you can't fill with insured bushels.</p>
-  <p><b>Revenue guarantee</b> = insured bushels × guarantee price. For RP that is the higher of the projected and harvest price; RP-HPE and YP use the projected price. Planning estimates, not policy terms.</p></div>`}
+    <div class="clab" style="margin-top:22px">Insurance & FSA dates</div>
+    ${dates.length?`<ul class="dllist idl">${dates.map(x=>{const t=new Date(x.d+'T12:00:00'),n=daysUntil(x.d);return`<li><div class="dlbadge ${n<=14?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div><div class="dltext"><b>${esc(x.title)}</b><span>${esc(x.src)}${x.note?` · ${esc(x.note)}`:''}</span></div></li>`}).join('')}</ul>`
+      :`<p class="muted" style="font-size:.85rem;margin:0">No crop insurance or FSA dates in the next year. ${S.owner?'Add them as program deadlines on Crop Overview (pick Crop insurance or FSA) and they show here for every client in that area.':'Your advisor adds these.'}</p>`}`}
+  else if(!insCalc(sel)&&view!=='fsa')body=need;
+  else if(view==='levels')body=`<div class="clab">Your premium per acre at each level</div>
+    <p class="muted" style="font-size:.82rem;margin:-4px 0 12px">From your agent's quote (what you pay, after subsidy).</p>
+    <div class="pgrid">${[70,75,80,85].map(v=>fld('premBy.'+v,v+'% ($/ac)')).join('')}</div>
+    <div id="insLv">${insLevels(sel)}</div>`;
+  else if(view==='pays'){const e=S.insEst,p=n0(sel.projPrice);
+    body=`<div class="pgrid2 iest">
+      <label class="pf"><span>Your yield · <b id="iest_y_o">${e.y}% of APH · ${(n0(sel.aph)*e.y/100).toFixed(0)} bu/ac</b></span><input class="iest" data-e="y" type="range" min="30" max="130" step="5" value="${e.y}"></label>
+      <label class="pf"><span>Harvest price · <b id="iest_h_o">${usd(p*(1+e.h/100))} (${e.h>0?'+':''}${e.h}%)</b></span><input class="iest" data-e="h" type="range" min="-40" max="40" step="5" value="${e.h}"></label></div>
+    ${sel.sco||n0(sel.eco)?`<label class="pf" style="margin-top:12px"><span>County yield (SCO / ECO) · <b id="iest_c_o">${e.c==null?'same as yours':e.c+'% of expected'}</b></span><input class="iest" data-e="c" type="range" min="30" max="130" step="5" value="${e.c??e.y}"></label>
+      <button class="link" data-act="iestlink" style="font-size:.8rem;margin-top:4px">Match my yield</button>`:''}
+    <div id="insEst" style="margin-top:20px">${insEstOut(sel)}</div>
+    <div class="clab" style="margin-top:24px">Net insurance per acre across outcomes</div>
+    <div id="insGrid">${insGrid(sel)}</div>`}
+  else if(view==='addons'){const st=scoTop(sel),eco=[90,95].filter(v=>v>Math.max(st,cov));
+    body=`<p class="muted" style="font-size:.85rem;margin:0 0 16px">These add-ons pay when the <b>county</b> comes in short, on top of your own policy. They can pay even when your farm is fine, and may not pay when only your farm has a loss.</p>
+    <div class="clab">SCO · ${cov}% up to ${st}%</div>
+    <div class="chips">${chip('sco','','Off')}${chip('sco','true','On')}</div>
+    ${sel.sco?`<div class="pgrid" style="margin-bottom:20px">${fld('scoPrem','SCO premium ($/ac)')}</div>`:''}
+    <div class="clab">ECO · ${Math.max(st,cov)}% up to</div>
+    <div class="chips">${chip('eco','','Off')}${eco.map(v=>chip('eco',v,v+'%')).join('')}</div>
+    ${n0(sel.eco)?`<div class="pgrid">${fld('ecoPrem','ECO premium ($/ac)')}</div>`:''}
+    <div id="insAdd">${insAddOut(sel)}</div>`}
+  else if(view==='fsa'){const k=key(sel.crop),F=fsaCalc(sel);
+    body=`<p class="muted" style="font-size:.85rem;margin:0 0 16px">FSA programs on your <b>base acres</b> (not planted acres). Choose ARC-CO or PLC each year for each crop.</p>
+    <div class="clab">Your election</div>
+    <div class="chips">${chip('fsaElect','PLC','PLC')}${chip('fsaElect','ARC-CO','ARC-CO')}${chip('fsaElect','','Not elected')}</div>
+    <div class="pgrid">${fld('baseAcres','Base acres')}${fld('plcYield','PLC yield (bu/ac)')}${fld('myaPrice','Season avg price ($/bu)',F.est!=null?`est. ${F.est.toFixed(2)}`:'')}${fld('refPrice','Reference price ($/bu)',FSA_REF[k]!=null?FSA_REF[k].toFixed(2):'')}</div>
+    <div class="clab" style="margin-top:18px">ARC-CO county numbers</div>
+    <div class="pgrid">${fld('arcBmYield','Benchmark yield (bu/ac)')}${fld('arcBmPrice','Benchmark price ($/bu)',FSA_REF[k]!=null?FSA_REF[k].toFixed(2):'')}${fld('arcCntyYield','County yield this year')}${fld('loanRate','Loan rate ($/bu)',FSA_LOAN[k]!=null?FSA_LOAN[k].toFixed(2):'')}</div>
+    <div id="fsaOut">${fsaOut(sel)}</div>`}
+  return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(sel.crop)}${has?` · ${esc(sel.insType)} ${cov}%${sel.unitType?` · ${esc(sel.unitType)} units`:''}`:''}</div></div></div>
+  <div class="chips" style="margin-bottom:12px">${list.map(c=>`<button class="chip" data-inscrop="${c.id}" aria-pressed="${c.id===sel.id}">${esc(c.crop)}</button>`).join('')}</div>
+  <div id="insHead">${insHead(f,sel)}</div>
+  <div class="chips ivtabs">${INS_VIEWS.map(([k,l])=>`<button class="chip sm" data-insview="${k}" aria-pressed="${k===view}">${l}</button>`).join('')}</div>
+  <div class="panel calc">${body}</div></section>
+  <details class="explain"><summary>How these are figured</summary>
+  <p><b>Revenue guarantee</b> = acres × APH × coverage × guarantee price. RP uses the higher of the projected and harvest price; RP-HPE and YP use the projected price. A policy pays the guarantee minus acres × your yield × harvest price (YP: bushels short × projected price).</p>
+  <p><b>SCO and ECO</b> pay on the county's revenue (or yield for YP) falling below the top of their band, in full once it reaches the bottom. Starting with 2027 crops, SCO covers up to 90%.</p>
+  <p><b>PLC</b> = (reference price − higher of season price and loan rate) × PLC yield × 85% of base acres. <b>ARC-CO</b> pays 90% of benchmark revenue minus county yield × that price, capped at 12% of benchmark, × 85% of base acres. FSA pays in October after the marketing year, before sequestration and payment limits.</p>
+  <p>Every crop is treated as one unit. These are planning estimates, not policy terms. Your agent and FSA office have the official numbers.</p></details>`}
+function insHead(f,sel){
+  const all=f.crops.filter(c=>+c.year===+S.year).map(c=>insCalc(c)).filter(Boolean),totG=all.reduce((a,r)=>a+r.guar,0),totP=all.reduce((a,r)=>a+r.prem,0),r=insCalc(sel);
+  return`<div class="cckpi ikpi"><div><span>${esc(sel.crop)} guarantee</span><b>${r?usd(r.guar,0):'—'}</b><em>${r?usd(r.guar/r.ac)+' per acre':'set up the policy'}</em></div>
+    <div><span>Premium you pay</span><b>${r&&r.prem?usd(r.prem,0):'—'}</b><em>${r&&r.prem?usd(r.prem/r.ac)+' per acre':'from your agent'}</em></div>
+    <div><span>All crops guaranteed</span><b>${totG?usd(totG,0):'—'}</b><em>${totP?usd(totP,0)+' total premium':'&nbsp;'}</em></div></div>`}
 function insResult(f,sel){
   const r=position(f,S.year).find(x=>key(x.crop)===key(sel.crop))||{},ac=n0(sel.acres),cpa=costOf(sel);
   const perAc=ac?r.revGuar/ac:null,costShare=cpa&&perAc!=null?perAc/cpa:null,sh=r.insured?r.sold/r.insured:null;
   const tone=sh==null?'':sh>1?'p-loss':sh>0.8?'p-warn':'p-gain';
-  return`<div class="beresult"><div class="clab" style="text-align:center">Your revenue guarantee</div>
-    <div class="bebig">${r.revGuar?usd(r.revGuar,0):'—'}</div><div class="muted" style="text-align:center">${r.revGuar?`${usd(perAc)} per acre · at ${usd(r.insPrice)}/bu`:'Enter APH, coverage and projected price'}</div>
-    <div class="bestats"><div><span>Insured bushels</span><b>${r.insured?bu(r.insured):'—'}</b></div><div><span>Guaranteed bu/acre</span><b>${ac&&r.insured?(r.insured/ac).toFixed(1):'—'}</b></div>
+  return`<div class="beresult"><div class="bestats" style="margin-top:0"><div><span>Insured bushels</span><b>${r.insured?bu(r.insured):'—'}</b></div><div><span>Guaranteed bu/acre</span><b>${ac&&r.insured?(r.insured/ac).toFixed(1):'—'}</b></div>
       <div><span>Guarantee price</span><b>${r.insPrice?usd(r.insPrice):'—'}</b></div><div><span>Covers of cost/acre</span><b>${costShare==null?'—':pct(costShare)}</b></div></div></div>
   <div class="clab" style="margin-top:20px">Compare to what's sold</div>
   <div class="mkt"><div><span>Contracted bushels</span><b>${bu(r.sold||0)}</b></div><div><span>Insured bushels</span><b>${r.insured?bu(r.insured):'—'}</b></div>
     <div class="${tone}"><span>Contracted vs insured</span><b>${sh==null?'—':pct(sh)}</b></div></div>
   <p class="muted" style="font-size:.76rem;margin:6px 0 0">${sh!=null&&sh>1?'More is contracted than insured. A short crop could leave contracts unfilled.':sh!=null&&sh>0.8?'Contracts are close to the insured bushels.':'Contracts are within insured bushels.'}</p>`}
+function insLevels(sel){
+  const p=n0(sel.projPrice),aph=n0(sel.aph),pb=sel.premBy||{};let prev=null;
+  const rows=[70,75,80,85].map(v=>{const r=insCalc(sel,{cov:v,harvest:p,yield:aph});if(!r)return'';const g=r.guar/r.ac,pr=num(pb[v]);
+    const eff=prev&&pr!=null&&prev.pr!=null&&pr>prev.pr?(g-prev.g)/(pr-prev.pr):null;prev={g,pr};
+    return`<tr class="${v===n0(sel.coverage)?'cur':''}"><td><b>${v}%</b>${v===n0(sel.coverage)?' <span class="tag bin">current</span>':''}</td><td class="n">${(aph*v/100).toFixed(0)} bu</td><td class="n">${usd(g)}</td>
+      <td class="n">${pr==null?'—':usd(pr)}</td><td class="n"><b>${pr==null?'—':usd(g-pr)}</b></td><td class="n">${eff==null?'—':usd(eff)}</td>
+      <td class="n">${v===n0(sel.coverage)?'':`<button class="link" data-ichip="coverage" data-v="${v}">Use</button>`}</td></tr>`}).join('');
+  return`<div class="tablewrap" style="margin-top:18px"><table class="ilv"><thead><tr><th>Level</th><th class="n">Pays below</th><th class="n">Guarantee /ac</th><th class="n">Premium /ac</th><th class="n">After premium</th><th class="n" title="Extra guarantee per extra $1 of premium vs the level above">Per extra $1</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="muted" style="font-size:.76rem;margin:8px 0 0">At the projected price. "Pays below" is the yield where ${sel.insType==='YP'?'the policy':'the policy (at an unchanged price)'} starts to pay. "Per extra $1" is how much more guarantee each added premium dollar buys compared with the level before it.</p>`}
+function insEstOut(sel){
+  const e=S.insEst,p=n0(sel.projPrice),h=p*(1+e.h/100),y=n0(sel.aph)*e.y/100,r=insCalc(sel,{harvest:h,yield:y,cntyPct:(e.c??e.y)/100});if(!r)return'';
+  const cpa=costOf(sel),withIns=(r.crop+r.net)/r.ac,tone=cpa?withIns>=cpa?'p-gain':'p-loss':'';
+  return`<div class="clab" style="text-align:center">Insurance would pay</div><div class="bebig">${usd(r.pay,0)}</div>
+    <div class="muted" style="text-align:center">${usd(r.pay/r.ac)} per acre${r.prem?` · ${usd(r.net,0)} after ${usd(r.prem,0)} premium`:' · add premiums to see the net'}</div>
+    <div class="bestats"><div><span>Your policy</span><b>${usd(r.base,0)}</b></div>${sel.sco?`<div><span>SCO</span><b>${usd(r.sco,0)}</b></div>`:''}${n0(sel.eco)?`<div><span>ECO</span><b>${usd(r.eco,0)}</b></div>`:''}
+      <div><span>Crop value at that price</span><b>${usd(r.crop/r.ac)}/ac</b></div></div>
+    <div class="mkt"><div><span>Revenue without insurance</span><b>${usd(r.crop/r.ac)}/ac</b></div><div class="${tone}"><span>With insurance, after premium</span><b>${usd(withIns)}/ac</b></div><div><span>Cost of production</span><b>${cpa?usd(cpa)+'/ac':'—'}</b></div></div>`}
+function insGrid(sel){
+  const p=n0(sel.projPrice),aph=n0(sel.aph),ys=[50,60,70,80,90,100,110],hs=[-30,-20,-10,0,10,20,30];if(!insCalc(sel))return'';
+  const v=ys.map(y=>hs.map(d=>{const r=insCalc(sel,{harvest:p*(1+d/100),yield:aph*y/100});return r.net/r.ac})),mx=Math.max(1,...v.flat().map(Math.abs));
+  return`<div class="tablewrap"><table class="heat"><thead><tr><th>Yield ↓ / Harvest price →</th>${hs.map(d=>`<th class="n">${usd(p*(1+d/100))}<div class="muted" style="font-weight:400">${d?(d>0?'+':'')+d+'%':'projected'}</div></th>`).join('')}</tr></thead><tbody>
+    ${ys.map((y,i)=>`<tr><td><b>${y}%</b> <span class="muted">${(aph*y/100).toFixed(0)} bu/ac</span></td>${v[i].map(x=>`<td class="n" style="background:color-mix(in srgb,${x<0?'var(--bad)':'var(--good)'} ${Math.round(Math.abs(x)/mx*28)}%,var(--surface))">${usd(x,0)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+  <p class="muted" style="font-size:.76rem;margin:8px 0 0">Payout minus premium, per acre. Includes SCO / ECO if on, assuming the county's yield moves with yours.</p>`}
+function insAddOut(sel){
+  const r0=insCalc(sel);if(!r0)return'';const on=sel.sco||n0(sel.eco);
+  if(!on)return`<p class="muted" style="font-size:.85rem;margin:8px 0 0">Turn on SCO or ECO to see what they would pay at different county results.</p>`;
+  const rows=[100,95,90,85,80,75,70,65].map(x=>{const r=insCalc(sel,{harvest:r0.p,yield:r0.aph,cntyPct:x/100}),add=(r.sco+r.eco)/r.ac,pr=((sel.sco?n0(sel.scoPrem):0)+(n0(sel.eco)?n0(sel.ecoPrem):0));
+    return`<tr><td><b>${x}%</b></td>${sel.sco?`<td class="n">${usd(r.sco/r.ac)}</td>`:''}${n0(sel.eco)?`<td class="n">${usd(r.eco/r.ac)}</td>`:''}<td class="n"><b>${usd(add-pr)}</b></td></tr>`}).join('');
+  return`<div class="mkt" style="margin-top:20px">${sel.sco?`<div><span>SCO most it can pay</span><b>${usd(r0.scoLiab/r0.ac)}/ac</b></div>`:''}${n0(sel.eco)?`<div><span>ECO most it can pay</span><b>${usd(r0.ecoLiab/r0.ac)}/ac</b></div>`:''}</div>
+  <div class="tablewrap" style="margin-top:14px"><table class="ilv"><thead><tr><th>County ${sel.insType==='YP'?'yield':'revenue'} vs expected</th>${sel.sco?'<th class="n">SCO /ac</th>':''}${n0(sel.eco)?'<th class="n">ECO /ac</th>':''}<th class="n">After premium /ac</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="muted" style="font-size:.76rem;margin:8px 0 0">Under the 2025 farm law, acres enrolled in ARC can also carry SCO. Check with your agent for your county's availability.</p>`}
+function fsaOut(sel){
+  const F=fsaCalc(sel),el=sel.fsaElect;
+  if(!F.ba)return`<p class="muted" style="font-size:.85rem;margin:16px 0 0">Enter base acres to estimate ARC-CO and PLC payments.</p>`;
+  if(F.mya==null)return`<p class="muted" style="font-size:.85rem;margin:16px 0 0">Enter a season average price (or set futures on Production) to estimate payments.</p>`;
+  const best=F.plc!=null&&F.arc!=null?(F.plc>F.arc?'PLC':F.arc>F.plc?'ARC-CO':''):'';
+  const tile=(name,v,sub)=>`<div class="${v?'p-gain':''}"><span>${name}${el===name?' · your election':''}${best===name?' · higher':''}</span><b>${v==null?'—':usd(v,0)}</b><span>${sub}</span></div>`;
+  return`<div class="mkt" style="margin-top:20px">${tile('PLC',F.plc,F.plc==null?'add your PLC yield':`${usd(F.plcRate)}/bu below reference`)}${tile('ARC-CO',F.arc,F.arc==null?'add benchmark and county yields':`${usd(F.arcRate)} per base acre`)}</div>
+  <p class="muted" style="font-size:.76rem;margin:8px 0 0">Using a ${usd(F.mya)} season price${num(sel.myaPrice)==null?' (estimated from your futures and basis)':''}${F.bm!=null?`, ${usd(F.bm)} benchmark revenue and ${usd(F.act)} county revenue per acre`:''}. Paid on 85% of base acres.</p>`}
 function insSel(){const f=S.farms[S.current];return f&&(f.crops.find(c=>c.id===S.insCrop)||f.crops.filter(c=>+c.year===+S.year)[0])}
-document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('iinp'))return;const sel=insSel();if(!sel)return;
-  const v=num(t.value);if(v==null)delete sel[t.dataset.k];else sel[t.dataset.k]=v;S.insDirty=true;
-  const el=$('#insResult');if(el)el.innerHTML=insResult(S.farms[S.current],sel)});
-document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('iinp')&&S.insDirty){S.insDirty=false;persist(S.current)}});
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip]');if(!t||t.closest('dialog'))return;
+function insRefresh(){const f=S.farms[S.current],sel=insSel();if(!f||!sel)return;
+  const set=(id,fn)=>{const el=document.getElementById(id);if(el)el.innerHTML=fn()};
+  set('insHead',()=>insHead(f,sel));set('insResult',()=>insResult(f,sel));set('insLv',()=>insLevels(sel));set('insEst',()=>insEstOut(sel));set('insGrid',()=>insGrid(sel));set('insAdd',()=>insAddOut(sel));set('fsaOut',()=>fsaOut(sel))}
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList)return;const sel=insSel();if(!sel)return;
+  if(t.classList.contains('iest')){const k=t.dataset.e,p=n0(sel.projPrice);S.insEst[k]=+t.value;
+    const o={y:()=>`${t.value}% of APH · ${(n0(sel.aph)*t.value/100).toFixed(0)} bu/ac`,h:()=>`${usd(p*(1+t.value/100))} (${t.value>0?'+':''}${t.value}%)`,c:()=>`${t.value}% of expected`}[k],el=$('#iest_'+k+'_o');if(el)el.textContent=o();
+    if(k==='y'&&S.insEst.c==null){const c=$('.iest[data-e="c"]');if(c)c.value=t.value}
+    // the estimator's sliders only redraw the result, never the page
+    const a=$('#insEst');if(a)a.innerHTML=insEstOut(sel);return}
+  if(t.classList.contains('itxt')){sel[t.dataset.k]=t.value.trim();S.insDirty=true;return}
+  if(!t.classList.contains('iinp'))return;
+  const v=num(t.value),[k,sub]=t.dataset.k.split('.');
+  if(sub){sel[k]=sel[k]||{};if(v==null)delete sel[k][sub];else sel[k][sub]=v}else if(v==null)delete sel[k];else sel[k]=v;
+  S.insDirty=true;insRefresh()});
+document.addEventListener('change',e=>{const c=e.target.classList;if(c&&(c.contains('iinp')||c.contains('itxt'))&&S.insDirty){S.insDirty=false;persist(S.current)}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip],[data-insview],[data-act="iestlink"]');if(!t||t.closest('dialog'))return;
   if(t.dataset.inscrop){S.insCrop=t.dataset.inscrop;render();return}
-  const sel=insSel();if(!sel)return;const k=t.dataset.ichip,v=k==='coverage'?+t.dataset.v:t.dataset.v;
-  sel[k]=v;if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;persist(S.current)});
+  if(t.dataset.insview){S.insView=t.dataset.insview;render();return}
+  if(t.dataset.act==='iestlink'){S.insEst.c=null;render();return}
+  const sel=insSel();if(!sel)return;const k=t.dataset.ichip,raw=t.dataset.v;
+  const v=k==='coverage'||k==='eco'?(raw===''?null:+raw):k==='sco'?raw==='true':raw;
+  if(v==null||v===false||v==='')delete sel[k];else sel[k]=v;
+  if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;
+  if(k==='coverage'&&n0(sel.eco)&&n0(sel.eco)<=Math.max(scoTop(sel),v))delete sel.eco;
+  persist(S.current)});
 
 /* ---------- intel: advisor posts ---------- */
 // posts live in market/intel (everyone reads, only the consultant writes); each post targets all clients, one state, or one broker's clients
