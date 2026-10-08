@@ -320,6 +320,8 @@ table.heat td.n{font-family:var(--f-data)}
 .cclist dt{color:var(--muted)} .cclist dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 @media (max-width:420px){.ccards{grid-template-columns:minmax(0,1fr)}.cclist{grid-template-columns:minmax(0,1fr)}.ccleg>div{grid-template-columns:10px 58px 38px minmax(0,1fr)}}
 .wrap{overflow-x:clip}
+.zipform{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.zipform .pf{flex:0 1 200px}
 /* sales & contracts: slim rows */
 .skpi{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}
 @media (max-width:560px){.skpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -1646,8 +1648,12 @@ function cashBids(f){
   if(!B||!B.locs)return`<section>${head}<div class="panel"><div class="empty"><b>Cash bids haven't loaded yet</b>Elevator and processor bids update each evening from JSA's basis tracker.</div></div></section>`;
   // location picker: bid towns, the farm's state first
   const towns=[...new Map(B.locs.map(l=>[l[1],l])).values()].sort((a,b)=>(a[2]===f.state?0:1)-(b[2]===f.state?0:1)||a[2].localeCompare(b[2])||a[1].localeCompare(b[1]));
-  const picker=`<label class="label" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${home?'Change location':'Your location'} <select id="bidHome" style="width:auto;max-width:100%">
-      <option value="">${home?esc(home.label):'Choose the nearest town'}</option>${towns.map(l=>`<option value="${esc(l[1])}">${esc(l[1])}</option>`).join('')}</select></label>`;
+  // ZIP code is the main way in; picking a bid town stays as a fallback
+  const picker=`<form class="zipform" id="zipform"><label class="pf"><span>${home?'Change ZIP code':'Your ZIP code'}</span>
+      <input id="zipIn" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="e.g. 50421" value="${esc(home&&home.zip||'')}" autocomplete="postal-code"></label>
+      <button class="primary" type="submit">${home?'Update':'Find bids'}</button></form>
+    <details class="smore" style="margin-top:6px"><summary>No ZIP handy? Pick the nearest town</summary>
+      <select id="bidHome" style="width:auto;max-width:100%;margin-top:8px"><option value="">Choose a town</option>${towns.map(l=>`<option value="${esc(l[1])}">${esc(l[1])}</option>`).join('')}</select></details>`;
   let list='';
   if(home){const here=[home.lat,home.lon];
     const best={};// nearest delivery month per location for this grain
@@ -1663,7 +1669,19 @@ function cashBids(f){
     ${home?`<div class="chips">${[['C','Corn'],['S','Soybeans'],['W','Wheat']].map(([k,l])=>`<button class="chip" data-bidcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}</div>
     <div class="chips">${[25,50,100].map(r=>`<button class="chip sm" data-bidrad="${r}" aria-pressed="${rad===r}">${r} mi</button>`).join('')}</div>
     <div class="panel qboard">${list}</div><p class="muted" style="font-size:.74rem;margin:6px 0 0">Cash price = ${S.market&&S.market.asOf?fmtDate(S.market.asOf)+' ':''}futures + each elevator's posted basis for its nearest delivery month. Bids as of ${fmtDate(B.asOf)}; confirm with the elevator before selling.</p>`
-      :`<div class="panel"><div class="empty"><b>Where's your farm?</b>Choose the nearest town above. Bids are sorted best price first within 25, 50 or 100 miles.</div></div>`}</section>`}
+      :`<div class="panel"><div class="empty"><b>Where's your farm?</b>Enter your ZIP code above. Bids are sorted best price first within 25, 50 or 100 miles.</div></div>`}</section>`}
+// ZIP lookup: Census 2024 ZIP code centers, published with the app as zips/zips-<first digit>.csv and loaded only when needed
+const zipCache={};
+async function zipLookup(zip){const d=zip[0];
+  if(!zipCache[d]){const r=await fetch(`zips/zips-${d}.csv`);if(!r.ok)throw new Error('zip file');
+    const m=new Map();(await r.text()).split('\n').forEach(l=>{const[z,a,o]=l.split(',');if(z)m.set(z,[+a,+o])});zipCache[d]=m}
+  return zipCache[d].get(zip)||null}
+document.addEventListener('submit',async e=>{if(e.target.id!=='zipform')return;e.preventDefault();
+  const zip=($('#zipIn').value||'').trim(),f=S.farms[S.current];if(!f)return;
+  if(!/^\d{5}$/.test(zip)){toast('Enter a 5-digit ZIP code.',true);return}
+  let ll=null;try{ll=await zipLookup(zip)}catch(_){toast("Couldn't load ZIP codes right now. Try again, or pick the nearest town.",true);return}
+  if(!ll){toast(`ZIP ${zip} wasn't found. Check it, or pick the nearest town.`,true);return}
+  f.bidHome={label:`ZIP ${zip}`,zip,lat:ll[0],lon:ll[1]};persist(S.current)});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-qchip],[data-bidcrop],[data-bidrad]');if(!t||t.closest('dialog'))return;
   if(t.dataset.qchip)S.qChip=t.dataset.qchip;if(t.dataset.bidcrop)S.bidCrop=t.dataset.bidcrop;if(t.dataset.bidrad)S.bidRadius=+t.dataset.bidrad;render()});
 document.addEventListener('change',e=>{if(e.target.id!=='bidHome'||!e.target.value)return;const f=S.farms[S.current],l=S.bids&&S.bids.locs.find(x=>x[1]===e.target.value);
