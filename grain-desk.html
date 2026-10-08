@@ -130,6 +130,17 @@ dialog form{padding:20px}
 .explain{max-width:85ch;font-size:.82rem;color:var(--muted);margin-top:12px;display:grid;gap:6px}
 .explain p{margin:0} .explain b{color:var(--ink)}
 tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)}
+/* home screen */
+.hometiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;margin-top:20px}
+.htile{display:grid;gap:6px;align-content:start;text-align:left;padding:22px 20px;border-radius:16px;border:1px solid var(--line);background:var(--surface);cursor:pointer;
+  transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease;min-height:180px}
+.htile:hover{border-color:var(--accent);box-shadow:0 6px 18px rgba(20,60,35,.12);transform:translateY(-2px)}
+.hicon{width:38px;height:38px;color:var(--accent);padding:7px;border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));margin-bottom:6px}
+.htitle{font:750 1.2rem var(--f-display)}
+.hdesc{font-size:.85rem;color:var(--muted);line-height:1.4}
+.hstat{margin-top:auto;padding-top:10px;font-size:.88rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.htile[data-section="weather"] .hicon,.htile[data-section="intel"] .hicon{color:var(--muted);background:var(--soft)}
+@media (prefers-reduced-motion:reduce){.htile{transition:none}.htile:hover{transform:none}}
 /* production calculator */
 .calc{padding:22px 24px;border-radius:14px}
 .clab{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:10px}
@@ -406,7 +417,7 @@ const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
 const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
-  flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null,brokerF:''};
+  section:'home',flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null,brokerF:''};
 try{S.brokerF=localStorage.getItem('gd.brokerFilter')||''}catch(_){}
 
 /* ---------- helpers ---------- */
@@ -924,16 +935,51 @@ function renderClients(){
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
-  // tabs follow the season: plan it, store it, sell it, then tools
-  const tabs=[['overview','Crop Overview'],['production','Production'],['storage','Storage'],['sales','Sales & contracts'],['quotes','Quotes'],['optimizer','Profit optimizer'],['insurance','Crop insurance']];
-  if(!tabs.some(t=>t[0]===S.tab))S.tab='overview';
-  const body={overview:tabOverview,sales:tabSales,storage:tabStorage,production:tabProduction,quotes:tabQuotes,optimizer:tabOptimizer,insurance:tabInsurance}[S.tab](f);
-  return`<div class="farmhead"><div>${S.owner?`<div class="crumb"><button class="link" data-act="back">← All client farms</button></div>`:''}
-    <h1>${esc(f.name)} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
+  // home screen of sections; only the Crop Overview section has its own tabs (they follow the season)
+  const sec=SECTIONS[S.section]?S.section:'home',sd=SECTIONS[sec];
+  let nav='',body;
+  if(sec==='home')body=homeScreen(f);
+  else if(sd.tabs){if(!sd.tabs.some(t=>t[0]===S.tab))S.tab=sd.tabs[0][0];
+    nav=`<div class="tabs" role="tablist">${sd.tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+    body=TAB_FN[S.tab](f)}
+  else body=sd.fn(f);
+  return`<div class="farmhead"><div><div class="crumb">${S.owner?`<button class="link" data-act="back">← All client farms</button>`:''}${sec!=='home'?`${S.owner?' <span class="muted">·</span> ':''}<button class="link" data-act="home">← Home</button>`:''}</div>
+    <h1>${esc(f.name)}${sec!=='home'?` <span class="muted" style="font-weight:600">· ${esc(sd.label)}</span>`:''} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.owner?`<span class="muted" style="font-size:.85rem">Broker: <b style="color:var(--ink)">${esc(f.broker||'Unassigned')}</b></span>`:''}
     <button class="small" data-act="rename">${S.owner?'Edit details':'Farm details'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
-  <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}</button>`).join('')}</div>${body}`}
+  ${nav}${body}`}
+const TAB_FN={overview:f=>tabOverview(f),production:f=>tabProduction(f),storage:f=>tabStorage(f),sales:f=>tabSales(f),optimizer:f=>tabOptimizer(f),insurance:f=>tabInsurance(f),quotes:f=>tabQuotes(f)};
+const SECTIONS={
+  marketing:{label:'Crop Overview',tabs:[['overview','Crop Overview'],['production','Production'],['storage','Storage'],['sales','Sales & contracts'],['optimizer','Profit optimizer']]},
+  insurance:{label:'Crop insurance',fn:f=>tabInsurance(f)},
+  quotes:{label:'Quotes',fn:f=>tabQuotes(f)},
+  weather:{label:'Weather',fn:f=>tabWeather(f)},
+  intel:{label:'Intel',fn:f=>tabIntel(f)}};
+// which section a tab lives in, so links like "Go to Production" land in the right place
+const sectionOfTab=t=>t==='insurance'?'insurance':t==='quotes'?'quotes':'marketing';
+const ICONS={
+  marketing:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  insurance:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  quotes:'<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+  weather:'<circle cx="8" cy="9" r="3"/><path d="M8 2v2M2 9h2M3.8 4.8l1.4 1.4M12.2 4.8l-1.4 1.4"/><path d="M9 20h9a4 4 0 0 0 0-8 5 5 0 0 0-9.6 1.5A3.3 3.3 0 0 0 9 20z"/>',
+  intel:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>'};
+function homeScreen(f){
+  const p=position(f,S.year),exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0);
+  const dl=deadlinesFor(f)[0],ins=p.reduce((a,r)=>a+(r.revGuar||0),0);
+  const corn=f.crops.find(c=>+c.year===+S.year&&key(c.crop)==='corn'),cfi=corn?futFor(corn):{price:(S.market&&S.market.prices&&S.market.prices[defaultSym({crop:'Corn',year:S.year})])??null,symbol:defaultSym({crop:'Corn',year:S.year})};
+  const tiles=[
+    ['marketing','Crop Overview','Production, storage, sales and contracts, and the profit optimizer.',exp?`<b>${pct(sold/exp)}</b> of ${S.year} crop sold`:'Set up your crops to get started'],
+    ['insurance','Crop insurance','Coverage, insured bushels and your revenue guarantee.',ins?`<b>${usd(ins,0)}</b> guaranteed`:'Set up coverage for each crop'],
+    ['quotes','Quotes','Daily corn, soybean and wheat futures. Cash bids coming soon.',cfi&&cfi.price!=null?`Corn ${cfi.symbol?symLabel(cfi.symbol):''} <b>${usd(cfi.price,4)}</b>`:'Futures prices'],
+    ['weather','Weather','Forecast and conditions for your farm.','Coming soon'],
+    ['intel','Intel','Market updates and insights from your advisor.','Coming soon']];
+  return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
+      <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
+      <span class="htitle">${t}</span><span class="hdesc">${d}</span><span class="hstat">${stat}</span></button>`).join('')}</div>
+  ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}`}
+function tabWeather(f){return`<section><div class="panel"><div class="empty"><b>Weather is coming soon</b>${locLabel(f)?`Forecasts for ${esc(locLabel(f))} will show here.`:'Add your county and state under Farm details so forecasts can be local.'}</div></div></section>`}
+function tabIntel(){return`<section><div class="panel"><div class="empty"><b>Intel is coming soon</b>Market updates and insights from your advisor will show here.</div></div></section>`}
 
 // pie of part-to-whole; slices start at 12 o'clock and run clockwise, separated by a 2px surface gap
 function pieSVG(segs,label){
@@ -1813,20 +1859,22 @@ async function attachPhoto(sid,file){
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  const t=e.target.closest('[data-section],[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
   if(t.dataset.cost){e.stopPropagation();openCost(t.dataset.cost);return}
   if(t.dataset.dladd){openForm('deadline');return}
   if(t.dataset.dl){openForm('deadline',t.dataset.dl);return}
   if(t.dataset.sdladd||t.dataset.sdl){openShared(t.dataset.sdl);return}
-  if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.section=sectionOfTab(S.tab);render();return}
+  if(t.dataset.section){S.section=t.dataset.section;if(S.section==="marketing")S.tab="overview";render();window.scrollTo(0,0);return}
   if(t.dataset.sale){showSale(t.dataset.sale);return}
   if(t.dataset.sort){const k=t.dataset.sort;S.sort=S.sort.k===k?{k,dir:-S.sort.dir}:{k,dir:k==='date'||k==='bu'?-1:1};render();return}
   if(t.dataset.by){S.by=t.dataset.by;render();return}
   if(t.dataset.add){openForm(t.dataset.add);return}
   if(t.dataset.edit){e.stopPropagation();openForm(t.dataset.edit,t.dataset.id);return}
-  if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.confirmRemove=false;render();return}
+  if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.section='home';S.confirmRemove=false;render();return}
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
+  if(a==='home'){S.section='home';render();window.scrollTo(0,0)}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
   if(a==='scan'){
@@ -1851,7 +1899,7 @@ document.addEventListener('click',e=>{
     const fallback=()=>{dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>Marketing summary</h2><p class="muted" style="font-size:.85rem">Select the text and copy it into an email or notes.</p><textarea id="sumtxt" rows="12" readonly>${esc(txt)}</textarea><div class="dlgfoot"><div class="sp"></div><button type="button" class="primary" data-act="close-plain">Done</button></div>`;
       $('#dlg').showModal();const ta=$('#sumtxt');ta.focus();ta.select();$('[data-act="close-plain"]').onclick=()=>$('#dlg').close()};
     try{navigator.clipboard.writeText(txt).then(()=>toast('Summary copied: paste it into an email or notes'),fallback)}catch(err){fallback()}}
-  if(a==='addclient')nameDialog('Add a client farm','',(name,broker,loc)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker,...loc});S.current=id;S.tab='overview';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
+  if(a==='addclient')nameDialog('Add a client farm','',(name,broker,loc)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker,...loc});S.current=id;S.tab='overview';S.section='home';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
   if(a==='rename'){const f=S.farms[S.current];
     nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;persist(S.current)},S.owner?(f.broker||''):undefined,{state:f.state,county:f.county})}
   if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
