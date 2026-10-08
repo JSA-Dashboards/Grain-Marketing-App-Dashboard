@@ -1,6 +1,6 @@
 <title>Grain Marketing Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: app bar + farm header + tabbed work area; summary strip first, detail tables below */
 :root{
@@ -11,7 +11,7 @@
   --c-corn:#C99A06; --c-soy:#4F8A2B; --c-wheat:#A8702F;
   --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
   --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --f-data:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --f-data:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --r:6px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -286,7 +286,41 @@ dialog:has(.costtab){width:min(760px,calc(100vw - 32px))}
 table.heat td,table.heat th{white-space:nowrap}
 table.heat td.n{font-family:var(--f-data)}
 /* crop cards (farm info / breakeven / crop values) */
-.ccards{display:grid;gap:18px;margin-top:20px}
+.ccards{display:grid;gap:16px;margin-top:20px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+/* compact crop card */
+.cc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px 12px;border-top:4px solid var(--crop);min-width:0;display:grid;gap:12px;align-content:start}
+.cc header{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.cc h2{font-size:1.25rem;font-weight:780;display:flex;align-items:center}
+.cc h2 .muted{font-weight:500;margin-left:6px}
+.ccfut{text-align:right;display:grid;line-height:1.2}
+.ccfut span{font-size:.72rem;color:var(--muted)}
+.ccfut b{font-size:1.05rem;font-variant-numeric:tabular-nums}
+.ccsub{margin:-6px 0 0;font-size:.84rem;color:var(--muted)}
+.cckpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cckpi>div{background:var(--soft);border-radius:10px;padding:8px 10px;display:grid;gap:2px;min-width:0}
+.cckpi span{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cckpi b{font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cckpi .pos{background:color-mix(in srgb,var(--good) 13%,var(--surface))} .cckpi .pos b{color:var(--good)}
+.cckpi .neg{background:color-mix(in srgb,var(--bad) 11%,var(--surface))} .cckpi .neg b{color:var(--bad)}
+.cc .pos{color:var(--good)} .cc .neg{color:var(--bad)}
+.ccpos{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center}
+.ccpos .pie{width:76px;height:76px}
+.ccleg{display:grid;gap:5px}
+.ccleg>div{display:grid;grid-template-columns:10px 64px 42px minmax(0,1fr);gap:8px;align-items:baseline;font-size:.85rem}
+.ccleg i{width:10px;height:10px;border-radius:2px;align-self:center}
+.ccleg i.sold{background:var(--accent)} .ccleg i.hedged{background:var(--grain)} .ccleg i.unpriced{background:var(--soft);border:1px solid var(--line)}
+.ccleg span{color:var(--muted)} .ccleg b{font-variant-numeric:tabular-nums;text-align:right}
+.ccleg em{font-style:normal;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccwarn{margin:0;font-size:.8rem;color:var(--warn)}
+.ccmore{border-top:1px solid var(--line);padding-top:8px}
+.ccmore summary{cursor:pointer;font-size:.84rem;font-weight:600;color:var(--accent);list-style:none}
+.ccmore summary::before{content:'▸ '}.ccmore[open] summary::before{content:'▾ '}
+.cclist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 18px;margin:10px 0 0;font-size:.84rem}
+.cclist>div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--line);padding:3px 0}
+.cclist dt{color:var(--muted)} .cclist dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+@media (max-width:420px){.ccards{grid-template-columns:minmax(0,1fr)}.cclist{grid-template-columns:minmax(0,1fr)}.ccleg>div{grid-template-columns:10px 58px 38px minmax(0,1fr)}}
+.wrap{overflow-x:clip}
+.tabs{scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .ccard header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:12px 18px 10px;border-bottom:2px solid var(--accent)}
 .ccard header h2{font-size:1.3rem;font-weight:800}
@@ -1044,30 +1078,36 @@ function cropMarket(f,r){
   const profit=cost==null?null:mkt!=null&&!missBu?soldVal+unsoldVal+(hedgeVal||0)-premium-cost:(r.be!=null?r.pricedRev-r.be*r.pricedBu:null);
   return{pl,fi,fut,basis,mkt,prod,sold,unsold,hedged,unpriced,soldVal,estBu,missBu,hedgeVal,itmBu,premium,cost,unsoldVal,unpricedVal,profit,
     ppa:profit!=null&&n0(pl.acres)?profit/n0(pl.acres):null,full:mkt!=null&&!missBu}}
+// compact crop card: headline numbers first, a small sold/hedged/unpriced pie, full numbers on request
+const kfmt=v=>{if(v==null)return'—';const a=Math.abs(v),s=v<0?'−$':'$';return a>=1e6?s+(a/1e6).toFixed(2)+'M':a>=1e4?s+Math.round(a/1e3)+'k':s+Math.round(a).toLocaleString('en-US')};
 function cropCard(f,r){
-  const m=cropMarket(f,r),pl=m.pl,n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
-  const signed=(v,d=2)=>v==null?'—':`<span class="${v<0?'neg':'pos'}">${usd(v,d)}</span>`;
-  const pnl=v=>v==null?'':v<0?'p-loss':'p-gain';// whole profit square turns green or red
-  const cell=(l,v,cls='')=>`<div class="kv ${cls}"><span>${l}</span><b>${v}</b></div>`;
-  const pair=(l1,v1,l2,v2,tone='')=>`<div class="kv2 ${tone}"><div><span>${l1}</span><b>${v1}</b></div><div><span>${l2}</span><b>${v2}</b></div></div>`;
-  const dyn=!r.plan||!n0(costOf(pl))?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Costs covered':`<span class="${r.be!=null&&r.dynBe>r.be?'neg':'pos'}">${usd(r.dynBe,4)}</span>`;
-  const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)];
-  return`<article class="ccard" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
-    <header><div><div class="muted" style="font-size:.8rem">${esc(f.name)}</div><h2><span class="cdot"></span>${esc(r.crop)} ${S.year}</h2></div>
-      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}">${m.fut!=null?'Futures & basis':'Add futures & basis'}</button>`:'<button class="small" data-add="crop">Add crop plan</button>'}</header>
-    <div class="crow"><div class="clabel">Farm info</div><div class="ccells">
-      ${cell('Acres',n1(pl.acres))}${cell('APH',n1(pl.aph))}${cell('Est. yield',n1(r.yld||null))}${cell('Production goal',n1(m.prod))}
-      ${cell('Cost / acre',usd(costOf(pl)))}${cell('Total farm cost',usd(m.cost))}${cell('Net profit / acre',signed(m.ppa),pnl(m.ppa))}${cell('Total profit',signed(m.profit,0),pnl(m.profit))}</div></div>
-    <div class="crow"><div class="clabel">Breakeven</div><div class="ccells">
-      ${cell('Est. basis',m.basis==null?'—':`<span class="${m.basis<0?'neg':''}">${m.basis<0?'−':''}${Math.abs(m.basis).toFixed(2)}</span>`)}${cell('Initial B/E',usd(r.be,4))}${cell('Dynamic B/E',dyn)}</div></div>
-    <div class="crow"><div class="clabel">Crop values</div><div class="ccells">
-      ${pair('Total bushels',n1(m.prod),`Futures price${m.fi.symbol?` <em>(${symLabel(m.fi.symbol)})</em>`:m.fi.source==='manual'?' <em>(entered)</em>':''}`,m.fut==null?'—':usd(m.fut,4))}
-      ${pair('Unsold bushels',n1(m.unsold),'Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
-      ${pair('Sold bushels',`<span class="pos">${n1(m.sold)}</span>`,'Value of sold',`<span class="pos">${usd(m.soldVal,0)}</span>`,'t-good')}
-      ${pair(`Hedged bushels${m.itmBu?` <em>(${n1(m.itmBu)} bu Premium Plus would double up)</em>`:''}`,`<span class="warn">${n1(m.hedged)}</span>`,'Value of hedges',m.hedgeVal==null?'—':signed(m.hedgeVal,0),'t-warn')}
-      ${pair('Unpriced bushels',`<span class="neg">${n1(m.unpriced)}</span>`,'Value of unpriced',m.unpricedVal==null?'—':`<span class="neg">${usd(m.unpricedVal,0)}</span>`,'t-bad')}</div></div>
-    <footer class="muted">${m.full?`Profit values unsold bushels at ${m.fi.source==='market'?`${symLabel(m.fi.symbol)} futures`:'futures'} ${m.basis!=null?'+ est. basis ':''}(${usd(m.mkt)})${m.fi.asOf?` as of ${fmtDate(m.fi.asOf)}`:''}${m.fi.source==='market'?' (CME, daily from JSA)':''}, includes futures hedge value.`
-      :`Profit counts only priced sold bushels. Add a futures price and est. basis to value unsold bushels.`}${m.estBu?` Value of sold estimates ${n1(m.estBu)} bu whose basis or futures isn't set yet.`:''}</footer></article>`}
+  const m=cropMarket(f,r),pl=m.pl,ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)],n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
+  const tone=v=>v==null?'':v<0?'neg':'pos',sgn=v=>v==null?'—':(v>0?'+':'')+usd(v);
+  const total=Math.max(m.prod,m.sold+m.hedged)||0,share=v=>total?pct(v/total):'—';
+  const dynTxt=!r.plan||!n0(costOf(pl))?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Covered':usd(r.dynBe);
+  const dynDir=r.be!=null&&r.dynBe!=null&&r.restBu>0&&r.dynBe>0?(r.dynBe<r.be-0.005?'<span class="pos">▼</span>':r.dynBe>r.be+0.005?'<span class="neg">▲</span>':''):'';
+  const row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`;
+  return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
+    <header><h2><span class="cdot"></span>${esc(r.crop)} <span class="muted">${S.year}</span></h2>
+      <div class="ccfut">${m.fut!=null?`<span>${m.fi.symbol?symLabel(m.fi.symbol)+' futures':'Futures'}</span><b>${usd(m.fut,4)}</b>`:`<button class="link" data-edit="mkt" data-id="${pl.id}">Add futures</button>`}</div></header>
+    <p class="ccsub">${r.plan?`${n1(pl.acres)} ac · ${bu(m.prod)} bu goal · break-even ${usd(r.be)}${m.basis!=null?` · basis ${fmtBasis(m.basis)}`:''}`:'No crop plan yet. <button class="link" data-add="crop">Add one</button>'}</p>
+    <div class="cckpi">
+      <div class="${tone(m.ppa)}"><span>Profit / acre</span><b>${sgn(m.ppa)}</b></div>
+      <div class="${tone(m.profit)}"><span>Total profit</span><b>${m.profit==null?'—':(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
+      <div><span>Dynamic B/E</span><b>${dynTxt} ${dynDir}</b></div></div>
+    <div class="ccpos">${pieSVG([{v:m.sold,cls:'sold',label:'Sold'},{v:m.hedged,cls:'hedged',label:'Hedged'},{v:Math.max(0,total-m.sold-m.hedged),cls:'unpriced',label:'Unpriced'}],`${r.crop}: ${share(m.sold)} sold, ${share(m.hedged)} hedged`)}
+      <div class="ccleg">
+        <div><i class="sold"></i><span>Sold</span><b>${share(m.sold)}</b><em>${bu(m.sold)} bu · ${kfmt(m.soldVal)}</em></div>
+        <div><i class="hedged"></i><span>Hedged</span><b>${share(m.hedged)}</b><em>${bu(m.hedged)} bu${m.hedgeVal?` · ${kfmt(m.hedgeVal)}`:''}</em></div>
+        <div><i class="unpriced"></i><span>Unpriced</span><b>${share(m.unpriced)}</b><em>${bu(m.unpriced)} bu${m.unpricedVal!=null?` · ${kfmt(m.unpricedVal)}`:''}</em></div></div></div>
+    ${m.itmBu?`<p class="ccwarn">${bu(m.itmBu)} bu of Premium Plus would double up at today's futures.</p>`:''}
+    <details class="ccmore"><summary>Show all numbers</summary>
+      <dl class="cclist">${row('Acres',n1(pl.acres))}${row('APH',n1(pl.aph))}${row('Est. yield',n1(r.yld||null))}${row('Production goal',bu(m.prod))}
+        ${row('Cost / acre',usd(costOf(pl)))}${row('Total farm cost',usd(m.cost,0))}${row('Est. basis',m.basis==null?'—':fmtBasis(m.basis))}${row('Initial B/E',usd(r.be))}
+        ${row('Futures price',m.fut==null?'—':usd(m.fut,4))}${row('Value of sold',usd(m.soldVal,0))}${row('Unsold bushels',bu(m.unsold))}${row('Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
+        ${row('Hedged bushels',bu(m.hedged))}${row('Value of hedges',m.hedgeVal==null?'—':usd(m.hedgeVal,0))}${row('Unpriced bushels',bu(m.unpriced))}${row('Value of unpriced',m.unpricedVal==null?'—':usd(m.unpricedVal,0))}</dl>
+      <p class="muted" style="font-size:.74rem;margin:8px 0 0">${m.full?`Unsold bushels valued at ${m.fi.source==='market'?symLabel(m.fi.symbol)+' futures':'futures'}${m.basis!=null?' + est. basis':''} (${usd(m.mkt)})${m.fi.asOf?` as of ${fmtDate(m.fi.asOf)}`:''}.`:'Profit counts only priced sold bushels until a futures price and basis are set.'}${m.estBu?` Value of sold estimates ${bu(m.estBu)} bu still missing basis or futures.`:''}</p>
+      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}" style="margin-top:8px">Futures & basis</button>`:''}</details></article>`}
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
 function farmSummary(p){
   if(!p.length)return'';
@@ -1119,8 +1159,7 @@ function tabOverview(f){
         ${SHOW_INSURANCE?`<dt>Insured bu</dt><dd>${r.insured?bu(r.insured)+(r.sold>r.insured?' ⚠':''):'—'}</dd>`:''}</dl></div>`}).join('')}</div>`
     :`<div class="empty"><b>No ${S.year} crops yet</b>Add a crop plan with acres and APH yield to see your marketing position.<div style="margin-top:12px"><button class="primary" data-add="crop">Add crop plan</button></div></div>`;
   const ups=deliveries(f).filter(d=>!d.st.done).slice(0,5);
-  return strip+`<section><div class="sechead"><h2>Marketing position</h2><div class="sp"></div><button class="small" data-add="sale">Add sale</button></div>
-    <div class="panel">${p.length?`<div class="legend"><span><i style="background:var(--accent)"></i>Sold / contracted</span><span><i style="background:var(--grain)"></i>Hedged (futures)</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Unpriced</span></div>`:''}<div class="pos">${bars}</div></div></section>
+  return strip+`
   <div class="cols"><section><div class="sechead"><h2>Needs attention</h2></div><div class="panel">${al.length?`<ul class="alerts">${al.map(a=>`<li><span class="dot ${a.c}"></span><span>${esc(a.t)}</span></li>`).join('')}</ul>`:`<div class="empty"><b>Nothing flagged</b>Sales, deliveries and storage line up for ${S.year}.</div>`}</div></section>
   ${deadlinePanel(f)}</div>`}
 // program deadlines live in market/deadlines: the consultant edits them once and every client sees them
