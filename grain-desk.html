@@ -161,6 +161,14 @@ tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)
 .bc2head b{font-family:var(--f-display);font-size:1.05rem}
 .pgrid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .pgrid3 .pf input{font-size:1rem;padding:8px 10px}
+/* contract scanning */
+.fgrid label.flag input,.fgrid label.flag select{border:2px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--surface))}
+.scanbox,.scannote{display:flex;gap:14px;align-items:center;margin-top:12px}
+.scanbox img,.scannote img{width:96px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none}
+.scannote{padding:10px;border-radius:10px;background:var(--soft)}
+.scannote img{width:64px;height:80px}
+.cphoto{display:flex;gap:12px;align-items:center;margin-top:14px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.cphoto img{width:72px;height:90px;object-fit:cover;border-radius:6px;display:block}
 /* deadlines to watch */
 .dllist{list-style:none;margin:0;padding:6px 0}
 .dllist li{display:flex;gap:14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
@@ -716,7 +724,7 @@ function openForm(kind,id,opts={}){
   const f=S.farms[S.current];const spec=FORMS[kind];
   const base=opts.base||(id&&LISTS[kind]?f[LISTS[kind]].find(r=>r.id===id):null);
   detail=opts.back?detail:null;
-  dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,
+  dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,note:opts.note||'',flags:opts.flags||[],
     onSave:opts.onSave||(kind==='sale'?saleSave(id):listSave(kind,id)),
     onDelete:opts.onDelete||(id&&LISTS[kind]&&kind!=='ins'&&kind!=='mkt'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null)};
   drawForm();if(!$('#dlg').open)$('#dlg').showModal()}
@@ -725,10 +733,10 @@ function drawForm(){
   const val=(x)=>typeof x==='function'?x(vals):x;
   const buyers=[...new Set((S.farms[S.current]?.sales||[]).map(s=>s.buyer).filter(Boolean))];
   const months=['Mar','May','Jul','Sep','Dec','Jan','Nov','Aug'].flatMap(m=>[m+' '+String(S.year).slice(2),m+' '+String(S.year+1).slice(2)]);
-  $('#dlgform').innerHTML=`<h2>${esc(dlgCtx.title||(id?'Edit ':'Add ')+spec.title.toLowerCase())}</h2>
+  $('#dlgform').innerHTML=`<h2>${esc(dlgCtx.title||(id?'Edit ':'Add ')+spec.title.toLowerCase())}</h2>${dlgCtx.note||''}
   <div class="fgrid">${spec.fields.filter(f=>!f.show||f.show(vals)).map(f=>f.type==='check'
     ?`<label class="full check"><span><input id="f_${f.k}" name="${f.k}" type="checkbox" ${vals[f.k]?'checked':''}> ${esc(val(f.label))}</span>${f.hint?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`
-    :`<label class="${f.full?'full':''}">${esc(val(f.label))}${f.req?' *':''}
+    :`<label class="${f.full?'full':''}${(dlgCtx.flags||[]).includes(f.k)?' flag':''}">${esc(val(f.label))}${f.req?' *':''}
     ${f.type==='select'?`<select id="f_${f.k}" name="${f.k}">${val(f.options).map(o=>{const[v,l]=Array.isArray(o)?o:[o,o];return`<option value="${esc(v)}" ${v===vals[f.k]?'selected':''}>${esc(l)}</option>`}).join('')}</select>`
     :`<input id="f_${f.k}" name="${f.k}" type="${f.type}" ${f.step?`step="${f.step}"`:''} ${f.list?`list="${f.list}"`:''} ${f.req?'required':''} value="${esc(vals[f.k]??'')}">`}
     ${val(f.hint)?`<span class="hint">${esc(val(f.hint))}</span>`:''}</label>`).join('')}</div>
@@ -754,7 +762,11 @@ $('#dlgform').addEventListener('click',e=>{
   if(act==='close')$('#dlg').close();
   if(act==='sale-edit')openForm('sale',s.id,{back});
   if(act==='sale-del'){if(!detail.confirmDel){detail.confirmDel=true;drawSale();return}
+    if(s.photoId&&S.assets)S.assets.delete(s.photoId).catch(()=>{});// the contract photo goes with the contract
     f.sales=f.sales.filter(x=>x.id!==s.id);$('#dlg').close();persist(S.current)}
+  if(act==='photo-add')pickPhoto(file=>attachPhoto(s.id,file));
+  if(act==='photo-rm'){if(!detail.confirmPhoto){detail.confirmPhoto=true;drawSale();return}
+    const id=s.photoId;delete s.photoId;detail.confirmPhoto=false;persist(S.current);drawSale();if(S.assets&&id)S.assets.delete(id).catch(()=>{})}
   if(act==='sale-price'){const leg=a.dataset.leg;
     openForm('price',null,{title:`Set ${leg} · ${s.crop} ${typeName(s).toLowerCase()}`,vals:{leg,date:TODAY,month:s.futuresMonth||''},back,
       onSave:live((s,rec)=>{if(leg==='basis')s.basis=rec.value;else s.price=rec.value;if(rec.month)s.futuresMonth=rec.month;
@@ -806,6 +818,9 @@ function drawSale(){
     ${s.location?fact('Location',esc(s.location)):''}
   </dl>
   ${s.notes?`<p class="muted" style="font-size:.85rem;margin:10px 0 0">${esc(s.notes)}</p>`:''}
+  ${s.photoId?`<div class="cphoto"><a href="/_blob/${esc(s.photoId)}" target="_blank" rel="noopener"><img src="/_blob/${esc(s.photoId)}" alt="Photo of the ${esc(s.crop)} contract"></a>
+      <div><b>Contract photo</b><div class="muted" style="font-size:.78rem">Tap to open full size</div>${S.assets?`<button type="button" class="link danger" data-act="photo-rm" style="font-size:.8rem;margin-top:6px">${detail.confirmPhoto?'Confirm remove':'Remove photo'}</button>`:''}</div></div>`
+    :S.assets?`<div style="margin-top:12px"><button type="button" class="small" data-act="photo-add">Attach contract photo</button></div>`:''}
   ${isOther(s)?`<h3 class="dsub">Specialty contract${s.otherDate?` <span class="pill ${daysUntil(s.otherDate)<0?'neutral':daysUntil(s.otherDate)<=14?'warn':'neutral'}" style="margin-left:6px;vertical-align:1px">${daysUntil(s.otherDate)<0?'Key date passed':`Key date in ${daysUntil(s.otherDate)}d`}</span>`:''}</h3>
     <dl class="facts">${fact('Contract name',esc(s.specialtyName||'—'))}${fact('Key date',fmtDate(s.otherDate))}${fact('Flat price (entered)',usd(num(s.otherFlat)))}</dl>
     ${s.terms?`<p style="font-size:.88rem;margin:10px 0 0;white-space:pre-wrap">${esc(s.terms)}</p>`:'<p class="muted" style="font-size:.85rem;margin:10px 0 0">No terms written down yet. Use Edit to add them.</p>'}
@@ -1111,7 +1126,7 @@ function tabSales(f){
   const by=summarize(list,S.by);
   const sh=(k,l,n)=>`<th class="${n?'n':''}"><button class="sortbtn" data-sort="${k}" aria-label="Sort by ${l}">${l}${S.sort.k===k?(S.sort.dir<0?' ↓':' ↑'):''}</button></th>`;
   return`<section><div class="sechead"><h2>${S.year} sales, contracts & hedges</h2><div class="sp"></div>
-    <button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
+    ${S.sample&&S.sampleImg?'<button class="small primary" data-act="scan">Scan a contract</button>':''}<button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
     <button class="primary" data-add="sale">Add sale or contract</button></div>
   ${all.length?`<div class="filters">
     <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
@@ -1706,6 +1721,96 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   const sel=insSel();if(!sel)return;const k=t.dataset.ichip,v=k==='coverage'?+t.dataset.v:t.dataset.v;
   sel[k]=v;if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;persist(S.current)});
 
+/* ---------- contract scanning ---------- */
+// open the phone camera / file picker; must be called from a click
+function pickPhoto(cb){const inp=document.createElement('input');inp.type='file';
+  inp.accept=((S.sampleImg&&S.sampleImg.mediaTypes)||['image/jpeg','image/png','image/webp']).join(',');
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)cb(f)};inp.click()}
+// phone photos are large; shrink to ~2000px JPEG before sending or storing (also fixes rotation)
+async function shrinkImage(file,max=2000){
+  try{const bmp=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,max/Math.max(bmp.width,bmp.height));
+    const cv=document.createElement('canvas');cv.width=Math.round(bmp.width*k);cv.height=Math.round(bmp.height*k);
+    cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);return await new Promise(r=>cv.toBlob(b=>r(b||file),'image/jpeg',0.85))}
+  catch(_){return file}}
+const uploadPhoto=blob=>S.assets?S.assets.upload(blob,{type:blob.type&&/^image\/(jpeg|png|webp|gif)$/.test(blob.type)?blob.type:'image/jpeg'}).then(r=>r.id).catch(()=>null):Promise.resolve(null);
+const SCAN_TYPES={forward:'Forward contract',spot:'Cash sale',hta:'HTA',basis:'Basis contract',accumulator:'Accumulator',premium_plus:'Put option',min_max:'Min/Max',futures_hedge:'Futures hedge',other:'Other'};
+function scanPrompt(){return`You are reading a photo of a US grain marketing contract (an elevator or processor purchase contract, or a broker confirmation). Extract its details for a farm record-keeping app.
+Reply with ONLY one JSON object with exactly these keys (use null for anything not shown on the document; never guess):
+{"isContract": true or false,
+ "summary": "one short sentence describing the contract",
+ "type": "forward" | "spot" | "hta" | "basis" | "accumulator" | "premium_plus" | "min_max" | "futures_hedge" | "other",
+ "specialtyName": string or null (contract program name, only when type is "other"),
+ "crop": "Corn" | "Soybeans" | "Wheat" | null,
+ "cropYear": number or null,
+ "date": "YYYY-MM-DD" or null (date the contract was made),
+ "bushels": number or null,
+ "flatPrice": number or null (fixed cash price, $/bu),
+ "futuresPrice": number or null (futures level, $/bu),
+ "basis": number or null ($/bu, negative when under futures),
+ "futuresMonth": string or null (like "Dec 26"),
+ "buyer": string or null, "contractNo": string or null, "location": string or null,
+ "deliveryStart": "YYYY-MM-DD" or null, "deliveryEnd": "YYYY-MM-DD" or null,
+ "premium": number or null, "strike": number or null, "expiration": "YYYY-MM-DD" or null,
+ "minPrice": number or null, "maxPrice": number or null, "fee": number or null,
+ "knockOut": number or null, "accumulationRate": number or null, "ratePeriod": "Daily" | "Weekly" | null,
+ "uncertain": [names of keys above whose values you could not read clearly or are unsure of]}
+Type guide: forward = fixed flat price for later delivery; spot = cash sale priced and delivered now; hta = hedge-to-arrive, futures fixed and basis open; basis = basis fixed and futures open; accumulator = bushels accumulate daily/weekly at a level with a knock-out; premium_plus = contract with a premium and a sold call that can double the bushels; min_max = floor and ceiling futures prices; futures_hedge = a broker futures position, not a cash contract; other = any other program.
+All prices in dollars per bushel: convert cents (452 or 452'4 cents means 4.52 or 4.525). Bushels as a plain number. Today is ${TODAY}; use it only to complete two-digit years.
+If the image is not a grain contract, set "isContract" to false and the rest to null.`}
+// turn Claude's reading into contract form values, plus which fields to flag for review
+function scanToVals(d){
+  const type=SCAN_TYPES[d.type]||'Forward contract',n=v=>num(v),v={type,crop:SALE_CROPS.find(c=>key(c)===key(d.crop))||d.crop||'Corn',
+    year:n(d.cropYear)??S.year,date:/^\d{4}-\d\d-\d\d$/.test(d.date||'')?d.date:TODAY,bu:n(d.bushels),basis:n(d.basis),futuresMonth:d.futuresMonth||'',
+    buyer:d.buyer||'',contractNo:d.contractNo||'',location:d.location||'',deliveryStart:d.deliveryStart||'',deliveryEnd:d.deliveryEnd||'',status:'Open',trackLoads:false,source:'Bin',ratePeriod:'Daily',accStart:TODAY};
+  const flat=['Forward contract','Cash sale'].includes(type);v.price=flat?n(d.flatPrice)??n(d.futuresPrice):n(d.futuresPrice);
+  if(type==='Accumulator')Object.assign(v,{knockOut:n(d.knockOut),rate:n(d.accumulationRate),ratePeriod:d.ratePeriod==='Weekly'?'Weekly':'Daily',expiration:d.expiration||''});
+  if(type==='Put option')Object.assign(v,{premium:n(d.premium),strike:n(d.strike),ppExpiration:d.expiration||''});
+  if(type==='Min/Max')Object.assign(v,{minPrice:n(d.minPrice),maxPrice:n(d.maxPrice),mmFee:n(d.fee),mmExpiration:d.expiration||'',price:null});
+  if(type==='Other')Object.assign(v,{specialtyName:d.specialtyName||'',otherFlat:n(d.flatPrice),otherDate:d.expiration||''});
+  const k2={bushels:'bu',flatPrice:'price',futuresPrice:'price',cropYear:'year',accumulationRate:'rate',fee:'mmFee',
+    expiration:type==='Accumulator'?'expiration':type==='Put option'?'ppExpiration':type==='Min/Max'?'mmExpiration':'otherDate'};
+  const flags=[...new Set([...(Array.isArray(d.uncertain)?d.uncertain:[]).map(x=>k2[x]||x),'source',...(v.bu==null?['bu']:[])])];
+  return{v,flags}}
+const SCAN_ERR={not_granted:"The app isn't allowed to use Claude in this view, so scanning is off. You can still type the contract in.",
+  sampling_disabled:"Claude isn't available on this account, so scanning is off.",images_unavailable:"This view can't send photos to Claude. Try the Claude app or claude.ai in a browser.",
+  image_rejected:"That photo couldn't be read. Try a clear JPEG or PNG photo of the contract.",rate_limited:"Too many scans right now, or your Claude usage limit was reached. Try again in a bit.",
+  session_expired:'Please sign in to claude.ai again, then retry.',invalid_json:"Claude couldn't turn that photo into contract details. Try a sharper, straight-on photo.",
+  refused:"Claude couldn't read that image. Try another photo."};
+let scanCtl=null;
+async function scanContract(file){
+  dlgCtx=null;detail=null;CE=null;const preview=URL.createObjectURL(file);
+  $('#dlgform').innerHTML=`<h2>Reading your contract</h2><div class="scanbox"><img src="${preview}" alt="Contract photo"><div><p><b>Claude is reading the photo…</b></p><p class="muted" style="font-size:.85rem">This usually takes 15–60 seconds. The first time, you'll be asked to allow the app to use Claude.</p></div></div>
+    <div class="dlgfoot"><div class="sp"></div><button type="button" id="scan_cancel">Cancel</button></div>`;
+  if(!$('#dlg').open)$('#dlg').showModal();
+  scanCtl=new AbortController();const ctl=scanCtl;
+  $('#scan_cancel').onclick=()=>{ctl.abort();$('#dlg').close()};
+  const blob=await shrinkImage(file);
+  const photoP=uploadPhoto(blob).then(id=>{if(ctl.signal.aborted&&id&&S.assets){S.assets.delete(id).catch(()=>{});return null}return id});
+  try{
+    const d=await S.sample.json(scanPrompt(),{images:[blob],signal:ctl.signal});
+    const photoId=await photoP;if(ctl.signal.aborted)return;
+    if(!d||d.isContract===false){if(photoId&&S.assets)S.assets.delete(photoId).catch(()=>{});
+      $('#dlgform').innerHTML=`<h2>That doesn't look like a contract</h2><p class="muted">Claude couldn't find grain contract details in that photo. Try a clear, straight-on photo of the whole contract.</p><div class="dlgfoot"><div class="sp"></div><button type="button" id="scan_close">Close</button></div>`;
+      $('#scan_close').onclick=()=>$('#dlg').close();return}
+    const{v,flags}=scanToVals(d);S.pendingPhoto=photoId;
+    openForm('sale',null,{vals:v,base:{id:uid(),...(photoId?{photoId}:{})},flags,title:'Check the scanned contract',
+      note:`<div class="scannote"><img src="${preview}" alt="Scanned contract"><div><b>${esc(d.summary||'Contract details filled in from your photo.')}</b>
+        <div class="muted" style="font-size:.8rem;margin-top:4px">Check every value before saving. Boxes outlined in gold were hard to read or aren't on the contract (like bin vs. harvest).${photoId?' The photo will be saved with this contract.':''}</div></div></div>`,
+      onSave:rec=>{S.pendingPhoto=null;saleSave(null)(rec)}})}
+  catch(e){const id=await photoP;if(id&&S.assets)S.assets.delete(id).catch(()=>{});
+    if(!e||e.code==='cancelled')return;
+    if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(e.code)){S.sample=null;render()}
+    if(e.code==='images_unavailable'){S.sampleImg=null;render()}
+    $('#dlgform').innerHTML=`<h2>Couldn't scan that contract</h2><p class="muted">${esc(SCAN_ERR[e.code]||"Something went wrong reaching Claude. Try again in a minute, or type the contract in.")}</p>
+      <div class="dlgfoot"><div class="sp"></div><button type="button" id="scan_close">Close</button></div>`;
+    if(!$('#dlg').open)$('#dlg').showModal();$('#scan_close').onclick=()=>$('#dlg').close()}}
+// add or replace the photo on an existing contract
+async function attachPhoto(sid,file){
+  toast('Uploading photo…');const id=await uploadPhoto(await shrinkImage(file));
+  if(!id){toast("Couldn't save that photo. Try a JPEG or PNG.",true);return}
+  const s=S.farms[S.current].sales.find(x=>x.id===sid);if(!s){S.assets.delete(id).catch(()=>{});return}
+  s.photoId=id;persist(S.current);if(detail&&detail.sid===sid)drawSale()}
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
@@ -1724,6 +1829,7 @@ document.addEventListener('click',e=>{
   if(a==='back'){S.current=null;render()}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
+  if(a==='scan')pickPhoto(scanContract);
   if(a==='optsave'&&S.opt){const f=S.farms[S.current],o=S.opt,name=(o.name||'').trim()||`Scenario ${(f.scenarios||[]).length+1}`;
     const rec={id:o.savedId||uid(),name,year:o.year,planId:o.planId,yieldPct:o.yieldPct,fut:o.fut,basis:o.basis,legs:clone(o.legs),savedAt:new Date().toISOString()};
     f.scenarios=[...(f.scenarios||[]).filter(x=>x.id!==rec.id),rec];o.savedId=rec.id;o.name=name;persist(S.current)}
@@ -1776,7 +1882,11 @@ function nameDialog(title,val,done,broker,loc={}){
     if(b){const match=brokerList().find(x=>key(x)===key(b));if(match)b=match}
     const county=$('#nd_county').value.trim().replace(/\s+county$/i,'');
     dlg.close();done(v,b,{state:$('#nd_state').value,county})}}
-$('#dlg').addEventListener('close',()=>{dlgCtx=null;detail=null;CE=null;render()});
+$('#dlg').addEventListener('close',()=>{
+  // a scanned contract closed without saving: drop its photo instead of leaving it stored
+  if(S.pendingPhoto){if(S.assets)S.assets.delete(S.pendingPhoto).catch(()=>{});S.pendingPhoto=null}
+  if(scanCtl&&!scanCtl.signal.aborted)scanCtl.abort();
+  dlgCtx=null;detail=null;CE=null;render()});
 
 /* ---------- boot ---------- */
 const PREVIEW={name:'Prairie Ridge Farms',sample:true,
@@ -1809,6 +1919,9 @@ async function boot(){
   if(!c||!c.use)return preview('Preview mode: showing sample data. Changes are not saved here.');
   const [db,user]=await Promise.all([c.use('db'),c.use('user')]);
   c.use('downloads').then(d=>{S.downloads=d;if(d&&!$('#dlg').open)render()});
+  // contract scanning: Claude reads a photo (only where this view can send images); photos are kept as assets for writers
+  c.use('sample').then(async sm=>{if(!sm)return;const lim=await sm.limits().catch(()=>null);S.sample=sm;S.sampleImg=lim&&lim.images?lim.images:null;if(S.sampleImg&&!$('#dlg').open)render()});
+  c.use('assets').then(a=>{S.assets=a});
   if(!db||!user)return preview('Saving is not available in this view, so this shows sample data. Open the shared link while signed in to claude.ai to keep records.');
   S.db=db;S.user=user;S.uid=await user.id();S.owner=await user.isOwner();
   if(!S.uid&&!S.owner){S.mode='noid';render();return}
