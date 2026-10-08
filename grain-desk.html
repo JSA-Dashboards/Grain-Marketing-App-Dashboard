@@ -320,6 +320,46 @@ table.heat td.n{font-family:var(--f-data)}
 .cclist dt{color:var(--muted)} .cclist dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 @media (max-width:420px){.ccards{grid-template-columns:minmax(0,1fr)}.cclist{grid-template-columns:minmax(0,1fr)}.ccleg>div{grid-template-columns:10px 58px 38px minmax(0,1fr)}}
 .wrap{overflow-x:clip}
+/* sales & contracts: slim rows */
+.skpi{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}
+@media (max-width:560px){.skpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.snote{margin:0 0 12px;font-size:.84rem;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sfilters{display:grid;gap:8px;margin-bottom:12px}
+.sfilters .chips{margin:0}
+.sfilters input[type=search]{max-width:420px}
+.smore summary{cursor:pointer;font-size:.84rem;font-weight:600;color:var(--accent)}
+.smoregrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:10px}
+.smoregrid label{display:flex;flex-direction:column;gap:4px;font-size:.74rem;color:var(--muted);font-weight:600}
+.slist{border-radius:14px}
+.slist ul{list-style:none;margin:0;padding:0}
+.srow{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.srow:last-child{border-bottom:0}
+.srow:hover{background:var(--soft)}
+.sdot{width:10px;height:10px;border-radius:50%;margin-top:6px}
+.smain{min-width:0;display:grid;gap:3px}
+.stitle{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stitle b{font-weight:650}
+.ssub{font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.spills{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sright{text-align:right;display:grid;gap:2px;white-space:nowrap}
+.sright b{font-weight:650;font-variant-numeric:tabular-nums}
+.sright span{font-size:.84rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.ssum table td,.ssum table th{padding:9px 12px}
+details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
+/* optimizer, calculator style */
+.ocalc{padding:18px 18px}
+.ocalc .chips{margin-bottom:16px}
+.pgrid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ocalc .leg{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px;display:grid;gap:6px}
+.ocalc .legf{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.ocalc .legf .pf input{font-size:1rem;padding:7px 10px}
+.osave{display:flex;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.osave input{flex:1 1 auto;min-width:0}
+.okpi{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:720px){.okpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.okpi b small{font-size:.72rem;font-weight:500;color:var(--muted);margin-left:2px}
+.okpi em{font-style:normal;font-size:.74rem;color:var(--muted)}
+.optchart .tip[hidden]{display:none}
 .tabs{scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .ccard header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:12px 18px 10px;border-bottom:2px solid var(--accent)}
@@ -1235,51 +1275,57 @@ function saleStatus(s){
   const leg=openLeg(s);const d=DELIVERABLE.includes(s.type)&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
   const a=isAcc(s)?accState(s):isPP(s)?ppState(s):isMM(s)&&num(s.price)==null?mmState(s):null;
   return(a?`<span class="pill ${a.c}">${esc(a.t)}</span> `:'')+(leg?`<span class="pill warn">Set ${leg}</span> `:'')+(d?`<span class="pill ${d.c}">${d.t}</span>`:s.type==='Cash sale'?'<span class="pill neutral">Delivered</span>':'')}
+// Sales & contracts: headline numbers, quick chips for crop and status, more filters on request, slim contract rows
+const SORTS={newest:{k:'date',dir:-1,l:'Newest first'},delivery:{k:'delivery',dir:1,l:'Delivery date'},bushels:{k:'bu',dir:-1,l:'Most bushels'},price:{k:'flat',dir:-1,l:'Highest price'},left:{k:'left',dir:-1,l:'Most left to deliver'}};
 function tabSales(f){
   const all=f.sales.filter(s=>+s.year===+S.year),list=filteredSales(f);
   const opts=(arr,cur,lbl)=>`<option value="">${lbl}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`).join('');
   const crops=[...new Map(all.map(s=>[key(s.crop),s.crop]))],buyers=[...new Map(all.filter(s=>s.buyer).map(s=>[key(s.buyer),s.buyer]))];
-  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status||F.month||F.source;
+  const F=S.flt,filtered=F.q||F.crop||F.type||F.buyer||F.status||F.month||F.source,more=F.type||F.buyer||F.month||F.source;
   const months=[...new Set(all.flatMap(delivMonths))].sort(),hasNone=all.some(s=>!delivMonths(s).length);
   const sum=summarize(list,'all'),tot=sum.reduce((a,r)=>({c:a.c+r.contracted,p:a.p+r.priced,v:a.v+r.value,h:a.h+r.hedged,l:a.l+r.left}),{c:0,p:0,v:0,h:0,l:0});
-  const needs=list.filter(s=>openLeg(s)).length;
-  const by=summarize(list,S.by);
-  const sh=(k,l,n)=>`<th class="${n?'n':''}"><button class="sortbtn" data-sort="${k}" aria-label="Sort by ${l}">${l}${S.sort.k===k?(S.sort.dir<0?' ↓':' ↑'):''}</button></th>`;
-  return`<section><div class="sechead"><h2>${S.year} sales, contracts & hedges</h2><div class="sp"></div>
-    ${S.mode==='live'?'<button class="small primary" data-act="scan">Scan a contract</button>':''}<button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
-    <button class="primary" data-add="sale">Add sale or contract</button></div>
-  ${all.length?`<div class="filters">
-    <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
-    <select id="flt_crop" aria-label="Crop">${opts(crops,F.crop,'All crops')}</select>
-    <select id="flt_type" aria-label="Type">${opts(SALE_TYPES.map(t=>[t,tl(t)]),F.type,'All types')}</select>
-    <select id="flt_buyer" aria-label="Buyer">${opts(buyers,F.buyer,'All buyers')}</select>
-    <select id="flt_month" aria-label="Delivery month">${opts([...months.map(m=>[m,monthLabel(m)]),...(hasNone?[['none','No delivery date']]:[])],F.month,'All delivery months')}</select>
-    <select id="flt_source" aria-label="Delivering from">${opts([['bin','From bin'],['harvest','At harvest']],F.source,'Bin & harvest')}</select>
-    <select id="flt_status" aria-label="Status">${Object.entries(STATUS_F).map(([v,l])=>`<option value="${v}" ${v===F.status?'selected':''}>${l}</option>`).join('')}</select>
-    ${filtered?'<button class="link" data-act="clearflt">Clear filters</button>':''}</div>
-  <div class="strip strip5">
-    <div class="stat"><div class="label">Contracted</div><div class="v">${bu(tot.c)}</div><div class="s">bu${filtered?', filtered':''}</div></div>
-    <div class="stat"><div class="label">Priced</div><div class="v">${tot.c?pct(tot.p/tot.c):'—'}</div><div class="s">${bu(tot.p)} bu with a flat price</div></div>
-    <div class="stat"><div class="label">Priced value</div><div class="v">${usd(tot.v,0)}</div><div class="s">flat price × bushels</div></div>
-    <div class="stat"><div class="label">Left to deliver</div><div class="v">${bu(tot.l)}</div><div class="s">bu on open contracts</div></div>
-    <div class="stat"><div class="label">Needs pricing</div><div class="v" style="color:${needs?'var(--warn)':'inherit'}">${needs}</div><div class="s">${needs?'<button class="link" data-act="showunpriced">Show them</button>':'contracts with an open leg'}</div></div></div>`:''}
-  <div class="panel" style="margin-top:16px">${list.length?`<div class="tablewrap desk"><table><thead><tr>${sh('date','Date')}${sh('crop','Crop')}<th>Type</th>${sh('buyer','Buyer')}${sh('bu','Bushels',1)}${sh('flat','Flat price',1)}${sh('delivery','Delivery')}${sh('left','Left',1)}<th>Status</th></tr></thead><tbody>
-    ${list.map(s=>{const fp=flatPrice(s),isDel=DELIVERABLE.includes(s.type);
-      return`<tr class="click" data-sale="${s.id}" tabindex="0"><td style="white-space:nowrap">${fmtDate(s.date)}</td><td>${esc(s.crop)}</td><td>${esc(typeName(s))}${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}${s.contractNo?`<div class="muted mono" style="font-size:.74rem">#${esc(s.contractNo)}</div>`:''}</td><td>${esc(s.buyer||'—')}</td>
-      <td class="n">${bu(qty(s))}${isAcc(s)?`<div class="muted" style="font-size:.74rem">of ${bu(n0(s.bu))} max</div>`:''}</td><td class="n"><b>${usd(fp)}</b><div class="muted" style="font-size:.74rem">${isAcc(s)?`acc ${usd(num(s.price))} · KO ${usd(num(s.knockOut))}`:isPP(s)?`fut ${usd(num(s.price))} +${usd(n0(s.premium))} · strike ${usd(num(s.strike))}`:isMM(s)?`min ${usd(num(s.minPrice))} · max ${usd(num(s.maxPrice))}`:isOther(s)&&num(s.otherFlat)==null&&num(s.price)!=null?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:s.type==='HTA'||s.type==='Basis contract'?`fut ${usd(num(s.price))} · basis ${fmtBasis(s.basis)}`:HEDGE_TYPES.includes(s.type)?`${legLabel(s,'price').toLowerCase()} ${usd(num(s.price))}`:''}</div></td>
-      <td style="white-space:nowrap">${isDel&&s.deliveryEnd?`${fmtDate(s.deliveryStart)} –<br>${fmtDate(s.deliveryEnd)}`:'<span class="muted">—</span>'}</td>
-      <td class="n">${isDel?(s.trackLoads?`${bu(remaining(s))}<div class="prog sm"><div style="width:${qty(s)?Math.min(100,delivered(s)/qty(s)*100):0}%"></div></div>`:bu(remaining(s))):'<span class="muted">—</span>'}</td>
-      <td>${saleStatus(s)}</td></tr>`}).join('')}</tbody></table></div>
-    <ul class="cards">${list.map(s=>{const fp=flatPrice(s);return`<li data-sale="${s.id}" tabindex="0"><div class="cl"><b>${esc(s.crop)} · ${esc(typeName(s))}${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</b><span class="mono">${bu(qty(s))}${isAcc(s)?' / '+bu(n0(s.bu)):''} bu</span></div>
-      <div class="cl muted"><span>${esc(s.buyer||'—')} · ${fmtDate(s.date)}</span><span class="mono">${fp!=null?usd(fp):''}</span></div>
-      <div class="cl"><span>${saleStatus(s)}</span>${DELIVERABLE.includes(s.type)&&remaining(s)>0?`<span class="muted mono" style="font-size:.8rem">${bu(remaining(s))} left</span>`:''}</div></li>`}).join('')}</ul>`
+  const needs=list.filter(s=>openLeg(s)).length,by=summarize(list,S.by);
+  const sortKey=Object.keys(SORTS).find(k=>SORTS[k].k===S.sort.k&&SORTS[k].dir===S.sort.dir)||'newest';
+  const fchip=(k,v,l)=>`<button class="chip sm" data-fchip="${k}" data-v="${esc(v)}" aria-pressed="${(F[k]||'')===v}">${esc(l)}</button>`;
+  const ckOf=c=>({corn:'corn',soybeans:'soy',wheat:'wheat'})[key(c)];
+  const row=s=>{const fp=flatPrice(s),isDel=DELIVERABLE.includes(s.type),left=isDel?remaining(s):0,ck=ckOf(s.crop);
+    const sub=[esc(s.buyer||'No buyer'),fmtDate(s.date),s.contractNo?'#'+esc(s.contractNo):'',isDel&&s.deliveryEnd?`deliver by ${fmtDate(s.deliveryEnd)}`:''].filter(Boolean).join(' · ');
+    return`<li class="srow" data-sale="${s.id}" tabindex="0"><span class="sdot" style="background:${ck?`var(--c-${ck})`:'var(--muted)'}"></span>
+      <div class="smain"><div class="stitle"><b>${esc(s.crop)} · ${esc(typeName(s))}</b>${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</div><span class="ssub">${sub}</span>
+        <span class="spills">${saleStatus(s)}${isDel&&left>0&&s.trackLoads?`<span class="muted" style="font-size:.76rem">${bu(left)} bu left</span>`:''}</span></div>
+      <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(num(s.price))}`:'price open'}</span></div></li>`};
+  return`<section><div class="sechead"><div><h2>${S.year} sales & contracts</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${all.length} contract${all.length===1?'':'s'}${filtered?` · ${list.length} shown`:''}</div></div><div class="sp"></div>
+    ${S.mode==='live'?'<button class="small" data-act="scan">Scan a contract</button>':''}<button class="primary" data-add="sale">+ Add contract</button></div>
+  ${all.length?`<div class="cckpi skpi">
+      <div><span>Contracted</span><b>${bu(tot.c)} bu</b></div>
+      <div><span>Priced</span><b>${tot.c?pct(tot.p/tot.c):'—'}</b></div>
+      <div><span>Priced value</span><b>${kfmt(tot.v)}</b></div>
+      <div><span>Left to deliver</span><b>${bu(tot.l)} bu</b></div></div>
+    ${needs?`<p class="snote"><span class="pill warn">${needs} need${needs===1?'s':''} pricing</span> HTAs, basis contracts and others with an open price part. <button class="link" data-act="showunpriced">Show them</button></p>`:''}
+    <div class="sfilters">
+      <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
+      <div class="chips">${fchip('crop','','All crops')}${crops.map(([k,c])=>fchip('crop',k,c)).join('')}</div>
+      <div class="chips">${[['','All'],['open','Left to deliver'],['unpriced','Needs pricing'],['delivered','Delivered'],['hedges','Hedges']].map(([v,l])=>fchip('status',v,l)).join('')}</div>
+      <details class="smore" ${more||S.moreOpen?'open':''}><summary>More filters & sort${more?' · on':''}</summary>
+        <div class="smoregrid">
+          <label>Type<select id="flt_type">${opts(SALE_TYPES.map(t=>[t,tl(t)]),F.type,'All types')}</select></label>
+          <label>Buyer<select id="flt_buyer">${opts(buyers,F.buyer,'All buyers')}</select></label>
+          <label>Delivery month<select id="flt_month">${opts([...months.map(m=>[m,monthLabel(m)]),...(hasNone?[['none','No delivery date']]:[])],F.month,'All months')}</select></label>
+          <label>Delivering from<select id="flt_source">${opts([['bin','From bin'],['harvest','At harvest']],F.source,'Bin & harvest')}</select></label>
+          <label>Sort<select id="flt_sort">${Object.entries(SORTS).map(([k,o])=>`<option value="${k}" ${k===sortKey?'selected':''}>${o.l}</option>`).join('')}</select></label></div>
+        <div style="display:flex;gap:14px;margin-top:8px">${filtered?'<button class="link" data-act="clearflt">Clear filters</button>':''}<button class="link" data-act="copysum">Copy summary</button>${S.downloads?'<button class="link" data-act="export">Export CSV</button>':''}</div></details></div>`:''}
+  <div class="panel slist">${list.length?`<ul>${list.map(row).join('')}</ul>`
     :all.length?`<div class="empty"><b>No contracts match these filters</b><button class="link" data-act="clearflt">Clear filters</button></div>`
-    :`<div class="empty"><b>No ${S.year} sales recorded</b>Add cash sales, spots, HTAs, basis contracts, accumulators, Premium Plus, Min/Max, specialty contracts and futures hedges.</div>`}</div>
-  ${list.length?`<section><div class="sechead"><h2>Summary</h2><div class="seg-ctl" role="group" aria-label="Group summary by">${[['crop','By crop'],['month','By delivery month'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div></div>
-    <div class="panel tablewrap"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':S.by==='month'?'Delivery month':'Type'}</th><th class="n">Contracts</th><th class="n">Contracted bu</th><th class="n">Priced bu</th><th class="n">Avg flat price</th><th class="n">Priced value</th><th class="n">Hedged bu</th><th class="n">Left to deliver</th></tr></thead><tbody>
-    ${by.map(r=>`<tr><td><b>${esc(r.label)}</b></td><td class="n">${r.n}</td><td class="n">${bu(r.contracted)}</td><td class="n">${bu(r.priced)}</td><td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted" title="Mixed crops">mixed</span>':'—'}</td><td class="n">${r.value?usd(r.value,0):'—'}</td><td class="n">${r.hedged?bu(r.hedged):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
-  <p class="muted" style="font-size:.8rem;margin-top:12px;max-width:85ch">Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Futures hedges protect price but aren't sales, so they're left out of contracted and priced totals. Premium Plus counts as sold at contract futures + premium, plus any doubled-up bushels at the strike. Min/Max counts as sold now and gets a flat price once its final futures (held between the min and max, less the fee) and basis are set. Averages are weighted by bushels.</p></section>`}
-
+    :`<div class="empty"><b>No ${S.year} sales recorded</b>Add a contract by hand, or scan a photo of one.</div>`}</div>
+  ${list.length?`<section><div class="sechead"><h2>Summary</h2></div>
+    <div class="chips">${[['crop','By crop'],['month','By delivery month'],['buyer','By buyer'],['type','By type']].map(([k,l])=>`<button class="chip sm" data-by="${k}" aria-pressed="${S.by===k}">${l}</button>`).join('')}</div>
+    <div class="panel tablewrap ssum"><table><thead><tr><th>${S.by==='crop'?'Crop':S.by==='buyer'?'Buyer':S.by==='month'?'Delivery month':'Type'}</th><th class="n">Contracted</th><th class="n">Priced</th><th class="n">Avg price</th><th class="n">Value</th><th class="n">Left to deliver</th></tr></thead><tbody>
+    ${by.map(r=>`<tr><td><b>${esc(r.label)}</b> <span class="muted" style="font-size:.76rem">${r.n}</span></td><td class="n">${bu(r.contracted)}</td><td class="n">${r.contracted?pct(r.priced/r.contracted):'—'}</td>
+      <td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted">mixed</span>':'—'}</td><td class="n">${r.value?kfmt(r.value):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
+  <details class="explain"><summary>How these numbers work</summary><p>Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Futures hedges protect price but aren't sales, so they're left out of contracted and priced totals. Premium Plus counts as sold at contract futures + premium, plus any doubled-up bushels at the strike. Min/Max counts as sold now and gets a flat price once its final futures (held between the min and max, less the fee) and basis are set.</p></details></section>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fchip]');if(!t||t.closest('dialog'))return;S.flt[t.dataset.fchip]=t.dataset.v;render()});
+document.addEventListener('change',e=>{if(e.target.id==='flt_sort'){const o=SORTS[e.target.value];if(o){S.sort={k:o.k,dir:o.dir};S.moreOpen=true;render()}}});
+document.addEventListener('toggle',e=>{if(e.target.classList&&e.target.classList.contains('smore'))S.moreOpen=e.target.open},true);
 function csvSales(f){
   const cols=[['Date','date'],['Crop year','year'],['Crop','crop'],['Type',s=>typeName(s)],['Contract #','contractNo'],['Buyer/broker','buyer'],['Location','location'],['Delivering from',s=>hasSource(s)?(fromHarvest(s)?'Harvest':'Bin'):''],['Bushels',s=>qty(s)],['Delivered bu',s=>delivered(s)],['Left to deliver',s=>remaining(s)],
     ['Futures month','futuresMonth'],['Futures/price','price'],['Basis','basis'],['Flat price',s=>flatPrice(s)??''],['Priced value',s=>{const fp=flatPrice(s);return fp==null?'':(fp*qty(s)).toFixed(2)}],['Delivery opens','deliveryStart'],['Delivery closes','deliveryEnd'],['Status',s=>HEDGE_TYPES.includes(s.type)?'Hedge':isAcc(s)?accState(s).t:remaining(s)>0?'Open':'Delivered'],
@@ -1463,33 +1509,36 @@ function tabOptimizer(f){
   const st=optState(f);
   if(!st)return`<section><div class="sechead"><h2>Profit optimizer</h2></div><div class="panel"><div class="empty"><b>Add a ${S.year} crop first</b>The optimizer starts from each crop's acres, yield and cost on the Production tab.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
   const{o,plans,plan}=st,saved=(f.scenarios||[]).filter(x=>+x.year===+S.year);
-  const prod=n0(plan.acres)*yieldOf(plan);
-  return`<section><div class="sechead"><h2>Profit optimizer</h2><div class="sp"></div>
-    <label class="label" style="display:flex;gap:8px;align-items:center">Crop <select id="opt_crop" style="width:auto">${plans.map(p=>`<option value="${p.id}" ${p.id===o.planId?'selected':''}>${esc(p.crop)}</option>`).join('')}</select></label>
-    <label class="label" style="display:flex;gap:8px;align-items:center">Saved <select id="opt_saved" style="width:auto"><option value="">New scenario</option>${saved.map(x=>`<option value="${x.id}" ${x.id===o.savedId?'selected':''}>${esc(x.name)} · ${esc(plans.find(p=>p.id===x.planId)?.crop||'')}</option>`).join('')}</select></label></div>
-  <p class="muted" style="margin:0 0 14px;max-width:85ch">Start from what's already sold on this crop, then add strategies for the bushels that aren't. Results show profit if futures finish anywhere from 30% lower to 30% higher. Nothing here changes your real contracts.</p>
+  const prod=n0(plan.acres)*yieldOf(plan),sold=(position(f,S.year).find(r=>key(r.crop)===key(plan.crop))||{}).sold||0;
+  const box=(id,label,val,ph='')=>`<label class="pf"><span>${label}</span><input id="${id}" class="optinp" type="number" step="any" inputmode="decimal" value="${val??''}" placeholder="${ph}"></label>`;
+  return`<section><div class="sechead"><div><h2>Profit optimizer</h2><div class="muted" style="font-size:.82rem;margin-top:2px">Test strategies on the bushels you haven't sold. Nothing here changes your contracts.</div></div></div>
   <div class="optgrid"><div class="optleft">
-    <div class="panel optbox"><h3>Assumptions</h3>
-      <div class="fgrid">
-        <label>Futures today ($/bu)<input id="opt_fut" class="optinp" type="number" step="any" value="${o.fut??''}" placeholder="e.g. ${esc(String(plan.futPrice??'4.50'))}"></label>
-        <label>Harvest basis ($/bu)<input id="opt_basis" class="optinp" type="number" step="any" value="${o.basis??''}"></label>
-        <label class="full">Yield: <span id="opt_yield_out">${o.yieldPct}% of expected · ${(yieldOf(plan)*o.yieldPct/100).toFixed(1)} bu/ac</span><input id="opt_yield" class="optinp" type="range" min="50" max="130" step="5" value="${o.yieldPct}"></label></div>
-      <dl class="facts" style="margin-top:12px">
-        <div><dt>Acres</dt><dd>${bu(n0(plan.acres))}</dd></div><div><dt>Expected bu</dt><dd>${bu(prod)}</dd></div>
-        <div><dt>Cost / acre</dt><dd>${usd(costOf(plan))}</dd></div><div><dt>Already sold</dt><dd>${bu(position(f,S.year).find(r=>key(r.crop)===key(plan.crop))?.sold||0)}</dd></div></dl>
-      <p class="muted" style="font-size:.76rem;margin:10px 0 0">Defaults come from the crop card and Production tab. Changes here only affect this scenario.</p></div>
-    <div class="panel optbox"><h3>Strategies to test</h3>
+    <div class="panel calc ocalc">
+      <div class="clab">Crop</div>
+      <div class="chips">${plans.map(p=>`<button class="chip" data-optcrop="${p.id}" aria-pressed="${p.id===o.planId}">${esc(p.crop)}</button>`).join('')}</div>
+      ${saved.length?`<div class="clab">Saved scenarios</div><div class="chips">${`<button class="chip sm" data-optsaved="" aria-pressed="${!o.savedId}">New</button>`}${saved.map(x=>`<button class="chip sm" data-optsaved="${x.id}" aria-pressed="${x.id===o.savedId}">${esc(x.name)}</button>`).join('')}</div>`:''}
+      <div class="clab">Market & yield</div>
+      <div class="pgrid2">${box('opt_fut','Futures today ($/bu)',o.fut,String(plan.futPrice??'4.50'))}${box('opt_basis','Harvest basis ($/bu)',o.basis)}</div>
+      <label class="pf" style="margin-top:12px"><span>Yield · <b id="opt_yield_out" style="text-transform:none;letter-spacing:0;color:var(--ink)">${o.yieldPct}% of expected · ${(yieldOf(plan)*o.yieldPct/100).toFixed(1)} bu/ac</b></span>
+        <input id="opt_yield" class="optinp" type="range" min="50" max="130" step="5" value="${o.yieldPct}"></label>
+      <p class="muted" style="font-size:.78rem;margin:10px 0 0">${bu(n0(plan.acres))} ac · ${bu(prod)} bu expected · ${usd(costOf(plan))}/ac cost · ${bu(sold)} bu already sold</p></div>
+    <div class="panel calc ocalc">
+      <div class="clab">Strategies to test</div>
       ${o.legs.length?o.legs.map(l=>{const T=LEG_TYPES[l.t];return`<div class="leg"><div class="leghead"><b>${T.label}</b><button class="link danger" data-rmleg="${l.id}" style="font-size:.8rem">Remove</button></div>
         <div class="muted" style="font-size:.76rem">${T.note}</div>
-        <div class="legf">${T.fields.map(([k,lab])=>`<label>${lab}<input class="leginp" id="leg_${l.id}_${k}" data-leg="${l.id}" data-k="${k}" type="number" step="any" value="${l[k]??''}"></label>`).join('')}</div></div>`}).join('')
-        :'<p class="muted" style="font-size:.85rem;margin:6px 0 10px">No strategies yet. Add one below to compare it with the current position.</p>'}
-      <div class="addlegs">${Object.entries(LEG_TYPES).map(([k,T])=>`<button class="small" data-addleg="${k}">+ ${T.label}</button>`).join('')}</div>
-      <p class="muted" style="font-size:.74rem;margin:10px 0 0">Premiums are placeholders. Enter real quotes from your broker.</p></div>
-    <div class="panel optbox"><h3>Save scenario</h3>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="opt_name" value="${esc(o.name)}" placeholder="e.g. Dec puts + March carry" style="flex:1 1 180px;width:auto">
-        <button class="primary small" data-act="optsave">${o.savedId?'Update':'Save'}</button>${o.savedId?`<button class="small danger" data-act="optdel">${o.confirmDel?'Confirm delete':'Delete'}</button>`:''}</div>
-      <p class="muted" style="font-size:.74rem;margin:8px 0 0">Saved with this farm, so the producer and broker both see it.</p></div>
+        <div class="legf">${T.fields.map(([k,lab])=>`<label class="pf"><span>${lab}</span><input class="leginp" id="leg_${l.id}_${k}" data-leg="${l.id}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${l[k]??''}"></label>`).join('')}</div></div>`}).join('')
+        :'<p class="muted" style="font-size:.85rem;margin:0 0 4px">Add a strategy to compare it with what you hold today.</p>'}
+      <div class="chips" style="margin:12px 0 0">${Object.entries(LEG_TYPES).map(([k,T])=>`<button class="chip sm add" data-addleg="${k}">+ ${T.label}</button>`).join('')}</div>
+      <p class="muted" style="font-size:.74rem;margin:10px 0 0">Premiums fill in as placeholders. Enter real quotes from your broker.</p>
+      <div class="osave"><input id="opt_name" value="${esc(o.name)}" placeholder="Name this scenario, e.g. Dec puts + March carry">
+        <button class="primary small" data-act="optsave">${o.savedId?'Update':'Save'}</button>${o.savedId?`<button class="small danger" data-act="optdel">${o.confirmDel?'Confirm':'Delete'}</button>`:''}</div></div>
   </div><div class="optright" id="optResults">${optResults(f)}</div></div></section>`}
+// crop and saved-scenario chips do what the old dropdowns did
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-optcrop],[data-optsaved]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  if(t.dataset.optcrop!==undefined){const p=f.crops.find(c=>c.id===t.dataset.optcrop);if(!p)return;S.opt={...S.opt,planId:p.id,fut:futFor(p).price,basis:num(p.estBasis)??0,legs:[],savedId:'',name:'',confirmDel:false};render();return}
+  const x=(f.scenarios||[]).find(z=>z.id===t.dataset.optsaved);
+  if(x)S.opt={farm:S.current,year:S.year,planId:x.planId,yieldPct:x.yieldPct??100,fut:x.fut,basis:x.basis??0,legs:clone(x.legs||[]),name:x.name,savedId:x.id,confirmDel:false};
+  else S.opt={...S.opt,savedId:'',name:'',legs:[],confirmDel:false};render()});
 function optResults(f){
   const st=optState(f);if(!st)return'';const{o,plan}=st;
   if(o.fut==null)return`<div class="panel"><div class="empty"><b>Enter today's futures price</b>The optimizer needs a starting futures price to build the price range.</div></div>`;
@@ -1500,14 +1549,15 @@ function optResults(f){
   const cv=xs.map(cur),sv=xs.map(scen);
   const be=vals=>{for(let i=1;i<N;i++)if((vals[i-1]<0)!==(vals[i]<0)){const t=vals[i-1]/(vals[i-1]-vals[i]);return xs[i-1]+t*(xs[i]-xs[i-1])}return null};
   const pa=v=>v/ac,sg=(v,d=2)=>`<span style="color:${v<0?'var(--bad)':'var(--good)'}">${usd(v,d)}</span>`;
-  const tile=(lab,F)=>{const c=cur(F),s=scen(F);return`<div class="stat"><div class="label">${lab}</div><div class="v">${sg(pa(s))}<span class="s"> /ac</span></div>
-    <div class="s">${o.legs.length?`now ${usd(pa(c))} · ${s-c>=0?'+':''}${usd(pa(s-c))}`:`total ${usd(s,0)}`}</div></div>`};
+  // result tiles in the crop-card style: tinted green/red by profit, change vs. today's position underneath
+  const tile=(lab,F)=>{const c=cur(F),s=scen(F),v=pa(s);return`<div class="${v<0?'neg':'pos'}"><span>${lab}</span><b>${(v>0?'+':'')+usd(v)}<small>/ac</small></b>
+    <em>${o.legs.length?`${s-c>=0?'+':''}${usd(pa(s-c))} vs. now`:`total ${kfmt(s)}`}</em></div>`};
   const beC=be(cv),beS=be(sv);
   const pts=[-0.2,-0.1,0,0.1,0.2],yl=[80,90,100,110];
   const heat=yl.map(y=>pts.map(p=>{const F=F0*(1+p),v=(baseProfit(f,plan,F,b,y).profit+legsAt(F))/ac;return v}));
   const mx=Math.max(1,...heat.flat().map(Math.abs));
-  return`<div class="strip strip4">${tile(`Futures ${usd(F0)} (today)`,F0)}${tile(`Futures −20% (${usd(F0*0.8)})`,F0*0.8)}${tile(`Futures +20% (${usd(F0*1.2)})`,F0*1.2)}
-    <div class="stat"><div class="label">Break-even futures</div><div class="v">${beS!=null?usd(beS):sv[0]>0?'Below range':'Above range'}</div><div class="s">${o.legs.length?`now ${beC!=null?usd(beC):cv[0]>0?'below range':'above range'}`:'profit is zero here'}</div></div></div>
+  return`<div class="cckpi okpi">${tile(`At ${usd(F0)} today`,F0)}${tile(`If −20% (${usd(F0*0.8)})`,F0*0.8)}${tile(`If +20% (${usd(F0*1.2)})`,F0*1.2)}
+    <div><span>Break-even futures</span><b>${beS!=null?usd(beS):sv[0]>0?'Below range':'Above range'}</b><em>${o.legs.length?`now ${beC!=null?usd(beC):cv[0]>0?'below range':'above range'}`:'profit is zero here'}</em></div></div>
   <div class="panel" style="margin-top:14px;padding:14px 16px 8px"><div class="sechead" style="margin:0 0 4px"><h3>Profit per acre by futures price at harvest</h3><div class="sp"></div>
     <div class="legend" style="padding:0"><span><i style="background:var(--muted)"></i>Current position</span>${o.legs.length?'<span><i style="background:var(--accent)"></i>With strategies</span>':''}</div></div>
     ${optChart(xs,[{name:'Current position',cls:'cur',vals:cv.map(pa)},...(o.legs.length?[{name:'With strategies',cls:'scn',vals:sv.map(pa)}]:[])],F0)}</div>
