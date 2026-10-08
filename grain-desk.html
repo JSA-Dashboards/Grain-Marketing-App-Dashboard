@@ -320,6 +320,34 @@ table.heat td.n{font-family:var(--f-data)}
 .cclist dt{color:var(--muted)} .cclist dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 @media (max-width:420px){.ccards{grid-template-columns:minmax(0,1fr)}.cclist{grid-template-columns:minmax(0,1fr)}.ccleg>div{grid-template-columns:10px 58px 38px minmax(0,1fr)}}
 .wrap{overflow-x:clip}
+/* weather */
+.wxalert{display:grid;gap:2px;padding:10px 14px;border-radius:10px;margin-bottom:10px;background:color-mix(in srgb,var(--bad) 13%,var(--surface));border-left:4px solid var(--bad)}
+.wxalert b{color:var(--bad)} .wxalert span{font-size:.84rem}
+.wxtop{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:14px;align-items:stretch}
+@media (max-width:760px){.wxtop{grid-template-columns:minmax(0,1fr)}}
+.wxnow{display:flex;gap:16px;align-items:center;padding:16px 18px;border-radius:14px}
+.wxtemp{font:800 2.8rem/1 var(--f-display)}
+.wxbig{width:64px;height:64px;flex:none}
+.wxi{width:26px;height:26px;flex:none}
+.wxi.sun,.wxbig.sun,.wxi.partly,.wxbig.partly{color:var(--c-corn)} .wxi.rain,.wxbig.rain,.wxi.storm,.wxbig.storm{color:var(--c-soy)} .wxi.cloud,.wxi.fog,.wxbig.cloud,.wxbig.fog,.wxi.snow,.wxbig.snow{color:var(--muted)}
+.wxkpi{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wxkpi em{font-style:normal;font-size:.74rem;color:var(--muted)}
+.wxh{padding:14px 16px;border-radius:14px;margin-top:14px}
+.wxhours{width:100%;height:auto;display:block}
+.wxhours .templine{fill:none;stroke:var(--grain);stroke-width:2.2;stroke-linejoin:round}
+.wxhours .popbar{fill:color-mix(in srgb,var(--c-soy) 55%,var(--surface))}
+.wxhours text{font:11px var(--f-body);fill:var(--muted)} .wxhours .tlab{fill:var(--ink);font-weight:600}
+.wxdays{border-radius:14px;margin-top:14px;padding:4px 0}
+.wxday summary{display:grid;grid-template-columns:110px 28px minmax(0,1fr) auto 44px 76px;gap:10px;align-items:center;padding:10px 16px;cursor:pointer;list-style:none;border-bottom:1px solid var(--line)}
+.wxday:last-child summary{border-bottom:0}
+.wxday summary::-webkit-details-marker{display:none}
+.wxdn{font-weight:650} .wxs{font-size:.86rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wxpop{font-size:.82rem;color:var(--c-soy);text-align:right;font-variant-numeric:tabular-nums}
+.wxhl{text-align:right;font-variant-numeric:tabular-nums} .wxhl span{color:var(--muted)}
+.wxday p{margin:0;padding:8px 16px 12px 54px;font-size:.86rem;color:var(--muted);border-bottom:1px solid var(--line)}
+.tag.fieldt{background:color-mix(in srgb,var(--good) 14%,var(--surface));color:var(--good)}
+.tag.sprayt{background:var(--good);color:var(--surface)}
+@media (max-width:520px){.wxday summary{grid-template-columns:72px 24px minmax(0,1fr) 40px 64px}.wxtags{display:none}.wxkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .zipform{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .zipform .pf{flex:0 1 200px}
 /* sales & contracts: slim rows */
@@ -1083,13 +1111,13 @@ function homeScreen(f){
     ['marketing','Crop Overview','Production, storage, sales and contracts, and the profit optimizer.',exp?`<b>${pct(sold/exp)}</b> of ${S.year} crop sold`:'Set up your crops to get started'],
     ['insurance','Crop insurance','Coverage, insured bushels and your revenue guarantee.',ins?`<b>${usd(ins,0)}</b> guaranteed`:'Set up coverage for each crop'],
     ['quotes','Quotes','Daily corn, soybean and wheat futures. Cash bids coming soon.',cfi&&cfi.price!=null?`Corn ${cfi.symbol?symLabel(cfi.symbol):''} <b>${usd(cfi.price,4)}</b>`:'Futures prices'],
-    ['weather','Weather','Forecast and conditions for your farm.','Coming soon'],
+    ['weather','Weather','7-day forecast, rain totals, and field and spray days.',(()=>{const k=wxKey(f);ensureWx(k);const w=k&&S.wx[k];if(!k)return'Add your ZIP code';if(!w)return'Forecast coming with the next update';
+      const n=(w.hourly||[])[0],d=wxDays(w),fd=d.filter(x=>x.field).length;return`${n?`<b>${n.temp}°</b> ${esc(n.short)} · `:''}${w.rain7!=null?w.rain7.toFixed(2)+' in rain this week · ':''}${fd} field days`})()],
     ['intel','Intel','Market updates and insights from your advisor.',(()=>{const ps=intelFor(f),n=intelNewCount(f);return ps.length?`${n?`<b>${n} new</b> · `:''}${esc(ps[0].title)}`:'No updates yet'})()]];
   return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
       <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
       <span class="htitle">${t}</span><span class="hdesc">${d}</span><span class="hstat">${stat}</span></button>`).join('')}</div>
   ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}`}
-function tabWeather(f){return`<section><div class="panel"><div class="empty"><b>Weather is coming soon</b>${locLabel(f)?`Forecasts for ${esc(locLabel(f))} will show here.`:'Add your county and state under Farm details so forecasts can be local.'}</div></div></section>`}
 
 // pie of part-to-whole; slices start at 12 o'clock and run clockwise, separated by a 2px surface gap
 function pieSVG(segs,label){
@@ -2050,6 +2078,56 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   if(t.dataset.intelopen)S.intelOpen=S.intelOpen===t.dataset.intelopen?null:t.dataset.intelopen;
   if(t.dataset.intelcat!==undefined)S.intelCat=t.dataset.intelcat;render()});
 
+/* ---------- weather (National Weather Service, pulled each morning per farm ZIP) ---------- */
+// one forecast document per rounded location: market/wx_<lat>_<lon>
+const wxKey=f=>f&&f.bidHome&&f.bidHome.lat!=null?`wx_${(+f.bidHome.lat).toFixed(2)}_${(+f.bidHome.lon).toFixed(2)}`:null;
+S.wx={};const wxSubs={};
+function ensureWx(k){if(!k||wxSubs[k]||!S.db)return;
+  wxSubs[k]=S.db.doc('market/'+k).onSnapshot(d=>{S.wx[k]=d.exists?clone(d.data()):null;if(!$('#dlg').open&&(S.section==='weather'||S.section==='home'))render()},()=>{})}
+const WX_ICON={sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  partly:'<circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1"/><path d="M9 20h9a4 4 0 0 0 0-8 5 5 0 0 0-9.6 1.5A3.3 3.3 0 0 0 9 20z"/>',
+  cloud:'<path d="M7 19h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2A3.5 3.5 0 0 0 7 19z"/>',
+  rain:'<path d="M7 15h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2A3.5 3.5 0 0 0 7 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  storm:'<path d="M7 14h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2A3.5 3.5 0 0 0 7 14z"/><path d="M12 14l-2 4h3l-2 4"/>',
+  snow:'<path d="M7 14h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2A3.5 3.5 0 0 0 7 14z"/><path d="M8 18h.01M12 20h.01M16 18h.01M10 22h.01M14 22h.01"/>',
+  fog:'<path d="M4 9h16M3 13h18M5 17h14"/>'};
+function wxKind(s){s=(s||'').toLowerCase();return/thunder|storm/.test(s)?'storm':/snow|sleet|flurr|ice/.test(s)?'snow':/rain|shower|drizzle/.test(s)?'rain':/fog|haze|smoke/.test(s)?'fog':/partly|mostly sunny|mostly clear|few clouds/.test(s)?'partly':/cloud|overcast/.test(s)?'cloud':'sun'}
+const wxSvg=(s,cls='wxi')=>`<svg viewBox="0 0 24 24" class="${cls} ${wxKind(s)}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${WX_ICON[wxKind(s)]}</svg>`;
+// pair each daytime period with the night after it; tag field days (dry) and spray days (dry and calm)
+function wxDays(w){const ps=w.periods||[],out=[];
+  for(let i=0;i<ps.length;i++){const p=ps[i];if(!p.day&&i>0)continue;const n=p.day?ps[i+1]&&!ps[i+1].day?ps[i+1]:null:p,d=p.day?p:null;
+    const pop=Math.max(d?d.pop:0,n?n.pop:0),wind=Math.max(d&&d.windMax||0,n&&n.windMax||0);
+    out.push({name:d?d.name:p.name,date:(d||p).start,short:(d||p).short,detail:(d||p).detail,hi:d?d.temp:null,lo:n?n.temp:null,pop,wind:d?d.windMax:n&&n.windMax,dir:(d||n||{}).dir,
+      field:pop<=20,spray:pop<=20&&(d?(d.windMax||0):wind)<=10});if(!p.day)i++}
+  return out.slice(0,7)}
+function tabWeather(f){
+  const k=wxKey(f);ensureWx(k);const w=k?S.wx[k]:null;
+  const zipBox=`<form class="zipform" id="zipform" style="margin-top:12px"><label class="pf"><span>Your ZIP code</span><input id="zipIn" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="e.g. 50421" value="${esc(f.bidHome&&f.bidHome.zip||'')}"></label><button class="primary" type="submit">Save</button></form>`;
+  if(!k)return`<section><div class="panel calc"><b style="font-size:1.1rem">Where's your farm?</b><p class="muted" style="margin:6px 0 0">Enter your ZIP code to get your local forecast. It's also used for cash bids near you.</p>${zipBox}</div></section>`;
+  if(!w)return`<section><div class="panel"><div class="empty"><b>Your forecast is on its way</b>Weather for ${esc(f.bidHome.label)} is pulled from the National Weather Service each morning, so it shows up after the next update.</div></div></section>`;
+  const days=wxDays(w),now=(w.hourly||[])[0],today=days[0]||{},fieldDays=days.filter(d=>d.field),sprayDays=days.filter(d=>d.spray);
+  const hrs=(w.hourly||[]).slice(0,24),tmin=Math.min(...hrs.map(h=>h.temp)),tmax=Math.max(...hrs.map(h=>h.temp)),tr=(tmax-tmin)||1;
+  const hourChart=hrs.length?`<svg viewBox="0 0 480 110" class="wxhours" role="img" aria-label="Next 24 hours: temperature and chance of rain">
+      ${hrs.map((h,i)=>`<rect x="${i*20+3}" y="${100-h.pop*.4}" width="14" height="${h.pop*.4}" class="popbar"><title>${new Date(h.t).toLocaleTimeString('en-US',{hour:'numeric'})}: ${h.pop}% rain</title></rect>`).join('')}
+      <polyline points="${hrs.map((h,i)=>`${i*20+10},${(58-(h.temp-tmin)/tr*44).toFixed(1)}`).join(' ')}" class="templine"/>
+      ${hrs.map((h,i)=>i%4===0?`<text x="${i*20+10}" y="${(58-(h.temp-tmin)/tr*44-7).toFixed(1)}" text-anchor="middle" class="tlab">${h.temp}°</text><text x="${i*20+10}" y="108" text-anchor="middle" class="hlab">${new Date(h.t).toLocaleTimeString('en-US',{hour:'numeric'}).replace(':00','').replace(' ','').toLowerCase()}</text>`:'').join('')}</svg>`:'';
+  return`<section><div class="sechead"><div><h2>${esc(w.place||f.bidHome.label)}</h2><div class="muted" style="font-size:.82rem;margin-top:2px">National Weather Service · updated ${new Date(w.asOf).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'})}</div></div><div class="sp"></div>
+      <button class="link" data-act="wxzip" style="font-size:.82rem">Change ZIP</button></div>
+    ${S.wxZip?zipBox:''}
+    ${(w.alerts||[]).map(a=>`<div class="wxalert"><b>${esc(a.event)}</b><span>${esc(a.headline||'')}</span></div>`).join('')}
+    <div class="wxtop"><div class="panel wxnow">${now?`${wxSvg(now.short,'wxbig')}<div><div class="wxtemp">${now.temp}°</div><div>${esc(now.short)}</div>
+        <div class="muted" style="font-size:.82rem">${today.hi!=null?`High ${today.hi}°`:''}${today.lo!=null?` · Low ${today.lo}°`:''}${now.wind!=null?` · Wind ${now.wind} mph`:''}</div></div>`:''}</div>
+      <div class="cckpi wxkpi"><div><span>Rain next 7 days</span><b>${w.rain7!=null?w.rain7.toFixed(2)+' in':'—'}</b></div>
+        <div class="${fieldDays.length?'pos':''}"><span>Field days</span><b>${fieldDays.length} of ${days.length}</b><em>${fieldDays.map(d=>d.name.slice(0,3)).join(' ')||'none'}</em></div>
+        <div class="${sprayDays.length?'pos':''}"><span>Spray days</span><b>${sprayDays.length}</b><em>${sprayDays.map(d=>d.name.slice(0,3)).join(' ')||'none'}</em></div></div></div>
+    <div class="panel wxh"><div class="clab">Next 24 hours</div>${hourChart}<div class="legend" style="padding:4px 0 0"><span><i style="background:var(--grain)"></i>Temperature</span><span><i style="background:color-mix(in srgb,var(--c-soy) 55%,var(--surface))"></i>Chance of rain</span></div></div>
+    <div class="panel wxdays">${days.map(d=>`<details class="wxday"><summary>
+        <span class="wxdn">${esc(d.name)}</span>${wxSvg(d.short)}<span class="wxs">${esc(d.short)}</span>
+        <span class="wxtags">${d.spray?'<span class="tag sprayt">Spray</span>':d.field?'<span class="tag fieldt">Field</span>':''}</span>
+        <span class="wxpop">${d.pop?d.pop+'%':''}</span><span class="wxhl"><b>${d.hi??'—'}°</b> <span>${d.lo??'—'}°</span></span></summary>
+        <p>${esc(d.detail||'')}</p></details>`).join('')}</div>
+    <p class="muted" style="font-size:.74rem;margin:8px 0 0">Field day = 20% or less chance of rain. Spray day = also wind 10 mph or less in the daytime. Tap a day for the full forecast. Forecast from weather.gov, refreshed each morning.</p></section>`}
+
 /* ---------- contract scanning ---------- */
 // open the phone camera / file picker; must be called from a click
 function pickPhoto(cb){const inp=document.createElement('input');inp.type='file';
@@ -2160,6 +2238,7 @@ document.addEventListener('click',e=>{
   if(a==='home'){S.section='home';render();window.scrollTo(0,0)}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
+  if(a==='wxzip'){S.wxZip=!S.wxZip;render()}
   if(a==='addreport')openShared(null,{agency:'USDA report',recurring:false,title:''});
   if(a==='scan'){
     // say why scanning is off in this view instead of hiding the button
