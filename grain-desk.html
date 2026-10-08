@@ -1126,7 +1126,7 @@ function tabSales(f){
   const by=summarize(list,S.by);
   const sh=(k,l,n)=>`<th class="${n?'n':''}"><button class="sortbtn" data-sort="${k}" aria-label="Sort by ${l}">${l}${S.sort.k===k?(S.sort.dir<0?' ↓':' ↑'):''}</button></th>`;
   return`<section><div class="sechead"><h2>${S.year} sales, contracts & hedges</h2><div class="sp"></div>
-    ${S.sample&&S.sampleImg?'<button class="small primary" data-act="scan">Scan a contract</button>':''}<button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
+    ${S.mode==='live'?'<button class="small primary" data-act="scan">Scan a contract</button>':''}<button class="small" data-act="copysum">Copy summary</button>${S.downloads?'<button class="small" data-act="export">Export CSV</button>':''}
     <button class="primary" data-add="sale">Add sale or contract</button></div>
   ${all.length?`<div class="filters">
     <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
@@ -1829,7 +1829,13 @@ document.addEventListener('click',e=>{
   if(a==='back'){S.current=null;render()}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
-  if(a==='scan')pickPhoto(scanContract);
+  if(a==='scan'){
+    // say why scanning is off in this view instead of hiding the button
+    const why=!S.sample?"Scanning needs Claude, and this view of the app can't reach it. Open the app at claude.ai in a web browser (Chrome, Edge or Safari), signed in, and try again."
+      :!S.sampleImg?"This view of the app can't send photos to Claude. Open the app at claude.ai in a web browser (Chrome, Edge or Safari) and try again.":null;
+    if(why){dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>Scanning isn't available here</h2><p class="muted">${why}</p><p class="muted" style="font-size:.8rem">You can still add the contract by hand with Add sale or contract.</p><div class="dlgfoot"><div class="sp"></div><button type="button" id="scan_close">OK</button></div>`;
+      $('#dlg').showModal();$('#scan_close').onclick=()=>$('#dlg').close()}
+    else pickPhoto(scanContract)}
   if(a==='optsave'&&S.opt){const f=S.farms[S.current],o=S.opt,name=(o.name||'').trim()||`Scenario ${(f.scenarios||[]).length+1}`;
     const rec={id:o.savedId||uid(),name,year:o.year,planId:o.planId,yieldPct:o.yieldPct,fut:o.fut,basis:o.basis,legs:clone(o.legs),savedAt:new Date().toISOString()};
     f.scenarios=[...(f.scenarios||[]).filter(x=>x.id!==rec.id),rec];o.savedId=rec.id;o.name=name;persist(S.current)}
