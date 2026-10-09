@@ -392,6 +392,9 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .ikpi{margin-bottom:14px} .ikpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.ikpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ikpi>div:last-child{grid-column:1/-1}}
 .ivtabs{margin-bottom:12px}
+/* number boxes: no up/down arrows, so a stray click can't change a price */
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .rmanote{font-size:.78rem;margin:10px 0 0} .rmanote b{color:var(--ink);font-family:var(--f-data)} .rmanote .link{font-size:.78rem}
 .pf:has(input[type=range]) span{white-space:normal}
 @media (max-width:560px){.pgrid2.iest{grid-template-columns:minmax(0,1fr)}}
@@ -655,6 +658,8 @@ const projOf=c=>num(c.projPrice)??(rmaFor(c)||{}).proj??null;
 function harvOf(c){const h=num(c.harvestPrice);if(h!=null)return h;const r=rmaFor(c),p=projOf(c);
   if(!r||r.harv==null||!r.harvDays)return null;return p?Math.min(r.harv,2*p):r.harv}
 const loadsBu=s=>(s.loads||[]).reduce((a,l)=>a+n0(l.netBu),0);
+// the mouse wheel over a selected number box scrolls the page instead of changing the number (app-wide)
+document.addEventListener('wheel',e=>{const t=e.target;if(t&&t.matches&&t.matches('input[type=number]')&&t===document.activeElement)t.blur()},{passive:true});
 function delivered(s){
   if(s.type==='Cash sale')return qty(s);
   if(!DELIVERABLE.includes(s.type))return 0;
