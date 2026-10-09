@@ -392,6 +392,7 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .ikpi{margin-bottom:14px} .ikpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.ikpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ikpi>div:last-child{grid-column:1/-1}}
 .ivtabs{margin-bottom:12px}
+.rmanote{font-size:.78rem;margin:10px 0 0} .rmanote b{color:var(--ink);font-family:var(--f-data)} .rmanote .link{font-size:.78rem}
 .pf:has(input[type=range]) span{white-space:normal}
 @media (max-width:560px){.pgrid2.iest{grid-template-columns:minmax(0,1fr)}}
 details.ipol{margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
@@ -647,6 +648,12 @@ function futFor(plan){
   const sym=plan.futSymbol||defaultSym(plan),p=sym&&S.market&&S.market.prices?S.market.prices[sym]:null;
   if(p!=null)return{price:p,source:'market',symbol:sym,asOf:S.market.asOf};
   return{price:num(plan.futPrice),source:num(plan.futPrice)!=null?'manual':null,asOf:plan.priceDate}}
+// RMA projected / harvest prices for corn and soybeans, figured nightly from JSA's futures (Feb / Oct averages of Dec corn, Nov soybeans).
+// A price typed on the crop always wins. Before October ends the harvest price is the average so far; RP caps it at 200% of projected.
+const rmaFor=c=>{const r=S.market&&S.market.rma&&S.market.rma[String(c&&c.year)];return r&&r[key(c.crop)]||null};
+const projOf=c=>num(c.projPrice)??(rmaFor(c)||{}).proj??null;
+function harvOf(c){const h=num(c.harvestPrice);if(h!=null)return h;const r=rmaFor(c),p=projOf(c);
+  if(!r||r.harv==null||!r.harvDays)return null;return p?Math.min(r.harv,2*p):r.harv}
 const loadsBu=s=>(s.loads||[]).reduce((a,l)=>a+n0(l.netBu),0);
 function delivered(s){
   if(s.type==='Cash sale')return qty(s);
@@ -690,7 +697,7 @@ function position(f,year){
     const avg=pricedBu?priced.reduce((a,s)=>a+qty(s)*flatPrice(s),0)/pricedBu:null;
     const be=p&&yld?n0(costOf(p))/yld:null;
     const insured=p&&p.insType&&p.insType!=='None'?n0(p.acres)*n0(p.aph)*n0(p.coverage)/100:0;
-    const insPrice=p?(p.insType==='RP'?Math.max(n0(p.projPrice),n0(p.harvestPrice)):n0(p.projPrice)):0;
+    const insPrice=p?(p.insType==='RP'?Math.max(n0(projOf(p)),n0(harvOf(p))):n0(projOf(p))):0;
     const revGuar=insured*insPrice;
     // break-even on the bushels not yet priced, after counting revenue already locked in
     const premiums=0;// Premium Plus premium is received and already in its price
@@ -1398,7 +1405,7 @@ const SF_TABLES=[
   {name:'CROP_PLANS',file:'crop_plans.csv',rows:(id,f)=>f.crops.map(c=>({id,c,r:position(f,c.year).find(x=>key(x.crop)===key(c.crop))||{}})),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CROP_PLAN_ID','VARCHAR',r=>r.c.id],['CROP_YEAR','NUMBER(4,0)',r=>nz(r.c.year)],['CROP','VARCHAR',r=>r.c.crop],
     ['ACRES','NUMBER(12,2)',r=>nz(r.c.acres)],['APH_YIELD','NUMBER(10,2)',r=>nz(r.c.aph)],['EXPECTED_YIELD','NUMBER(10,2)',r=>r.r.yld??null],['COST_PER_ACRE','NUMBER(12,2)',r=>costOf(r.c)],
-    ['INSURANCE_PLAN','VARCHAR',r=>r.c.insType||null],['COVERAGE_PCT','NUMBER(5,2)',r=>nz(r.c.coverage)],['PROJECTED_PRICE','NUMBER(10,4)',r=>nz(r.c.projPrice)],['HARVEST_PRICE','NUMBER(10,4)',r=>nz(r.c.harvestPrice)],
+    ['INSURANCE_PLAN','VARCHAR',r=>r.c.insType||null],['COVERAGE_PCT','NUMBER(5,2)',r=>nz(r.c.coverage)],['PROJECTED_PRICE','NUMBER(10,4)',r=>nz(projOf(r.c))],['HARVEST_PRICE','NUMBER(10,4)',r=>nz(harvOf(r.c))],
     ['EXPECTED_BU','NUMBER(14,2)',r=>r.r.expected??null],['TOTAL_COST','NUMBER(16,2)',r=>r.r.totalCost==null?null:+r.r.totalCost.toFixed(2)],
     ['BREAKEVEN_PER_BU','NUMBER(10,4)',r=>r.r.be==null?null:+r.r.be.toFixed(4)],['DYNAMIC_BREAKEVEN','NUMBER(10,4)',r=>r.r.dynBe==null?null:+r.r.dynBe.toFixed(4)],
     ['INSURED_BU','NUMBER(14,2)',r=>r.r.insured==null?null:+r.r.insured.toFixed(2)],['REVENUE_GUARANTEE','NUMBER(16,2)',r=>r.r.revGuar==null?null:+r.r.revGuar.toFixed(2)],
@@ -1959,9 +1966,9 @@ const INS_VIEWS=[['policy','Policy'],['levels','Coverage levels'],['pays','What 
 const scoTop=c=>num(c.scoTop)??(+c.year>=2027?90:86); // SCO covers up to 90% starting 2027, 86% before
 // o: {cov, harvest, yield (bu/ac), cntyPct (county revenue or yield as a share of expected)}
 function insCalc(c,o={}){
-  const t=c.insType,ac=n0(c.acres),aph=n0(c.aph),cov=num(o.cov)??n0(c.coverage),p=n0(c.projPrice);
+  const t=c.insType,ac=n0(c.acres),aph=n0(c.aph),cov=num(o.cov)??n0(c.coverage),p=n0(projOf(c));
   if(!t||t==='None'||!ac||!aph||!p||!cov)return null;
-  const h=num(o.harvest)??num(c.harvestPrice)??p,y=num(o.yield)??aph,cp=num(o.cntyPct)??y/aph;
+  const h=num(o.harvest)??harvOf(c)??p,y=num(o.yield)??aph,cp=num(o.cntyPct)??y/aph;
   const gBu=ac*aph*cov/100,gPrice=t==='RP'?Math.max(p,h):p,guar=gBu*gPrice;
   const base=t==='YP'?Math.max(0,gBu-ac*y)*p:Math.max(0,guar-ac*y*h);
   // SCO and ECO pay on the county's loss, not the farm's: band from the lower to the upper coverage level
@@ -1985,7 +1992,7 @@ function tabInsurance(f){
   const list=f.crops.filter(c=>+c.year===+S.year);
   if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div><div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
   const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None',view=S.insView||'policy',cov=n0(sel.coverage);
-  if(!S.insEst||S.insEst.id!==sel.id){const p=num(sel.projPrice),h=num(sel.harvestPrice);S.insEst={id:sel.id,y:100,h:p&&h?Math.max(-40,Math.min(40,Math.round((h/p-1)*20)*5)):0,c:null}}
+  if(!S.insEst||S.insEst.id!==sel.id){const p=projOf(sel),h=harvOf(sel);S.insEst={id:sel.id,y:100,h:p&&h?Math.max(-40,Math.min(40,Math.round((h/p-1)*20)*5)):0,c:null}}
   const chip=(k,v,label)=>`<button class="chip" data-ichip="${k}" data-v="${v}" aria-pressed="${String(sel[k]??'')===String(v)}">${label}</button>`;
   const fld=(k,label,ph='')=>{const v=k.includes('.')?(sel[k.split('.')[0]]||{})[k.split('.')[1]]:sel[k];
     return`<label class="pf"><span>${label}</span><input class="iinp" id="ii_${sel.id}_${k.replace('.','_')}" data-k="${k}" type="number" step="any" inputmode="decimal" value="${v??''}" placeholder="${ph}"></label>`};
@@ -2000,8 +2007,9 @@ function tabInsurance(f){
     <div class="chips">${[50,55,60,65,70,75,80,85].map(v=>chip('coverage',v,v+'%')).join('')}</div>
     <div class="clab">Units</div>
     <div class="chips">${['Basic','Optional','Enterprise'].map(v=>chip('unitType',v,v)).join('')}</div>
-    <div class="pgrid">${fld('acres','Acres')}${fld('aph','APH (bu/ac)')}${fld('projPrice','Projected price ($/bu)','RMA projected')}${sel.insType!=='YP'?fld('harvestPrice','Harvest price ($/bu)','once published'):''}
+    <div class="pgrid">${fld('acres','Acres')}${fld('aph','APH (bu/ac)')}${fld('projPrice','Projected price ($/bu)',rmaFor(sel)&&rmaFor(sel).proj!=null?rmaFor(sel).proj.toFixed(2):'RMA projected')}${sel.insType!=='YP'?fld('harvestPrice','Harvest price ($/bu)',rmaFor(sel)&&rmaFor(sel).harvDays?rmaFor(sel).harv.toFixed(2):'once published'):''}
       ${fld('premBy.'+cov,`Premium at ${cov}% ($/ac)`,'your cost')}</div>
+    ${rmaNote(sel)}
     <div id="insResult">${insResult(f,sel)}</div>
     <details class="ipol"${sel.insCompany||sel.insAgent||sel.policyNo?'':' open'}><summary>Policy details${sel.insCompany?` · ${esc(sel.insCompany)}`:''}${sel.policyNo?` · #${esc(sel.policyNo)}`:''}</summary>
       <div class="pgrid">${tfld('insCompany','Insurance company')}${tfld('insAgent','Agent','name and phone')}${tfld('policyNo','Policy number')}</div></details>`
@@ -2014,7 +2022,7 @@ function tabInsurance(f){
     <p class="muted" style="font-size:.82rem;margin:-4px 0 12px">From your agent's quote (what you pay, after subsidy).</p>
     <div class="pgrid">${[70,75,80,85].map(v=>fld('premBy.'+v,v+'% ($/ac)')).join('')}</div>
     <div id="insLv">${insLevels(sel)}</div>`;
-  else if(view==='pays'){const e=S.insEst,p=n0(sel.projPrice);
+  else if(view==='pays'){const e=S.insEst,p=n0(projOf(sel));
     body=`<div class="pgrid2 iest">
       <label class="pf"><span>Your yield · <b id="iest_y_o">${e.y}% of APH · ${(n0(sel.aph)*e.y/100).toFixed(0)} bu/ac</b></span><input class="iest" data-e="y" type="range" min="30" max="130" step="5" value="${e.y}"></label>
       <label class="pf"><span>Harvest price · <b id="iest_h_o">${usd(p*(1+e.h/100))} (${e.h>0?'+':''}${e.h}%)</b></span><input class="iest" data-e="h" type="range" min="-40" max="40" step="5" value="${e.h}"></label></div>
@@ -2049,7 +2057,16 @@ function tabInsurance(f){
   <p><b>Revenue guarantee</b> = acres × APH × coverage × guarantee price. RP uses the higher of the projected and harvest price; RP-HPE and YP use the projected price. A policy pays the guarantee minus acres × your yield × harvest price (YP: bushels short × projected price).</p>
   <p><b>SCO and ECO</b> pay on the county's revenue (or yield for YP) falling below the top of their band, in full once it reaches the bottom. Starting with 2027 crops, SCO covers up to 90%.</p>
   <p><b>PLC</b> = (reference price − higher of season price and loan rate) × PLC yield × 85% of base acres. <b>ARC-CO</b> pays 90% of benchmark revenue minus county yield × that price, capped at 12% of benchmark, × 85% of base acres. FSA pays in October after the marketing year, before sequestration and payment limits.</p>
+  <p><b>Corn and soybean prices</b> fill in automatically each evening, the way RMA figures them: the projected price is February's average of December corn / November soybean futures, the harvest price is October's average. Until October ends the harvest price is the average so far. A price you type in always wins. Wheat prices depend on class and state, so enter those from your agent.</p>
   <p>Every crop is treated as one unit. These are planning estimates, not policy terms. Your agent and FSA office have the official numbers.</p></details>`}
+// where the projected and harvest prices come from, with a one-tap way back to RMA's numbers if someone typed their own
+function rmaNote(sel){
+  const r=rmaFor(sel),sym=r&&r.symbol?symLabel(r.symbol):'';
+  if(!r||r.proj==null)return['corn','soybeans'].includes(key(sel.crop))?'':`<p class="muted rmanote">Enter ${esc(sel.crop.toLowerCase())}'s projected and harvest prices from your agent. They depend on the wheat class and state.</p>`;
+  const typedP=num(sel.projPrice),typedH=num(sel.harvestPrice),diffP=typedP!=null&&Math.abs(typedP-r.proj)>=.005,diffH=typedH!=null&&r.harvFinal&&r.harv!=null&&Math.abs(typedH-r.harv)>=.005;
+  const harv=r.harvDays?(r.harvFinal?`Harvest price <b>${usd(r.harv)}</b> (October average)`:`Harvest price so far <b>${usd(r.harv)}</b>, October average of ${r.harvDays} trading day${r.harvDays>1?'s':''}, final Nov 1`):'Harvest price is the October average and fills in starting October 1';
+  return`<p class="muted rmanote">RMA prices from ${sym||'new-crop'} futures: projected <b>${usd(r.proj)}</b> (February average${r.projFinal?'':', so far'}). ${harv}.
+    ${diffP||diffH?`<button class="link" data-act="userma">Use RMA price${diffP&&diffH?'s':''} instead of the typed one${diffP&&diffH?'s':''}</button>`:''}</p>`}
 function insHead(f,sel){
   const all=f.crops.filter(c=>+c.year===+S.year).map(c=>insCalc(c)).filter(Boolean),totG=all.reduce((a,r)=>a+r.guar,0),totP=all.reduce((a,r)=>a+r.prem,0),r=insCalc(sel);
   return`<div class="cckpi ikpi"><div><span>${esc(sel.crop)} guarantee</span><b>${r?usd(r.guar,0):'—'}</b><em>${r?usd(r.guar/r.ac)+' per acre':'set up the policy'}</em></div>
@@ -2066,7 +2083,7 @@ function insResult(f,sel){
     <div class="${tone}"><span>Contracted vs insured</span><b>${sh==null?'—':pct(sh)}</b></div></div>
   <p class="muted" style="font-size:.76rem;margin:6px 0 0">${sh!=null&&sh>1?'More is contracted than insured. A short crop could leave contracts unfilled.':sh!=null&&sh>0.8?'Contracts are close to the insured bushels.':'Contracts are within insured bushels.'}</p>`}
 function insLevels(sel){
-  const p=n0(sel.projPrice),aph=n0(sel.aph),pb=sel.premBy||{};let prev=null;
+  const p=n0(projOf(sel)),aph=n0(sel.aph),pb=sel.premBy||{};let prev=null;
   const rows=[70,75,80,85].map(v=>{const r=insCalc(sel,{cov:v,harvest:p,yield:aph});if(!r)return'';const g=r.guar/r.ac,pr=num(pb[v]);
     const eff=prev&&pr!=null&&prev.pr!=null&&pr>prev.pr?(g-prev.g)/(pr-prev.pr):null;prev={g,pr};
     return`<tr class="${v===n0(sel.coverage)?'cur':''}"><td><b>${v}%</b>${v===n0(sel.coverage)?' <span class="tag bin">current</span>':''}</td><td class="n">${(aph*v/100).toFixed(0)} bu</td><td class="n">${usd(g)}</td>
@@ -2075,7 +2092,7 @@ function insLevels(sel){
   return`<div class="tablewrap" style="margin-top:18px"><table class="ilv"><thead><tr><th>Level</th><th class="n">Pays below</th><th class="n">Guarantee /ac</th><th class="n">Premium /ac</th><th class="n">After premium</th><th class="n" title="Extra guarantee per extra $1 of premium vs the level above">Per extra $1</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
   <p class="muted" style="font-size:.76rem;margin:8px 0 0">At the projected price. "Pays below" is the yield where ${sel.insType==='YP'?'the policy':'the policy (at an unchanged price)'} starts to pay. "Per extra $1" is how much more guarantee each added premium dollar buys compared with the level before it.</p>`}
 function insEstOut(sel){
-  const e=S.insEst,p=n0(sel.projPrice),h=p*(1+e.h/100),y=n0(sel.aph)*e.y/100,r=insCalc(sel,{harvest:h,yield:y,cntyPct:(e.c??e.y)/100});if(!r)return'';
+  const e=S.insEst,p=n0(projOf(sel)),h=p*(1+e.h/100),y=n0(sel.aph)*e.y/100,r=insCalc(sel,{harvest:h,yield:y,cntyPct:(e.c??e.y)/100});if(!r)return'';
   const cpa=costOf(sel),withIns=(r.crop+r.net)/r.ac,tone=cpa?withIns>=cpa?'p-gain':'p-loss':'';
   return`<div class="clab" style="text-align:center">Insurance would pay</div><div class="bebig">${usd(r.pay,0)}</div>
     <div class="muted" style="text-align:center">${usd(r.pay/r.ac)} per acre${r.prem?` · ${usd(r.net,0)} after ${usd(r.prem,0)} premium`:' · add premiums to see the net'}</div>
@@ -2083,7 +2100,7 @@ function insEstOut(sel){
       <div><span>Crop value at that price</span><b>${usd(r.crop/r.ac)}/ac</b></div></div>
     <div class="mkt"><div><span>Revenue without insurance</span><b>${usd(r.crop/r.ac)}/ac</b></div><div class="${tone}"><span>With insurance, after premium</span><b>${usd(withIns)}/ac</b></div><div><span>Cost of production</span><b>${cpa?usd(cpa)+'/ac':'—'}</b></div></div>`}
 function insGrid(sel){
-  const p=n0(sel.projPrice),aph=n0(sel.aph),ys=[50,60,70,80,90,100,110],hs=[-30,-20,-10,0,10,20,30];if(!insCalc(sel))return'';
+  const p=n0(projOf(sel)),aph=n0(sel.aph),ys=[50,60,70,80,90,100,110],hs=[-30,-20,-10,0,10,20,30];if(!insCalc(sel))return'';
   const v=ys.map(y=>hs.map(d=>{const r=insCalc(sel,{harvest:p*(1+d/100),yield:aph*y/100});return r.net/r.ac})),mx=Math.max(1,...v.flat().map(Math.abs));
   return`<div class="tablewrap"><table class="heat"><thead><tr><th>Yield ↓ / Harvest price →</th>${hs.map(d=>`<th class="n">${usd(p*(1+d/100))}<div class="muted" style="font-weight:400">${d?(d>0?'+':'')+d+'%':'projected'}</div></th>`).join('')}</tr></thead><tbody>
     ${ys.map((y,i)=>`<tr><td><b>${y}%</b> <span class="muted">${(aph*y/100).toFixed(0)} bu/ac</span></td>${v[i].map(x=>`<td class="n" style="background:color-mix(in srgb,${x<0?'var(--bad)':'var(--good)'} ${Math.round(Math.abs(x)/mx*28)}%,var(--surface))">${usd(x,0)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
@@ -2109,7 +2126,7 @@ function insRefresh(){const f=S.farms[S.current],sel=insSel();if(!f||!sel)return
   const set=(id,fn)=>{const el=document.getElementById(id);if(el)el.innerHTML=fn()};
   set('insHead',()=>insHead(f,sel));set('insResult',()=>insResult(f,sel));set('insLv',()=>insLevels(sel));set('insEst',()=>insEstOut(sel));set('insGrid',()=>insGrid(sel));set('insAdd',()=>insAddOut(sel));set('fsaOut',()=>fsaOut(sel))}
 document.addEventListener('input',e=>{const t=e.target;if(!t.classList)return;const sel=insSel();if(!sel)return;
-  if(t.classList.contains('iest')){const k=t.dataset.e,p=n0(sel.projPrice);S.insEst[k]=+t.value;
+  if(t.classList.contains('iest')){const k=t.dataset.e,p=n0(projOf(sel));S.insEst[k]=+t.value;
     const o={y:()=>`${t.value}% of APH · ${(n0(sel.aph)*t.value/100).toFixed(0)} bu/ac`,h:()=>`${usd(p*(1+t.value/100))} (${t.value>0?'+':''}${t.value}%)`,c:()=>`${t.value}% of expected`}[k],el=$('#iest_'+k+'_o');if(el)el.textContent=o();
     if(k==='y'&&S.insEst.c==null){const c=$('.iest[data-e="c"]');if(c)c.value=t.value}
     // the estimator's sliders only redraw the result, never the page
@@ -2120,7 +2137,9 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList)return;co
   if(sub){sel[k]=sel[k]||{};if(v==null)delete sel[k][sub];else sel[k][sub]=v}else if(v==null)delete sel[k];else sel[k]=v;
   S.insDirty=true;insRefresh()});
 document.addEventListener('change',e=>{const c=e.target.classList;if(c&&(c.contains('iinp')||c.contains('itxt'))&&S.insDirty){S.insDirty=false;persist(S.current)}});
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip],[data-insview],[data-act="iestlink"]');if(!t||t.closest('dialog'))return;
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip],[data-insview],[data-act="iestlink"],[data-act="userma"]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.act==='userma'){const sel=insSel(),r=sel&&rmaFor(sel);if(!r)return;
+    if(num(sel.projPrice)!=null&&r.proj!=null)delete sel.projPrice;if(num(sel.harvestPrice)!=null&&r.harvFinal)delete sel.harvestPrice;persist(S.current);return}
   if(t.dataset.inscrop){S.insCrop=t.dataset.inscrop;render();return}
   if(t.dataset.insview){S.insView=t.dataset.insview;render();return}
   if(t.dataset.act==='iestlink'){S.insEst.c=null;render();return}

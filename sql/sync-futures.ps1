@@ -51,10 +51,34 @@ if ($fci -and $fci.Count -gt 0) {
     hist = @($f | ForEach-Object { [math]::Round([double]$_.FCI_VALUE, 3) }) }
 }
 
+# RMA crop insurance prices for corn and soybeans (spring-planted, Midwest price-discovery windows):
+# projected = average of February settles, harvest = average of October settles, of December corn / November soybeans.
+# Rounded to the cent like RMA. "final" once the month is over; before that it is the average so far.
+$yr = (Get-Date).Year; $today = (Get-Date).ToString('yyyy-MM-dd')
+$rmaSyms = @(($yr - 1)..($yr + 1) | ForEach-Object { $yy = '{0:d2}' -f ($_ % 100); "'ZCZ$yy'"; "'ZSX$yy'" }) -join ','
+$rmaRows = Invoke-Snow @"
+WITH s AS (SELECT DATE, SYMBOL, PRICE_CENTS FROM JSA.BASIS_TRACKER.FUTURES_PRICES WHERE SYMBOL IN ($rmaSyms)
+           QUALIFY ROW_NUMBER() OVER (PARTITION BY DATE, SYMBOL ORDER BY CAPTURED_AT DESC) = 1)
+SELECT SYMBOL, 2000 + RIGHT(SYMBOL,2)::INT AS YR,
+  AVG(IFF(LEFT(DATE,7) = '20' || RIGHT(SYMBOL,2) || '-02', PRICE_CENTS, NULL)) / 100 AS PROJ,
+  COUNT(IFF(LEFT(DATE,7) = '20' || RIGHT(SYMBOL,2) || '-02', 1, NULL)) AS PROJ_DAYS,
+  AVG(IFF(LEFT(DATE,7) = '20' || RIGHT(SYMBOL,2) || '-10', PRICE_CENTS, NULL)) / 100 AS HARV,
+  COUNT(IFF(LEFT(DATE,7) = '20' || RIGHT(SYMBOL,2) || '-10', 1, NULL)) AS HARV_DAYS
+FROM s GROUP BY SYMBOL
+"@
+$rma = [ordered]@{}
+foreach ($r in @($rmaRows)) {
+  $y = [string]$r.YR; $crop = if ($r.SYMBOL -like 'ZC*') { 'corn' } else { 'soybeans' }
+  if (-not $rma.Contains($y)) { $rma[$y] = [ordered]@{} }
+  $rma[$y][$crop] = [ordered]@{ symbol = $r.SYMBOL
+    proj = if ($r.PROJ -ne $null) { [math]::Round([double]$r.PROJ, 2) } else { $null }; projDays = [int]$r.PROJ_DAYS; projFinal = ($today -ge "$y-03-01")
+    harv = if ($r.HARV -ne $null) { [math]::Round([double]$r.HARV, 2) } else { $null }; harvDays = [int]$r.HARV_DAYS; harvFinal = ($today -ge "$y-11-01") }
+}
+
 $doc = [ordered]@{
   asOf = $asOf; prevDate = $prevDate; syncedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  source = 'JSA.BASIS_TRACKER.FUTURES_PRICES'; prices = $prices; prev = $prev; hist = $hist; fci = $fciDoc
+  source = 'JSA.BASIS_TRACKER.FUTURES_PRICES'; prices = $prices; prev = $prev; hist = $hist; fci = $fciDoc; rma = $rma
 }
 $out = Join-Path $outDir 'market-futures.json'
 [System.IO.File]::WriteAllText($out, ($doc | ConvertTo-Json -Depth 5 -Compress), (New-Object System.Text.UTF8Encoding $false))
-"asOf=$asOf prev=$prevDate contracts=$($prices.Count) fci=$(if($fciDoc){$fciDoc.asOf}else{'none'}) bytes=$((Get-Item $out).Length) file=$out"
+"asOf=$asOf prev=$prevDate contracts=$($prices.Count) fci=$(if($fciDoc){$fciDoc.asOf}else{'none'}) rma=$(($rma.Keys | ForEach-Object { $k=$_; "$k corn $($rma[$k].corn.proj)/$($rma[$k].corn.harv) soy $($rma[$k].soybeans.proj)/$($rma[$k].soybeans.harv)" }) -join '; ') bytes=$((Get-Item $out).Length) file=$out"
