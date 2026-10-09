@@ -423,6 +423,24 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 @media (max-width:760px){.dhead{display:none}
   .drow{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"name name flag" "sold prof ins" "due due due";row-gap:10px}
   .dname{grid-area:name}.dsold{grid-area:sold}.dprof{grid-area:prof}.dins{grid-area:ins}.ddue{grid-area:due}.dflag{grid-area:flag}}
+/* client report: a sheet of paper on screen, mirrored in the PDF */
+.rptnote{margin-bottom:14px;max-width:816px} .rptnote textarea{font:1rem var(--f-body);padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);resize:vertical}
+.paper{background:#fff;color:#17201A;max-width:816px;overflow-x:auto;padding:36px 40px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.06);font-size:.84rem}
+.paper .muted{color:#5A675E}
+.rhead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #1D6A4D;padding-bottom:10px;margin-bottom:12px}
+.rhead h3{margin:0;font:800 1.5rem/1.1 var(--f-display)} .rr{text-align:right;font-size:.8rem}
+.rkpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rkpi>div{background:#EEF3EC;border-radius:6px;padding:8px 10px;display:grid;gap:1px;min-width:0}
+.rkpi span{font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:#5A675E;font-weight:700} .rkpi b{font-size:1.2rem;font-variant-numeric:tabular-nums}
+.rkpi em{font-style:normal;font-size:.68rem;color:#5A675E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paper h4{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:#5A675E;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid #D6DED6}
+.rtab{font-size:.8rem} .rtab th{font-size:.62rem;padding:4px 6px;color:#5A675E;border-color:#D6DED6} .rtab td{padding:6px;border-color:#D6DED6}
+.rtab td.neg{color:#AE3D2B} .rtab td.pos{color:#2C7A4C} .rtab small{font-size:.72rem;color:#5A675E} .rtab .dbar{margin-bottom:3px;background:#EEF3EC}
+.rcols{display:grid;grid-template-columns:1fr 1fr;gap:20px} .rcols ul{margin:0;padding-left:16px;display:grid;gap:4px;font-size:.78rem}
+.rcols li.bad::marker{color:#AE3D2B} .rcols li.warn::marker{color:#B5862B}
+.rnote{white-space:pre-wrap;margin:0;font-size:.86rem}
+.rfoot{margin:22px 0 0;padding-top:8px;border-top:1px solid #D6DED6;font-size:.68rem;color:#5A675E}
+@media (max-width:640px){.paper{padding:18px 14px}.rkpi{grid-template-columns:repeat(2,minmax(0,1fr))}.rcols{grid-template-columns:1fr}.rhead{flex-direction:column}.rr{text-align:left}}
 /* number boxes: no up/down arrows, so a stray click can't change a price */
 input[type=number]{-moz-appearance:textfield;appearance:textfield}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -618,7 +636,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',bidHome:d.bidHome||null,sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',bidHome:d.bidHome||null,sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],reportNote:d.reportNote||'',updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -1207,7 +1225,7 @@ function renderFarm(f){
     <h1>${esc(f.name)}${sec!=='home'?` <span class="muted" style="font-weight:600">· ${esc(sd.label)}</span>`:''} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.owner?`<span class="muted" style="font-size:.85rem">Broker: <b style="color:var(--ink)">${esc(f.broker||'Unassigned')}</b></span>`:''}
-    <button class="small" data-act="rename">${S.owner?'Edit details':'Farm details'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
+    <button class="small" data-section="report">Client report</button><button class="small" data-act="rename">${S.owner?'Edit details':'Farm details'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
   ${nav}${body}`}
 const TAB_FN={overview:f=>tabOverview(f),production:f=>tabProduction(f),storage:f=>tabStorage(f),sales:f=>tabSales(f),optimizer:f=>tabOptimizer(f),insurance:f=>tabInsurance(f),quotes:f=>tabQuotes(f)};
 const SECTIONS={
@@ -1215,7 +1233,8 @@ const SECTIONS={
   insurance:{label:'Crop insurance',fn:f=>tabInsurance(f)},
   quotes:{label:'Quotes',fn:f=>tabQuotes(f)},
   weather:{label:'Weather',fn:f=>tabWeather(f)},
-  intel:{label:'Intel',fn:f=>tabIntel(f)}};
+  intel:{label:'Intel',fn:f=>tabIntel(f)},
+  report:{label:'Client report',fn:f=>tabReport(f)}};
 // which section a tab lives in, so links like "Go to Production" land in the right place
 const sectionOfTab=t=>t==='insurance'?'insurance':t==='quotes'?'quotes':'marketing';
 const ICONS={
@@ -2252,6 +2271,121 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   if(k==='insType'&&v!=='None'&&num(sel.coverage)==null)sel.coverage=80;
   if(k==='coverage'&&n0(sel.eco)&&n0(sel.eco)<=Math.max(scoTop(sel),v))delete sel.eco;
   persist(S.current)});
+
+/* ---------- one-page client report (on screen + PDF) ---------- */
+// everything the report shows, figured once so the screen and the PDF always match
+function reportData(f){
+  const id=Object.keys(S.farms).find(k=>S.farms[k]===f)||S.current,D=dashFarm(id,'');
+  const crops=D.rows.filter(r=>r.plan||r.sold||r.hedged).map(r=>{const pl=r.plan||{},m=r.plan?cropMarket(f,r):null,ins=pl.insType&&pl.insType!=='None';
+    return{crop:r.crop,acres:num(pl.acres),yld:r.yld||null,exp:r.expected,sold:r.sold,hed:r.hedged,sp:r.expected?r.sold/r.expected:null,hp:r.expected?r.hedged/r.expected:null,
+      avg:r.avg,be:r.be,mkt:m?m.mkt:null,ppa:m&&m.full?m.ppa:null,profit:m&&m.full?m.profit:null,
+      ins:ins?{plan:pl.insType,cov:n0(pl.coverage),guar:r.revGuar,insured:r.insured,share:r.insured?r.sold/r.insured:null}:null}});
+  const acres=crops.reduce((a,c)=>a+n0(c.acres),0),withP=crops.filter(c=>c.profit!=null),profit=withP.length?withP.reduce((a,c)=>a+c.profit,0):null;
+  const pAc=withP.reduce((a,c)=>a+n0(c.acres),0),guar=crops.reduce((a,c)=>a+(c.ins?c.ins.guar:0),0);
+  const soon=[...deadlinesFor(f).map(x=>({d:x.d,t:x.title})),...deliveries(f).filter(d=>!d.st.done&&d.deliveryEnd>=TODAY).map(d=>({d:d.deliveryEnd,t:`${d.crop} delivery to ${d.buyer||'buyer'} closes (${bu(remaining(d))} bu left)`}))]
+    .filter(x=>daysUntil(x.d)<=60).sort((a,b)=>a.d.localeCompare(b.d));
+  const attn=D.items.slice().sort((a,b)=>(a.c==='bad'?0:1)-(b.c==='bad'?0:1));
+  return{f,crops,exp:D.exp,sold:D.sold,hed:D.hed,acres,profit,ppa:pAc?profit/pAc:null,guar,soon,attn,
+    asOf:S.market&&S.market.asOf||null,made:TODAY}}
+const RPT_MAX=6;
+function tabReport(f){
+  const R=reportData(f),c=R.crops;
+  const kpis=[['Expected bushels',R.exp?bu(R.exp):'—',`${c.length} crop${c.length===1?'':'s'}${R.acres?` · ${bu(R.acres)} acres`:''}`],
+    ['Sold',R.exp?pct(R.sold/R.exp):'—',R.exp?`${pct((R.sold+R.hed)/R.exp)} with hedges`:''],
+    ['Est. profit',kfmt(R.profit),R.ppa!=null?`${usd(R.ppa,0)}/ac at today's market`:'needs futures and basis'],
+    ['Revenue guarantee',R.guar?kfmt(R.guar):'—','crop insurance']];
+  return`<section><div class="sechead"><div><h2>Client report</h2><div class="muted" style="font-size:.82rem;margin-top:2px">One page for meetings or email. Add a note, then download the PDF.</div></div><div class="sp"></div>
+    ${S.downloads?`<button class="primary" data-act="rptpdf"${S.rptBusy?' disabled':''}>${S.rptBusy?'Making PDF…':'Download PDF'}</button>`:'<span class="muted" style="font-size:.82rem">PDF download isn\'t available in this view</span>'}</div>
+  <label class="pf rptnote"><span>Advisor's note (goes on the report)</span><textarea id="rptNote" rows="3" maxlength="700" placeholder="e.g. Corn is 48% sold. Plan: add 10% on a rally to $5.30 December futures and review puts before harvest.">${esc(f.reportNote||'')}</textarea></label>
+  <div class="paper">
+    <div class="rhead"><div><h3>${esc(f.name)}</h3><div class="muted">${[locLabel(f),f.broker?'Broker: '+f.broker:''].filter(Boolean).map(esc).join(' · ')}</div></div>
+      <div class="rr"><b>${S.year} crop marketing report</b><div class="muted">${fmtDate(R.made)}${R.asOf?` · prices as of ${fmtDate(R.asOf)}`:''}</div></div></div>
+    <div class="rkpi">${kpis.map(([l,v,s])=>`<div><span>${l}</span><b>${v}</b><em>${s}</em></div>`).join('')}</div>
+    <h4>Marketing position</h4>
+    ${c.length?`<table class="rtab"><thead><tr><th>Crop</th><th class="n">Acres</th><th class="n">Yield</th><th class="n">Expected bu</th><th>Sold · hedged</th><th class="n">Avg sold</th><th class="n">Break-even</th><th class="n">Market</th><th class="n">Profit/ac</th></tr></thead><tbody>
+      ${c.map(x=>`<tr><td><b>${esc(x.crop)}</b></td><td class="n">${x.acres?bu(x.acres):'—'}</td><td class="n">${x.yld?x.yld.toFixed(0):'—'}</td><td class="n">${x.exp?bu(x.exp):'—'}</td>
+        <td><div class="dbar"><i class="s" style="width:${Math.min(100,(x.sp||0)*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-(x.sp||0)*100,(x.hp||0)*100)).toFixed(1)}%"></i></div><small>${x.sp==null?'—':pct(x.sp)}${x.hed?` · ${pct(x.hp)}`:''}</small></td>
+        <td class="n">${x.avg!=null?usd(x.avg):'—'}</td><td class="n">${x.be!=null?usd(x.be):'—'}</td><td class="n">${x.mkt!=null?usd(x.mkt):'—'}</td>
+        <td class="n ${x.ppa==null?'':x.ppa<0?'neg':'pos'}"><b>${x.ppa!=null?usd(x.ppa,0):'—'}</b></td></tr>`).join('')}</tbody></table>`
+      :'<p class="muted">No crops set up for this year yet.</p>'}
+    <h4>Crop insurance</h4>
+    ${c.some(x=>x.ins)?`<table class="rtab"><thead><tr><th>Crop</th><th>Plan</th><th class="n">Coverage</th><th class="n">Revenue guarantee</th><th class="n">Insured bu</th><th class="n">Contracted of insured</th></tr></thead><tbody>
+      ${c.filter(x=>x.ins).map(x=>`<tr><td><b>${esc(x.crop)}</b></td><td>${esc(x.ins.plan)}</td><td class="n">${x.ins.cov}%</td><td class="n">${usd(x.ins.guar,0)}</td><td class="n">${bu(x.ins.insured)}</td>
+        <td class="n ${x.ins.share!=null&&x.ins.share>1?'neg':''}"><b>${x.ins.share==null?'—':pct(x.ins.share)}</b></td></tr>`).join('')}</tbody></table>`
+      :'<p class="muted">No crop insurance recorded.</p>'}
+    <div class="rcols"><div><h4>Coming up · next 60 days</h4>${R.soon.length?`<ul>${R.soon.slice(0,RPT_MAX).map(x=>`<li><b>${fmtDate(x.d)}</b> ${esc(x.t)}</li>`).join('')}</ul>`:'<p class="muted">Nothing due in the next 60 days.</p>'}</div>
+      <div><h4>Watch list</h4>${R.attn.length?`<ul>${R.attn.slice(0,RPT_MAX).map(x=>`<li class="${x.c}">${esc(x.t)}</li>`).join('')}</ul>`:'<p class="muted">Nothing flagged.</p>'}</div></div>
+    ${f.reportNote?`<h4>Advisor's note</h4><p class="rnote">${esc(f.reportNote)}</p>`:''}
+    <p class="rfoot">Estimates from this farm's records and futures prices${R.asOf?` as of ${fmtDate(R.asOf)}`:''}, with your estimated basis. Not a guarantee of prices or insurance terms.</p>
+  </div></section>`}
+// saving the note: on change (leaving the box), not every keystroke
+document.addEventListener('change',e=>{if(e.target.id!=='rptNote')return;const f=S.farms[S.current];if(!f)return;const v=e.target.value.trim();if(v===(f.reportNote||''))return;f.reportNote=v;persist(S.current)});
+
+// PDF: drawn as real text and shapes (sharp at any zoom), letter size, one page
+let jspdfP=null;
+const loadJsPDF=()=>jspdfP||(jspdfP=new Promise((res,rej)=>{if(window.jspdf)return res(window.jspdf.jsPDF);
+  const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s.onload=()=>window.jspdf?res(window.jspdf.jsPDF):rej(new Error('load'));s.onerror=()=>{jspdfP=null;rej(new Error('load'))};document.head.appendChild(s)}));
+async function reportPdf(f){
+  const note=$('#rptNote');if(note&&note.value.trim()!==(f.reportNote||'')){f.reportNote=note.value.trim();persist(S.current)}
+  const JsPDF=await loadJsPDF(),R=reportData(f),doc=new JsPDF({unit:'pt',format:'letter'});
+  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...');
+  const INK=[23,32,26],MUTED=[90,103,94],ACC=[29,106,77],GRAIN=[181,134,43],BAD=[174,61,43],GOOD=[44,122,76],LINE=[214,222,214],SOFT=[238,243,236];
+  const W=612,M=40,CW=W-2*M;let y=48;
+  const txt=(s,x,yy,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||9);doc.setTextColor(...(o.c||INK));doc.text(T(s),x,yy,{align:o.a||'left',maxWidth:o.w})};
+  const rule=yy=>{doc.setDrawColor(...LINE);doc.setLineWidth(.6);doc.line(M,yy,W-M,yy)};
+  const h4=s=>{y+=20;txt(s.toUpperCase(),M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=12};
+  // header
+  txt(R.f.name,M,y,{b:1,s:18});txt(`${S.year} crop marketing report`,W-M,y-4,{b:1,s:10,a:'right'});
+  txt(fmtDate(R.made)+(R.asOf?` · prices as of ${fmtDate(R.asOf)}`:''),W-M,y+9,{s:8,c:MUTED,a:'right'});
+  y+=15;txt([locLabel(R.f),R.f.broker?'Broker: '+R.f.broker:''].filter(Boolean).join(' · '),M,y,{s:9,c:MUTED});
+  y+=10;doc.setDrawColor(...ACC);doc.setLineWidth(1.5);doc.line(M,y,W-M,y);y+=12;
+  // headline numbers
+  const kp=[['EXPECTED BUSHELS',R.exp?bu(R.exp):'—',`${R.crops.length} crops${R.acres?` · ${bu(R.acres)} acres`:''}`],['SOLD',R.exp?pct(R.sold/R.exp):'—',R.exp?`${pct((R.sold+R.hed)/R.exp)} with hedges`:''],
+    ['EST. PROFIT',kfmt(R.profit),R.ppa!=null?`${usd(R.ppa,0)}/ac at today's market`:'needs futures and basis'],['REVENUE GUARANTEE',R.guar?kfmt(R.guar):'—','crop insurance']];
+  const kw=(CW-3*8)/4;kp.forEach(([l,v,s],i)=>{const x=M+i*(kw+8);doc.setFillColor(...SOFT);doc.roundedRect(x,y,kw,48,4,4,'F');
+    txt(l,x+9,y+13,{b:1,s:6.8,c:MUTED});txt(v,x+9,y+31,{b:1,s:15,c:i===2&&R.profit!=null?(R.profit<0?BAD:GOOD):INK});txt(s,x+9,y+42,{s:7,c:MUTED,w:kw-14})});
+  y+=48;
+  // table helper: cols [label, width, align]; cells are strings or {t, c(color), b(bold), bar:[sold,hedged]}
+  const table=(cols,rows)=>{let x=M;cols.forEach(([l,w,a])=>{txt(l,a==='right'?x+w-4:x+4,y,{b:1,s:7,c:MUTED,a:a||'left'});x+=w});y+=5;rule(y);y+=12;
+    rows.forEach(r=>{x=M;r.forEach((v,i)=>{const[ ,w,a]=cols[i],o=typeof v==='object'&&v?v:{t:v};
+      if(o.bar){const bw=w-56;doc.setFillColor(...SOFT);doc.roundedRect(x+4,y-6,bw,6,3,3,'F');const s=Math.min(1,o.bar[0]),h=Math.max(0,Math.min(1-s,o.bar[1]));
+        if(s>0){doc.setFillColor(...ACC);doc.rect(x+4,y-6,bw*s,6,'F')}if(h>0){doc.setFillColor(...GRAIN);doc.rect(x+4+bw*s,y-6,bw*h,6,'F')}txt(o.t,x+bw+8,y,{s:8})}
+      else txt(o.t,a==='right'?x+w-4:x+4,y,{s:8.5,b:o.b,c:o.c,a:a||'left'});x+=w});y+=6;rule(y);y+=12})};
+  h4('Marketing position');
+  if(R.crops.length)table([['Crop',62],['Acres',46,'right'],['Yield',40,'right'],['Expected bu',66,'right'],['Sold · hedged',116],['Avg sold',52,'right'],['Break-even',56,'right'],['Market',48,'right'],['Profit/ac',46,'right']],
+    R.crops.map(x=>[{t:x.crop,b:1},x.acres?bu(x.acres):'—',x.yld?x.yld.toFixed(0):'—',x.exp?bu(x.exp):'—',{bar:[x.sp||0,x.hp||0],t:x.sp==null?'—':pct(x.sp)+(x.hed?' · '+pct(x.hp):'')},
+      x.avg!=null?usd(x.avg):'—',x.be!=null?usd(x.be):'—',x.mkt!=null?usd(x.mkt):'—',{t:x.ppa!=null?usd(x.ppa,0):'—',b:1,c:x.ppa==null?INK:x.ppa<0?BAD:GOOD}]));
+  else{txt('No crops set up for this year yet.',M,y,{c:MUTED});y+=12}
+  h4('Crop insurance');
+  const ins=R.crops.filter(x=>x.ins);
+  if(ins.length)table([['Crop',80],['Plan',80],['Coverage',70,'right'],['Revenue guarantee',110,'right'],['Insured bu',90,'right'],['Contracted of insured',102,'right']],
+    ins.map(x=>[{t:x.crop,b:1},x.ins.plan,x.ins.cov+'%',usd(x.ins.guar,0),bu(x.ins.insured),{t:x.ins.share==null?'—':pct(x.ins.share),b:1,c:x.ins.share!=null&&x.ins.share>1?BAD:INK}]));
+  else{txt('No crop insurance recorded.',M,y,{c:MUTED});y+=12}
+  // two short lists side by side
+  const colW=(CW-20)/2,list=(title,items,x,y0)=>{let yy=y0+20;txt(title.toUpperCase(),x,yy,{b:1,s:8,c:MUTED});yy+=6;doc.setDrawColor(...LINE);doc.line(x,yy,x+colW,yy);yy+=12;
+    if(!items.length){txt('Nothing to show.',x,yy,{c:MUTED});return yy+12}
+    // a dot or a short date sits in its own little column; the text wraps beside it, two lines at most
+    items.slice(0,RPT_MAX).forEach(it=>{const off=it.dot?10:it.b?42:0;
+      if(it.dot){doc.setFillColor(...it.dot);doc.circle(x+3,yy-3,2.2,'F')}
+      if(it.b)txt(it.b,x,yy,{b:1,s:8.5});
+      doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...INK);
+      const lines=doc.splitTextToSize(T(it.t),colW-off);doc.text(lines.slice(0,2),x+off,yy);yy+=11*Math.min(2,lines.length)+3});return yy};
+  const shortD=d=>new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const y1=list('Coming up · next 60 days',R.soon.map(x=>({b:shortD(x.d),t:x.t})),M,y),
+    y2=list('Watch list',R.attn.map(x=>({t:x.t,dot:x.c==='bad'?BAD:GRAIN})),M+colW+20,y);
+  y=Math.max(y1,y2);
+  if(R.f.reportNote){h4("Advisor's note");const lines=doc.setFont('helvetica','normal').setFontSize(9.5).splitTextToSize(T(R.f.reportNote),CW);doc.setTextColor(...INK);doc.text(lines.slice(0,10),M,y);y+=12*Math.min(10,lines.length)}
+  // footer
+  rule(752);txt(`Estimates from this farm's records and futures prices${R.asOf?` as of ${fmtDate(R.asOf)}`:''}, with estimated basis. Not a guarantee of prices or insurance terms.`,M,764,{s:7,c:MUTED});
+  txt('Grain Marketing Desk',W-M,764,{s:7,c:MUTED,a:'right'});
+  return doc.output('blob')}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="rptpdf"]');if(!t)return;const f=S.farms[S.current];if(!f||!S.downloads||S.rptBusy)return;
+  S.rptBusy=true;render();
+  reportPdf(f).then(blob=>S.downloads.save({filename:`${f.name.replace(/[^\w\- ]+/g,'').trim()||'Farm'} ${S.year} report ${TODAY}.pdf`,data:blob}))
+    .then(()=>toast('Report saved'))
+    .catch(err=>{if(err&&err.code==='declined')return;toast(err&&err.message==='load'?"Couldn't load the PDF maker. Check your connection and try again.":"Couldn't make the PDF here.",true)})
+    .finally(()=>{S.rptBusy=false;render()})});
 
 /* ---------- intel: advisor posts ---------- */
 // posts live in market/intel (everyone reads, only the consultant writes); each post targets all clients, one state, or one broker's clients
