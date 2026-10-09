@@ -392,6 +392,37 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .ikpi{margin-bottom:14px} .ikpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.ikpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ikpi>div:last-child{grid-column:1/-1}}
 .ivtabs{margin-bottom:12px}
+/* consultant dashboard */
+.dkpi{grid-template-columns:repeat(5,minmax(0,1fr));margin:6px 0 10px}
+@media (max-width:900px){.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.dkpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.dkpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+.dgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:860px){.dgrid{grid-template-columns:minmax(0,1fr)}}
+.phead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.alist{list-style:none;margin:0;padding:0}
+.alist li{display:grid;grid-template-columns:8px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:.86rem}
+.alist li:last-child{border-bottom:0} .alist li[data-open]{cursor:pointer} .alist li[data-open]:hover{background:var(--soft)}
+.alist b{font-weight:650}
+.adot{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--muted)} .adot.bad{background:var(--bad)} .adot.warn{background:var(--warn)}
+.dlist{list-style:none;margin:0;padding:0}
+.drow,.dhead{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.4fr) 88px 92px minmax(0,1.2fr) 116px;gap:14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.dhead{padding:8px 16px;font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.drow{cursor:pointer} .drow:hover{background:var(--soft)} .drow:last-child{border-bottom:0}
+.dname{display:grid;gap:2px;min-width:0}
+.dsold,.ddue{display:grid;gap:4px;min-width:0}
+.dsold span,.dnum span,.ddue span{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsold span b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ddue b{font-size:.86rem;font-weight:600;font-variant-numeric:tabular-nums}
+.dbar{display:flex;height:8px;border-radius:99px;background:var(--soft);overflow:hidden} .dbar i{display:block;height:100%}
+.dbar .s{background:var(--accent)} .dbar .h{background:var(--grain)}
+.dnum{display:grid;gap:1px;text-align:right} .dnum b{font-variant-numeric:tabular-nums;font-weight:650}
+.dnum.pos b{color:var(--good)} .dnum.neg b{color:var(--bad)} .dnum.warn b{color:var(--warn)}
+.dflag{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+@media (max-width:760px){.dhead{display:none}
+  .drow{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"name name flag" "sold prof ins" "due due due";row-gap:10px}
+  .dname{grid-area:name}.dsold{grid-area:sold}.dprof{grid-area:prof}.dins{grid-area:ins}.ddue{grid-area:due}.dflag{grid-area:flag}}
 /* number boxes: no up/down arrows, so a stray click can't change a price */
 input[type=number]{-moz-appearance:textfield;appearance:textfield}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -1062,38 +1093,105 @@ function renderOnboard(){return`<form class="onboard" id="onboard"><h1>Set up yo
   <div class="fgrid"><label class="full">Farm or operation name<input id="ob_name" required placeholder="e.g. Miller Family Farms"></label></div>
   <div class="dlgfoot"><button class="primary" type="submit">Start tracking</button></div></form>`}
 
+/* ---------- consultant dashboard: every client at a glance ---------- */
+// one pass per farm for the chosen year (and crop, when one is picked)
+function dashFarm(id,crop){
+  const f=S.farms[id],rows=position(f,S.year).filter(r=>!crop||key(r.crop)===crop);
+  const exp=rows.reduce((a,r)=>a+r.expected,0),sold=rows.reduce((a,r)=>a+r.sold,0),hed=rows.reduce((a,r)=>a+r.hedged,0);
+  const mk=rows.filter(r=>r.plan).map(r=>({r,m:cropMarket(f,r)}));
+  // profit only when every bushel can be valued (today's futures + basis), so farms compare like for like
+  let profit=null,pac=0;mk.forEach(({r,m})=>{if(m.full&&m.profit!=null){profit=(profit||0)+m.profit;pac+=n0(r.plan.acres)}});
+  const insRows=rows.filter(r=>r.insured>0),insured=insRows.reduce((a,r)=>a+r.insured,0),insSold=insRows.reduce((a,r)=>a+r.sold,0);
+  const items=[],add=(c,t,d)=>items.push({c,t,d:d||'',id,farm:f.name});
+  // a crop filter keeps items about that crop plus ones not about any crop (bins, deadlines)
+  const aboutCrop=t=>{const l=t.toLowerCase();return!crop||l.startsWith(crop)||!SALE_CROPS.some(c=>l.startsWith(c.toLowerCase()))};
+  alerts(f,S.year).filter(a=>a.c!=='neutral'&&aboutCrop(a.t)).forEach(a=>add(a.c,a.t));
+  if(!SHOW_INSURANCE)rows.forEach(r=>{
+    if(r.insured>0&&r.sold>r.insured)add('bad',`${r.crop}: ${bu(r.sold)} bu contracted is above the ${bu(r.insured)} bu insured.`);
+    else if(r.plan&&(!r.plan.insType||r.plan.insType==='None')&&r.sold>0)add('warn',`${r.crop}: bushels are contracted but no crop insurance is recorded.`)});
+  mk.forEach(({r,m})=>{if(m.full&&m.ppa!=null&&m.ppa<0)add('warn',`${r.crop}: losing about ${usd(-m.ppa,0)}/ac at today's market.`)});
+  const own=deadlinesFor(f).filter(x=>x.kind!=='shared'&&aboutCrop(x.title));
+  own.filter(x=>x.kind==='farm'&&daysUntil(x.d)<=14).forEach(x=>add('warn',`${x.title} · ${fmtDate(x.d)}`,x.d));
+  const dl=deliveries(f).filter(d=>!d.st.done&&(!crop||key(d.crop)===crop)).map(d=>({d:d.deliveryEnd,title:`${d.crop} delivery to ${d.buyer||'buyer'}`}));
+  const next=[...own.map(x=>({d:x.d,title:x.title})),...dl].filter(x=>x.d>=TODAY).sort((a,b)=>a.d.localeCompare(b.d))[0]||null;
+  const shared=deadlinesFor(f).filter(x=>x.kind==='shared'&&daysUntil(x.d)<=30);
+  return{id,f,rows,exp,sold,hed,profit,ppa:pac?profit/pac:null,insured,insSold,items,next,shared,
+    bad:items.filter(i=>i.c==='bad').length,warn:items.filter(i=>i.c==='warn').length}}
+const DASH_SORTS=[['name','Name'],['sold','Least sold'],['profit','Lowest profit'],['due','Soonest due'],['flags','Most flags']];
 function renderClients(){
   const allIds=Object.keys(S.farms).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
   const brokers=brokerList(),hasUnassigned=allIds.some(id=>!S.farms[id].broker);
   // a remembered filter for a broker who no longer has farms falls back to all
-  const bf=(S.brokerF==='__none'&&hasUnassigned)||brokers.some(b=>key(b)===S.brokerF)?S.brokerF:'',_u=allIds.some(id=>!S.farms[id].broker);
+  const bf=(S.brokerF==='__none'&&hasUnassigned)||brokers.some(b=>key(b)===S.brokerF)?S.brokerF:'';
   const statesUsed=[...new Set(allIds.map(id=>S.farms[id].state).filter(Boolean))].sort(),sf=statesUsed.includes(S.stateF)?S.stateF:'';
-  const ids=allIds.filter(id=>!bf||(bf==='__none'?!S.farms[id].broker:key(S.farms[id].broker)===bf)).filter(id=>!sf||S.farms[id].state===sf);
-  const rows=ids.map(id=>{const f=S.farms[id];const p=position(f,S.year);
-    const exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0),hed=p.reduce((a,r)=>a+r.hedged,0);
-    const al=alerts(f,S.year);const bad=al.filter(a=>a.c==='bad').length,warn=al.filter(a=>a.c==='warn').length;
-    const next=deliveries(f).find(d=>!d.st.done);
-    return`<tr class="click" data-open="${esc(id)}"><td><b>${esc(f.name)}</b>${f.sample?' <span class="pill neutral">Sample</span>':''}<div class="muted" style="font-size:.78rem">${locLabel(f)?esc(locLabel(f))+' · ':''}${esc(p.map(r=>r.crop).join(', ')||'No crops yet')}</div></td>
-      <td>${f.broker?esc(f.broker):'<span class="muted">Unassigned</span>'}</td>
-      <td class="n">${exp?bu(exp):'—'}</td><td class="n">${exp?pct(sold/exp):'—'}</td><td class="n">${exp?pct((sold+hed)/exp):'—'}</td>
-      <td>${next?`${fmtDate(next.deliveryEnd)} <span class="pill ${next.st.c}">${next.st.t}</span>`:'<span class="muted">None open</span>'}</td>
-      <td>${bad?`<span class="pill bad">${bad} critical</span> `:''}${warn?`<span class="pill warn">${warn} watch</span>`:''}${!bad&&!warn?'<span class="pill good">Clear</span>':''}</td>
-      <td class="muted" style="font-size:.8rem;white-space:nowrap">${f.updatedAt?fmtDate(f.updatedAt.slice(0,10)):'—'}</td></tr>`}).join('');
-  const yrs=[...new Set([THIS_YEAR,THIS_YEAR+1,THIS_YEAR-1,...ids.flatMap(id=>years(S.farms[id]))])].sort((a,b)=>b-a);
-  return`<div class="farmhead"><div><div class="label">Consultant view</div><h1>Client farms</h1></div><div class="sp"></div>
+  const crop=['corn','soybeans','wheat'].includes(S.dashCrop)?S.dashCrop:'',cropName=crop?SALE_CROPS.find(c=>key(c)===crop):'';
+  const byBroker=id=>!bf||(bf==='__none'?!S.farms[id].broker:key(S.farms[id].broker)===bf);
+  const ids=allIds.filter(byBroker).filter(id=>!sf||S.farms[id].state===sf);
+  const D=ids.map(id=>dashFarm(id,crop));
+  const sum=k=>D.reduce((a,d)=>a+(d[k]||0),0),exp=sum('exp'),sold=sum('sold'),hed=sum('hed');
+  const withP=D.filter(d=>d.profit!=null),profit=withP.length?sum('profit'):null,pAc=withP.reduce((a,d)=>a+(d.ppa?d.profit/d.ppa:0),0);
+  const rank={bad:0,warn:1};const items=D.flatMap(d=>d.items).sort((a,b)=>rank[a.c]-rank[b.c]||(a.d||'9').localeCompare(b.d||'9')||a.farm.localeCompare(b.farm));
+  const flagged=D.filter(d=>d.bad||d.warn).length,due14=D.filter(d=>d.next&&daysUntil(d.next.d)<=14);
+  // with one crop picked, the weighted average priced sale vs the weighted break-even across these farms
+  let avgLine='';if(crop){const rs=D.flatMap(d=>d.rows),pb=rs.reduce((a,r)=>a+r.pricedBu,0),be=rs.filter(r=>r.be!=null),bw=be.reduce((a,r)=>a+r.expected,0);
+    const ap=pb?rs.reduce((a,r)=>a+(r.avg!=null?r.avg*r.pricedBu:0),0)/pb:null,ab=bw?be.reduce((a,r)=>a+r.be*r.expected,0)/bw:null;
+    if(ap!=null||ab!=null)avgLine=`${ap!=null?`avg sold ${usd(ap)}`:''}${ap!=null&&ab!=null?' · ':''}${ab!=null?`break-even ${usd(ab)}`:''}`}
+  // program deadlines in the next 30 days, once each, with how many of these farms they apply to
+  const prog={};D.forEach(d=>d.shared.forEach(x=>{const k=x.d+'|'+x.title;(prog[k]||(prog[k]={...x,n:0})).n++}));
+  const progList=Object.values(prog).sort((a,b)=>a.d.localeCompare(b.d)).slice(0,4);
+  const sortK=DASH_SORTS.some(s=>s[0]===S.dashSort)?S.dashSort:'name',sp=d=>d.exp?(d.sold+d.hed)/d.exp:9;
+  const cmp={name:(a,b)=>a.f.name.localeCompare(b.f.name),sold:(a,b)=>sp(a)-sp(b),profit:(a,b)=>(a.ppa??1e9)-(b.ppa??1e9),
+    due:(a,b)=>(a.next?a.next.d:'9').localeCompare(b.next?b.next.d:'9'),flags:(a,b)=>(b.bad*10+b.warn)-(a.bad*10+a.warn)}[sortK];
+  const list=D.slice().sort((a,b)=>cmp(a,b)||a.f.name.localeCompare(b.f.name));
+  const yrs=[...new Set([THIS_YEAR,THIS_YEAR+1,THIS_YEAR-1,...allIds.flatMap(id=>years(S.farms[id]))])].sort((a,b)=>b-a);
+  const chipB=(v,l)=>`<button class="chip sm" data-dbf="${esc(v)}" aria-pressed="${bf===v}">${l}</button>`;
+  const row=d=>{const f=d.f,s=d.exp?d.sold/d.exp:0,h=d.exp?d.hed/d.exp:0,ins=d.insured?d.insSold/d.insured:null;
+    const crops=d.rows.map(r=>r.crop).join(', ');
+    return`<li class="drow" data-open="${esc(d.id)}" tabindex="0">
+      <div class="dname"><div class="stitle"><b>${esc(f.name)}</b>${f.sample?'<span class="pill neutral">Sample</span>':''}</div>
+        <span class="ssub">${[locLabel(f),f.broker||'Unassigned',crop?'':crops].filter(Boolean).map(esc).join(' · ')||'No crops yet'}</span></div>
+      <div class="dsold">${d.exp?`<div class="dbar" aria-hidden="true"><i class="s" style="width:${Math.min(100,s*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-s*100,h*100)).toFixed(1)}%"></i></div>
+        <span><b>${pct(s)}</b> sold${d.hed?` · ${pct(h)} hedged`:''} · ${bu(d.exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
+      <div class="dnum dprof ${d.ppa==null?'':d.ppa<0?'neg':'pos'}"><b>${d.ppa==null?'—':usd(d.ppa,0)}</b><span>profit/ac</span></div>
+      <div class="dnum dins ${ins==null?'':ins>1?'neg':ins>.8?'warn':''}"><b>${ins==null?'—':pct(ins)}</b><span>of insured sold</span></div>
+      <div class="ddue">${d.next?`<b>${fmtDate(d.next.d)}${daysUntil(d.next.d)<=14?` <span class="pill warn">${daysUntil(d.next.d)}d</span>`:''}</b><span>${esc(d.next.title)}</span>`:'<span>Nothing due</span>'}</div>
+      <div class="dflag">${d.bad?`<span class="pill bad">${d.bad} critical</span>`:''}${d.warn?`<span class="pill warn">${d.warn} watch</span>`:''}${!d.bad&&!d.warn?'<span class="pill good">Clear</span>':''}</div></li>`};
+  const shown=S.attnAll?items:items.slice(0,8);
+  return`<div class="farmhead"><div><div class="label">Consultant view</div><h1>Client dashboard</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.downloads&&ids.length?'<button data-act="sfexport">Export for Snowflake</button>':''}<button class="primary" data-act="addclient">Add a client farm</button></div>
-  <p class="muted" style="margin:4px 0 0;max-width:70ch">Farmers you share this app with appear here once they set up their farm. You can also add a client yourself and enter their records for them.</p>
-  ${allIds.length?`<div class="filters" style="margin-top:16px">
-    <label class="label" style="display:flex;gap:8px;align-items:center">Broker <select id="brokerSel" style="width:auto">
-      <option value="">All brokers (${allIds.length} farms)</option>
-      ${brokers.map(b=>`<option value="${esc(key(b))}" ${key(b)===bf?'selected':''}>${esc(b)} (${allIds.filter(id=>key(S.farms[id].broker)===key(b)).length})</option>`).join('')}
-      ${hasUnassigned?`<option value="__none" ${bf==='__none'?'selected':''}>Unassigned (${allIds.filter(id=>!S.farms[id].broker).length})</option>`:''}</select></label>
-    ${statesUsed.length?`<label class="label" style="display:flex;gap:8px;align-items:center">State <select id="stateSel" style="width:auto"><option value="">All states</option>${statesUsed.map(s=>`<option ${s===sf?'selected':''}>${s}</option>`).join('')}</select></label>`:''}
-    ${bf?'<button class="link" data-act="clearbroker">Show all brokers</button>':''}</div>`:''}
-  <section class="panel" style="margin-top:12px"><div class="tablewrap">${ids.length?`<table><thead><tr><th>Farm</th><th>Broker</th><th class="n">Expected bu</th><th class="n">Sold</th><th class="n">Sold + hedged</th><th>Next delivery</th><th>Flags</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>`
-    :allIds.length?`<div class="empty"><b>No farms for this broker yet</b>Assign farms with Edit details on each farm, or add a client farm.</div>`
-    :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</div></section>`}
+  ${allIds.length?`<div class="sfilters" style="margin-top:14px">
+    <div class="chips">${chipB('','All brokers')}${brokers.map(b=>chipB(key(b),`${esc(b)} <span class="muted">${allIds.filter(id=>key(S.farms[id].broker)===key(b)).length}</span>`)).join('')}${hasUnassigned?chipB('__none',`Unassigned <span class="muted">${allIds.filter(id=>!S.farms[id].broker).length}</span>`):''}</div>
+    <div class="chips">${[['','All crops'],['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([k,l])=>`<button class="chip sm" data-dcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}
+      ${statesUsed.length>1?`<span class="dsep"></span>${['',...statesUsed].map(s=>`<button class="chip sm" data-dsf="${esc(s)}" aria-pressed="${sf===s}">${s?esc(s):'All states'}</button>`).join('')}`:''}</div></div>`:''}
+  <div class="cckpi dkpi">
+    <div><span>Farms</span><b>${ids.length}</b><em>${bf?esc(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):'all brokers'}${crop?' · '+cropName:''}</em></div>
+    <div><span>Sold</span><b>${exp?pct(sold/exp):'—'}</b><em>${exp?`${pct((sold+hed)/exp)} with hedges · ${bu(exp)} bu`:'no expected bushels'}</em></div>
+    <div class="${profit==null?'':profit<0?'neg':'pos'}"><span>Est. profit</span><b>${kfmt(profit)}</b><em>${avgLine||(pAc&&profit!=null?usd(profit/pAc,0)+'/ac at today\'s market':'at today\'s market')}</em></div>
+    <div class="${flagged?'neg':''}"><span>Need attention</span><b>${flagged}</b><em>${flagged?`of ${ids.length} farms`:'all clear'}</em></div>
+    <div><span>Due in 14 days</span><b>${due14.length}</b><em>${due14.length?'farms with something due':'nothing close'}</em></div></div>
+  <p class="muted" style="font-size:.78rem;margin:0 0 14px">For now only you see this view. Once the app is hosted with logins, each broker can see their own clients here.</p>
+  <div class="dgrid">
+    <section class="panel"><div class="phead"><b>Needs attention</b><span class="muted">${items.length?items.length+' item'+(items.length>1?'s':''):''}</span></div>
+      ${items.length?`<ul class="alist">${shown.map(i=>`<li data-open="${esc(i.id)}" tabindex="0"><span class="adot ${i.c}"></span><div><b>${esc(i.farm)}</b><span> · ${esc(i.t)}</span></div></li>`).join('')}</ul>
+        ${items.length>8?`<div style="padding:8px 16px 12px"><button class="link" data-act="attnall">${S.attnAll?'Show fewer':`Show all ${items.length}`}</button></div>`:''}`
+      :`<div class="empty"><b>Nothing needs attention</b>Over-contracting, losses at today's market, late deliveries and expiring contracts show up here.</div>`}</section>
+    <section class="panel"><div class="phead"><b>Program deadlines</b><span class="muted">next 30 days</span></div>
+      ${progList.length?`<ul class="alist">${progList.map(x=>`<li><span class="adot ${daysUntil(x.d)<=14?'warn':'muted'}"></span><div><b>${fmtDate(x.d)}</b><span> · ${esc(x.title)} · ${x.n} farm${x.n>1?'s':''}</span></div></li>`).join('')}</ul>`
+      :`<div class="empty" style="padding:22px 16px"><b>None in the next 30 days</b>Add program deadlines from any farm's Crop Overview.</div>`}</section></div>
+  <div class="sechead" style="margin-top:18px"><h2>Clients</h2><div class="sp"></div>
+    <div class="chips" style="margin:0">${DASH_SORTS.map(([k,l])=>`<button class="chip sm" data-dsort="${k}" aria-pressed="${sortK===k}">${l}</button>`).join('')}</div></div>
+  <section class="panel slist">${ids.length?`<div class="dhead"><span>Farm</span><span>Marketed</span><span style="text-align:right">Profit/ac</span><span style="text-align:right">Insured sold</span><span>Next due</span><span style="text-align:right">Flags</span></div>
+    <ul class="dlist">${list.map(row).join('')}</ul>`
+    :allIds.length?`<div class="empty"><b>No farms match these filters</b>Assign farms to brokers with Edit details on each farm, or add a client farm.</div>`
+    :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</section>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-dbf],[data-dsf],[data-dcrop],[data-dsort],[data-act="attnall"]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.dbf!==undefined){setBrokerF(t.dataset.dbf);return}
+  if(t.dataset.dsf!==undefined)S.stateF=t.dataset.dsf;
+  else if(t.dataset.dcrop!==undefined)S.dashCrop=t.dataset.dcrop;
+  else if(t.dataset.dsort)S.dashSort=t.dataset.dsort;
+  else S.attnAll=!S.attnAll;
+  render()});
 
 function renderFarm(f){
   const yrs=years(f);if(!yrs.includes(S.year))yrs.unshift(S.year);
