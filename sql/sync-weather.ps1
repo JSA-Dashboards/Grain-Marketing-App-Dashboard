@@ -9,6 +9,24 @@ $root = Split-Path $PSScriptRoot -Parent
 $inFile = Join-Path $root 'sync\weather-locations.json'
 $outDir = Join-Path $root 'sync\weather'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+# If the scheduled task saved the farm list to sync\farmscan, build the locations file from it:
+# only each farm's bidHome lat/lon is read; one location per rounded spot. The scan folder is then deleted.
+$scan = Join-Path $root 'sync\farmscan'
+if (Test-Path $scan) {
+  $seen = [ordered]@{}
+  foreach ($file in Get-ChildItem $scan -Recurse -Filter *.json) {
+    try { $j = Get-Content $file.FullName -Raw | ConvertFrom-Json } catch { continue }
+    $h = if ($j.data) { $j.data.bidHome } else { $j.bidHome }
+    if (-not $h -or $null -eq $h.lat -or $null -eq $h.lon) { continue }
+    $lat = [double]$h.lat; $lon = [double]$h.lon   # key matches the app's wx_<lat.toFixed(2)>_<lon.toFixed(2)>
+    $key = 'wx_{0}_{1}' -f $lat.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture), $lon.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
+    if (-not $seen.Contains($key)) { $seen[$key] = [ordered]@{ key = $key; lat = [double]$h.lat; lon = [double]$h.lon } }
+  }
+  [System.IO.File]::WriteAllText($inFile, (ConvertTo-Json @($seen.Values) -Compress), (New-Object System.Text.UTF8Encoding $false))
+  Remove-Item -Recurse -Force $scan
+  "locations=$($seen.Count) from farm scan"
+}
 if (-not (Test-Path $inFile)) { throw "No locations file at $inFile" }
 $locs = Get-Content $inFile -Raw | ConvertFrom-Json
 $headers = @{ 'User-Agent' = 'GrainMarketingDesk/1.0 (farm weather)'; 'Accept' = 'application/geo+json' }
