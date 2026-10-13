@@ -1,0 +1,35 @@
+# Grain Marketing Desk on one server: the web app, the nightly jobs, and Caddy for HTTPS.
+#   docker compose up -d --build      start or update
+#   docker compose logs -f app        watch the app (sign-in links show here until email is set up)
+services:
+  app:
+    build: { context: .., dockerfile: hosted/server/Dockerfile }
+    env_file: .env
+    volumes: ["grain-data:/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 60s
+
+  jobs:
+    build: { context: .., dockerfile: hosted/server/Dockerfile }
+    command: ["python", "-m", "app.jobs.scheduler"]
+    env_file: .env
+    volumes:
+      - grain-data:/data
+      - ./secrets/snowflake_key.p8:/secrets/snowflake_key.p8:ro
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    environment: { SITE_ADDRESS: "${SITE_ADDRESS:-localhost}" }
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [app]
+    restart: unless-stopped
+
+volumes:
+  grain-data: {}
+  caddy-data: {}

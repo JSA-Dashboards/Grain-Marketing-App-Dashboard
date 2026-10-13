@@ -1,0 +1,6 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9
+anthropic>=0.70
+snowflake-connector-python>=3.12,<4
+requests>=2.32,<3

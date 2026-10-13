@@ -4,3 +4,10 @@
 Thumbs.db
 sync/
 preview-local.html
+
+# hosted version: real settings and keys stay on the server
+hosted/.env
+hosted/secrets/
+__pycache__/
+*.pdf
+preview-hosted.html

@@ -619,7 +619,7 @@ const SALE_CROPS=['Corn','Soybeans','Wheat'];
 const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
 
-const S={mode:'loading',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
+const S={mode:'loading',admin:false,role:'',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
   section:'home',flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null,brokerF:''};
 try{S.brokerF=localStorage.getItem('gd.brokerFilter')||''}catch(_){}
 
@@ -1193,7 +1193,7 @@ function renderClients(){
     <div class="${profit==null?'':profit<0?'neg':'pos'}"><span>Est. profit</span><b>${kfmt(profit)}</b><em>${avgLine||(pAc&&profit!=null?usd(profit/pAc,0)+'/ac at today\'s market':'at today\'s market')}</em></div>
     <div class="${flagged?'neg':''}"><span>Need attention</span><b>${flagged}</b><em>${flagged?`of ${ids.length} farms`:'all clear'}</em></div>
     <div><span>Due in 14 days</span><b>${due14.length}</b><em>${due14.length?'farms with something due':'nothing close'}</em></div></div>
-  <p class="muted" style="font-size:.78rem;margin:0 0 14px">For now only you see this view. Once the app is hosted with logins, each broker can see their own clients here.</p>
+  ${S.hosted?'':'<p class="muted" style="font-size:.78rem;margin:0 0 14px">For now only you see this view. Once the app is hosted with logins, each broker can see their own clients here.</p>'}
   <div class="dgrid">
     <section class="panel"><div class="phead"><b>Needs attention</b><span class="muted">${items.length?items.length+' item'+(items.length>1?'s':''):''}</span></div>
       ${items.length?`<ul class="alist">${shown.map(i=>`<li data-open="${esc(i.id)}" tabindex="0"><span class="adot ${i.c}"></span><div><b>${esc(i.farm)}</b><span> · ${esc(i.t)}</span></div></li>`).join('')}</ul>
@@ -1409,8 +1409,8 @@ function deadlinePanel(f){
   const badge=d=>{const t=new Date(d+'T12:00:00'),n=daysUntil(d);
     return`<div class="dlbadge ${n<=14?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div>`};
   return`<section><div class="sechead"><div><h2>Deadlines to watch</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${locLabel(f)?`${esc(locLabel(f))} · national + local`:'<button class="link" data-act="rename" style="font-size:.82rem">Add your county and state</button> to see local deadlines'}</div></div><div class="sp"></div>
-    ${S.owner?'<button class="small" data-sdladd="1" title="Shown to every client">+ Program deadline</button>':''}<button class="small" data-dladd="1">+ Add deadline</button></div>
-  <div class="panel">${list.length?`<ul class="dllist">${list.map(x=>`<li class="click" ${x.kind==='contract'?`data-sale="${x.sid}"`:x.kind==='farm'?`data-dl="${x.id}"`:S.owner?`data-sdl="${x.id}"`:''} tabindex="0">
+    ${S.admin?'<button class="small" data-sdladd="1" title="Shown to every client">+ Program deadline</button>':''}<button class="small" data-dladd="1">+ Add deadline</button></div>
+  <div class="panel">${list.length?`<ul class="dllist">${list.map(x=>`<li class="click" ${x.kind==='contract'?`data-sale="${x.sid}"`:x.kind==='farm'?`data-dl="${x.id}"`:S.admin?`data-sdl="${x.id}"`:''} tabindex="0">
       ${badge(x.d)}<div class="dltext"><b>${esc(x.title)}</b><span>${esc(x.src)}${x.note?` · ${esc(x.note)}`:''}</span></div></li>`).join('')}</ul>
     ${all.length>6?`<div style="padding:8px 16px 12px"><button class="link" data-act="dlall">${S.dlAll?'Show fewer':`Show all ${all.length}`}</button></div>`:''}`
     :`<div class="empty"><b>Nothing due in the next year</b>Program deadlines and contract expirations show here automatically. Add your own with + Add deadline.</div>`}</div></section>`}
@@ -2143,7 +2143,7 @@ function tabInsurance(f){
     :`<p class="muted" style="margin:4px 0 0">No insurance recorded for ${esc(sel.crop)}. Pick a plan above to set it up.</p>`}
     <div class="clab" style="margin-top:22px">Insurance & FSA dates</div>
     ${dates.length?`<ul class="dllist idl">${dates.map(x=>{const t=new Date(x.d+'T12:00:00'),n=daysUntil(x.d);return`<li><div class="dlbadge ${n<=14?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div><div class="dltext"><b>${esc(x.title)}</b><span>${esc(x.src)}${x.note?` · ${esc(x.note)}`:''}</span></div></li>`}).join('')}</ul>`
-      :`<p class="muted" style="font-size:.85rem;margin:0">No crop insurance or FSA dates in the next year. ${S.owner?'Add them as program deadlines on Crop Overview (pick Crop insurance or FSA) and they show here for every client in that area.':'Your advisor adds these.'}</p>`}`}
+      :`<p class="muted" style="font-size:.85rem;margin:0">No crop insurance or FSA dates in the next year. ${S.admin?'Add them as program deadlines on Crop Overview (pick Crop insurance or FSA) and they show here for every client in that area.':'Your advisor adds these.'}</p>`}`}
   else if(!insCalc(sel)&&view!=='fsa')body=need;
   else if(view==='levels')body=`<div class="clab">Your premium per acre at each level</div>
     <p class="muted" style="font-size:.82rem;margin:-4px 0 12px">From your agent's quote (what you pay, after subsidy).</p>
@@ -2480,15 +2480,15 @@ function tabIntel(f){
       <h3>${esc(p.title)}</h3>
       <div class="ipbody${long&&!open?' clamp':''}">${esc(p.body||'').replace(/\n/g,'<br>')}</div>
       <div class="ipfoot">${long?`<button class="link" data-intelopen="${p.id}">${open?'Show less':'Read more'}</button>`:'<span></span>'}
-        <span class="muted" style="font-size:.76rem">From your advisor${S.owner?` · ${esc(audienceLabel(p.audience))}`:''}</span>
-        ${S.owner?`<button class="link" data-intelpost="${p.id}" style="font-size:.8rem">Edit</button>`:''}</div></article>`};
-  return`<div class="intelgrid"><section style="margin-top:0"><div class="sechead"><h2>From your advisor</h2><div class="sp"></div>${S.owner?'<button class="primary small" data-intelpost="new">+ New post</button>':''}</div>
+        <span class="muted" style="font-size:.76rem">From your advisor${S.admin?` · ${esc(audienceLabel(p.audience))}`:''}</span>
+        ${S.admin?`<button class="link" data-intelpost="${p.id}" style="font-size:.8rem">Edit</button>`:''}</div></article>`};
+  return`<div class="intelgrid"><section style="margin-top:0"><div class="sechead"><h2>From your advisor</h2><div class="sp"></div>${S.admin?'<button class="primary small" data-intelpost="new">+ New post</button>':''}</div>
     <div class="chips">${[['','All'],...INTEL_CATS.map(c=>[c,c])].map(([v,l])=>`<button class="chip sm" data-intelcat="${esc(v)}" aria-pressed="${cat===v}">${esc(l)}</button>`).join('')}</div>
-    ${list.length?list.map(post).join(''):`<div class="panel"><div class="empty"><b>${cat?`No ${esc(cat.toLowerCase())} posts yet`:'No updates yet'}</b>${S.owner?'Use + New post to share market updates, marketing tips and action items with your clients.':'Market updates and insights from your advisor will show up here.'}</div></div>`}</section>
-  <aside><div class="sechead"><h2>Upcoming reports</h2><div class="sp"></div>${S.owner?'<button class="small" data-act="addreport">+ Add</button>':''}</div>
+    ${list.length?list.map(post).join(''):`<div class="panel"><div class="empty"><b>${cat?`No ${esc(cat.toLowerCase())} posts yet`:'No updates yet'}</b>${S.admin?'Use + New post to share market updates, marketing tips and action items with your clients.':'Market updates and insights from your advisor will show up here.'}</div></div>`}</section>
+  <aside><div class="sechead"><h2>Upcoming reports</h2><div class="sp"></div>${S.admin?'<button class="small" data-act="addreport">+ Add</button>':''}</div>
     <div class="panel">${reports.length?`<ul class="dllist">${reports.map(x=>{const t=new Date(x.d+'T12:00:00'),n=daysUntil(x.d);
-      return`<li${S.owner?` class="click" data-sdl="${x.id}"`:''}><div class="dlbadge ${n<=3?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div><div class="dltext"><b>${esc(x.title)}</b>${x.note?`<span>${esc(x.note)}</span>`:''}</div></li>`}).join('')}</ul>`
-      :`<div class="empty" style="padding:18px"><b>No reports listed</b>${S.owner?'Add USDA report dates (WASDE, Crop Progress, Grain Stocks) with + Add.':'Your advisor will list upcoming USDA reports here.'}</div>`}</div></aside></div>`}
+      return`<li${S.admin?` class="click" data-sdl="${x.id}"`:''}><div class="dlbadge ${n<=3?'soon':''}"><b>${t.toLocaleDateString('en-US',{month:'short'})} ${t.getDate()}</b><span>${n===0?'today':n+'d'}</span></div><div class="dltext"><b>${esc(x.title)}</b>${x.note?`<span>${esc(x.note)}</span>`:''}</div></li>`}).join('')}</ul>`
+      :`<div class="empty" style="padding:18px"><b>No reports listed</b>${S.admin?'Add USDA report dates (WASDE, Crop Progress, Grain Stocks) with + Add.':'Your advisor will list upcoming USDA reports here.'}</div>`}</div></aside></div>`}
 // post editor (consultant only)
 let IP=null;
 function openPost(id){
@@ -2725,7 +2725,7 @@ document.addEventListener('click',e=>{
   if(a==='optdel'&&S.opt){if(!S.opt.confirmDel){S.opt.confirmDel=true;render();return}
     const f=S.farms[S.current];f.scenarios=(f.scenarios||[]).filter(x=>x.id!==S.opt.savedId);S.opt={...S.opt,savedId:'',name:'',confirmDel:false};persist(S.current)}
   if(a==='clearflt'){S.flt={q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''};render()}
-  if(a==='sfexport'&&S.owner){const files=snowflakeFiles();
+  if(a==='sfexport'&&S.admin){const files=snowflakeFiles();
     S.downloads.save({filename:`grain-desk-snowflake-${TODAY}.zip`,data:makeZip(files)}).then(()=>toast('Snowflake export saved')).catch(e=>{if(e&&e.code!=='declined')toast("Couldn't save the export here.",true)})}
   if(a==='showunpriced'){S.flt.status='unpriced';render()}
   if(a==='export'){const f=S.farms[S.current];const name=(f.name.replace(/[^\w\- ]+/g,'').trim()||'farm')+` ${S.year} sales.csv`;
@@ -2736,7 +2736,7 @@ document.addEventListener('click',e=>{
     try{navigator.clipboard.writeText(txt).then(()=>toast('Summary copied: paste it into an email or notes'),fallback)}catch(err){fallback()}}
   if(a==='addclient')nameDialog('Add a client farm','',(name,broker,loc)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker,...loc});S.current=id;S.tab='overview';S.section='home';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
   if(a==='rename'){const f=S.farms[S.current];
-    nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;persist(S.current)},S.owner?(f.broker||''):undefined,{state:f.state,county:f.county})}
+    nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;persist(S.current)},S.admin?(f.broker||''):undefined,{state:f.state,county:f.county})}
   if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
     const id=S.current;delete S.farms[id];S.current=null;S.confirmRemove=false;render();
     if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
@@ -2801,7 +2801,7 @@ const PREVIEW={name:'Prairie Ridge Farms',sample:true,
     {id:'b4',name:'Hopper bin 4',location:'Home place',capacity:12000,crop:'',bu:0,checked:THIS_YEAR+'-09-15'}]};
 
 function preview(msg){
-  S.mode='preview';S.owner=true;S.note=msg;S.farms={'sample':normalize(PREVIEW)};S.current='sample';
+  S.mode='preview';S.owner=true;S.admin=true;S.note=msg;S.farms={'sample':normalize(PREVIEW)};S.current='sample';
   $('#who').textContent='Preview';render()}
 async function boot(){
   const c=window.claude;
@@ -2813,9 +2813,12 @@ async function boot(){
   c.use('assets').then(a=>{S.assets=a});
   if(!db||!user)return preview('Saving is not available in this view, so this shows sample data. Open the shared link while signed in to claude.ai to keep records.');
   S.db=db;S.user=user;S.uid=await user.id();S.owner=await user.isOwner();
+  // owner = works with many client farms (consultant, or a broker on the hosted version);
+  // admin = also manages what every client sees (Intel, program deadlines, broker assignments, Snowflake export)
+  S.role=user.role?await user.role():(S.owner?'admin':'farmer');S.admin=S.role==='admin';S.hosted=!!c.hosted;
   if(!S.uid&&!S.owner){S.mode='noid';render();return}
   S.mode='live';
-  const me=await user.me();$('#who').textContent=S.owner?'Consultant · '+(me.name||'you'):(me.name||'');
+  const me=await user.me();$('#who').textContent=S.admin?'Consultant · '+(me.name||'you'):S.role==='broker'?'Broker · '+(me.name||''):(me.name||'');
   const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
   // shared futures prices written by the evening sync; everyone reads, only the owner writes
   db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
