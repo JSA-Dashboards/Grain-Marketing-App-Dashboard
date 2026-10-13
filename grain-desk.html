@@ -1180,9 +1180,9 @@ function renderClients(){
       <div class="ddue">${d.next?`<b>${fmtDate(d.next.d)}${daysUntil(d.next.d)<=14?` <span class="pill warn">${daysUntil(d.next.d)}d</span>`:''}</b><span>${esc(d.next.title)}</span>`:'<span>Nothing due</span>'}</div>
       <div class="dflag">${d.bad?`<span class="pill bad">${d.bad} critical</span>`:''}${d.warn?`<span class="pill warn">${d.warn} watch</span>`:''}${!d.bad&&!d.warn?'<span class="pill good">Clear</span>':''}</div></li>`};
   const shown=S.attnAll?items:items.slice(0,8);
-  return`<div class="farmhead"><div><div class="label">Consultant view</div><h1>Client dashboard</h1></div><div class="sp"></div>
+  return`<div class="farmhead"><div><div class="label">${S.admin?'Consultant view':'Broker view'}</div><h1>Client dashboard</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
-    ${S.downloads&&ids.length?`<button data-act="sumpdf"${S.sumBusy?' disabled':''} title="One summary of the farms shown below, for emailing to a broker">${S.sumBusy?'Making PDF…':'Summary PDF'}</button><button data-act="sfexport">Export for Snowflake</button>`:''}<button class="primary" data-act="addclient">Add a client farm</button></div>
+    ${S.downloads&&ids.length?`<button data-act="sumpdf"${S.sumBusy?' disabled':''} title="One summary of the farms shown below, for emailing to a broker">${S.sumBusy?'Making PDF…':'Summary PDF'}</button>${S.admin?'<button data-act="sfexport">Export for Snowflake</button>':''}`:''}<button class="primary" data-act="addclient">Add a client farm</button></div>
   ${allIds.length?`<div class="sfilters" style="margin-top:14px">
     <div class="chips">${chipB('','All brokers')}${brokers.map(b=>chipB(key(b),`${esc(b)} <span class="muted">${allIds.filter(id=>key(S.farms[id].broker)===key(b)).length}</span>`)).join('')}${hasUnassigned?chipB('__none',`Unassigned <span class="muted">${allIds.filter(id=>!S.farms[id].broker).length}</span>`):''}</div>
     <div class="chips">${[['','All crops'],['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([k,l])=>`<button class="chip sm" data-dcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}

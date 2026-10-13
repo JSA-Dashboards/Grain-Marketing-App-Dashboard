@@ -65,7 +65,11 @@ foreach ($r in $rows) {
 $bids = New-Object System.Collections.ArrayList
 foreach ($k in $byKey.Keys) {
   $parts = $k.Split('|'); $seen = @{}
-  foreach ($b in ($byKey[$k] | Sort-Object { $_[0] })) {
+  # a group with ONE bid must stay a list of one bid: PowerShell would otherwise unroll that bid
+  # and loop over its fields (this produced months like "7-06" and lost single wheat bids)
+  $list = $byKey[$k]
+  if ($list.Count -gt 1) { $sorted = @($list | Sort-Object { $_[0] }) } else { $sorted = @(, $list[0]) }
+  foreach ($b in $sorted) {
     if ($seen.ContainsKey($b[0])) { continue }; $seen[$b[0]] = 1
     $y = [math]::Floor(($b[0] - 1) / 12); $mo = $b[0] - $y * 12
     [void]$bids.Add(@([int]$parts[0], $parts[1], $parts[2], ('{0}-{1:00}' -f $y, $mo), $b[1], $b[2]))

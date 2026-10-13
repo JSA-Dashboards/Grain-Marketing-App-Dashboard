@@ -1,0 +1,2 @@
+-r requirements.txt
+httpx  # FastAPI's test client (tests/smoke_test.py)

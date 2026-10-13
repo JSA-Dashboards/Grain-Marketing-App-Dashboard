@@ -9,11 +9,12 @@ from .. import store
 from .snow import query
 
 MONTHS = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12}
-WHEATS = {'Wheat', 'Hard Red Spring', 'Hard Red Winter', 'Soft Red Winter', 'Soft White'}
+WHEATS = {'wheat', 'hard red spring', 'hard red winter', 'soft red winter', 'soft white'}
 
 
 def grain_code(g):
-    return 'C' if g == 'Corn' else 'S' if g == 'Soybeans' else 'W' if g in WHEATS else None
+    g = (g or '').strip().lower()          # providers write "Corn", "CORN", "corn"
+    return 'C' if g == 'corn' else 'S' if g == 'soybeans' else 'W' if g in WHEATS else None
 
 
 def year_month(r, cur):
