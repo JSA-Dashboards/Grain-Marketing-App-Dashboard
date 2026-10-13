@@ -1136,7 +1136,8 @@ function dashFarm(id,crop){
   return{id,f,rows,exp,sold,hed,profit,ppa:pac?profit/pac:null,insured,insSold,items,next,shared,
     bad:items.filter(i=>i.c==='bad').length,warn:items.filter(i=>i.c==='warn').length}}
 const DASH_SORTS=[['name','Name'],['sold','Least sold'],['profit','Lowest profit'],['due','Soonest due'],['flags','Most flags']];
-function renderClients(){
+// the dashboard's current broker / state / crop filters, shared by the screen and the summary PDF
+function dashFilter(){
   const allIds=Object.keys(S.farms).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
   const brokers=brokerList(),hasUnassigned=allIds.some(id=>!S.farms[id].broker);
   // a remembered filter for a broker who no longer has farms falls back to all
@@ -1145,6 +1146,10 @@ function renderClients(){
   const crop=['corn','soybeans','wheat'].includes(S.dashCrop)?S.dashCrop:'',cropName=crop?SALE_CROPS.find(c=>key(c)===crop):'';
   const byBroker=id=>!bf||(bf==='__none'?!S.farms[id].broker:key(S.farms[id].broker)===bf);
   const ids=allIds.filter(byBroker).filter(id=>!sf||S.farms[id].state===sf);
+  const brokerName=bf?(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):'';
+  return{allIds,brokers,hasUnassigned,bf,statesUsed,sf,crop,cropName,ids,brokerName}}
+function renderClients(){
+  const{allIds,brokers,hasUnassigned,bf,statesUsed,sf,crop,cropName,ids}=dashFilter();
   const D=ids.map(id=>dashFarm(id,crop));
   const sum=k=>D.reduce((a,d)=>a+(d[k]||0),0),exp=sum('exp'),sold=sum('sold'),hed=sum('hed');
   const withP=D.filter(d=>d.profit!=null),profit=withP.length?sum('profit'):null,pAc=withP.reduce((a,d)=>a+(d.ppa?d.profit/d.ppa:0),0);
@@ -1177,7 +1182,7 @@ function renderClients(){
   const shown=S.attnAll?items:items.slice(0,8);
   return`<div class="farmhead"><div><div class="label">Consultant view</div><h1>Client dashboard</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
-    ${S.downloads&&ids.length?'<button data-act="sfexport">Export for Snowflake</button>':''}<button class="primary" data-act="addclient">Add a client farm</button></div>
+    ${S.downloads&&ids.length?`<button data-act="sumpdf"${S.sumBusy?' disabled':''} title="One summary of the farms shown below, for emailing to a broker">${S.sumBusy?'Making PDF…':'Summary PDF'}</button><button data-act="sfexport">Export for Snowflake</button>`:''}<button class="primary" data-act="addclient">Add a client farm</button></div>
   ${allIds.length?`<div class="sfilters" style="margin-top:14px">
     <div class="chips">${chipB('','All brokers')}${brokers.map(b=>chipB(key(b),`${esc(b)} <span class="muted">${allIds.filter(id=>key(S.farms[id].broker)===key(b)).length}</span>`)).join('')}${hasUnassigned?chipB('__none',`Unassigned <span class="muted">${allIds.filter(id=>!S.farms[id].broker).length}</span>`):''}</div>
     <div class="chips">${[['','All crops'],['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([k,l])=>`<button class="chip sm" data-dcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}
@@ -2386,6 +2391,71 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
     .then(()=>toast('Report saved'))
     .catch(err=>{if(err&&err.code==='declined')return;toast(err&&err.message==='load'?"Couldn't load the PDF maker. Check your connection and try again.":"Couldn't make the PDF here.",true)})
     .finally(()=>{S.rptBusy=false;render()})});
+
+/* ---------- client summary PDF: the dashboard's filtered farms, for emailing a broker ---------- */
+async function summaryPdf(){
+  const JsPDF=await loadJsPDF(),F=dashFilter(),D=F.ids.map(id=>dashFarm(id,F.crop)),doc=new JsPDF({unit:'pt',format:'letter',orientation:'landscape'});
+  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...');
+  const INK=[23,32,26],MUTED=[90,103,94],ACC=[29,106,77],GRAIN=[181,134,43],BAD=[174,61,43],GOOD=[44,122,76],LINE=[214,222,214],SOFT=[238,243,236];
+  const W=792,H=612,M=40,CW=W-2*M,BOTTOM=H-48;let y=46,page=1;
+  const txt=(s,x,yy,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||9);doc.setTextColor(...(o.c||INK));doc.text(T(s),x,yy,{align:o.a||'left',maxWidth:o.w})};
+  const rule=yy=>{doc.setDrawColor(...LINE);doc.setLineWidth(.6);doc.line(M,yy,W-M,yy)};
+  const asOf=S.market&&S.market.asOf,who=F.brokerName||'All brokers',scope=[F.cropName,F.sf].filter(Boolean).join(' · ');
+  const footer=()=>{rule(H-34);txt(`${who} · ${S.year} client summary · page ${page}`,M,H-22,{s:7,c:MUTED});
+    txt(`Estimates from each farm's records${asOf?` and futures as of ${fmtDate(asOf)}`:''}. Not a guarantee of prices or insurance terms.`,W-M,H-22,{s:7,c:MUTED,a:'right'})};
+  const newPage=()=>{footer();doc.addPage();page++;y=46};
+  const need=h=>{if(y+h>BOTTOM)newPage()};
+  // header
+  txt(`${who} · client summary`,M,y,{b:1,s:18});txt(`${S.year} crop year${scope?' · '+scope:''}`,W-M,y-4,{b:1,s:10,a:'right'});
+  txt(fmtDate(TODAY)+(asOf?` · prices as of ${fmtDate(asOf)}`:''),W-M,y+9,{s:8,c:MUTED,a:'right'});
+  y+=12;doc.setDrawColor(...ACC);doc.setLineWidth(1.5);doc.line(M,y,W-M,y);y+=12;
+  // headline numbers
+  const sum=k=>D.reduce((a,d)=>a+(d[k]||0),0),exp=sum('exp'),sold=sum('sold'),hed=sum('hed'),wp=D.filter(d=>d.profit!=null),profit=wp.length?sum('profit'):null;
+  const pAc=wp.reduce((a,d)=>a+(d.ppa?d.profit/d.ppa:0),0),flagged=D.filter(d=>d.bad||d.warn).length,due=D.filter(d=>d.next&&daysUntil(d.next.d)<=14).length;
+  const kp=[['FARMS',String(D.length),scope||'all crops'],['SOLD',exp?pct(sold/exp):'—',exp?`${pct((sold+hed)/exp)} with hedges · ${bu(exp)} bu`:''],
+    ['EST. PROFIT',kfmt(profit),pAc&&profit!=null?`${usd(profit/pAc,0)}/ac at today's market`:'at today\'s market'],['NEED ATTENTION',String(flagged),`of ${D.length} farms`],['DUE IN 14 DAYS',String(due),'farms with something due']];
+  const kw=(CW-4*8)/5;kp.forEach(([l,v,s],i)=>{const x=M+i*(kw+8);doc.setFillColor(...SOFT);doc.roundedRect(x,y,kw,46,4,4,'F');
+    txt(l,x+9,y+13,{b:1,s:6.8,c:MUTED});txt(v,x+9,y+30,{b:1,s:15,c:i===2&&profit!=null?(profit<0?BAD:GOOD):i===3&&flagged?BAD:INK});txt(s,x+9,y+40,{s:7,c:MUTED,w:kw-14})});
+  y+=46+22;
+  // client table, repeating its header on each new page
+  const cols=[['Farm',140],['Location',95],['Expected bu',66,'right'],['Sold · hedged',86],['Profit/ac',56,'right'],['Insured sold',62,'right'],['Next due',150],['Flags',57,'right']];
+  const head=()=>{let x=M;cols.forEach(([l,w,a])=>{txt(l,a==='right'?x+w-4:x+4,y,{b:1,s:7,c:MUTED,a:a||'left'});x+=w});y+=5;rule(y);y+=13};
+  txt('CLIENTS',M,y,{b:1,s:8,c:MUTED});y+=14;head();
+  D.slice().sort((a,b)=>a.f.name.localeCompare(b.f.name)).forEach(d=>{if(y+16>BOTTOM){newPage();head()}
+    const f=d.f,s=d.exp?d.sold/d.exp:0,h=d.exp?d.hed/d.exp:0,ins=d.insured?d.insSold/d.insured:null;let x=M;
+    // one line per cell: text too long for its column is shortened with "..."
+    const fit=(v,w,b)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(8.5);let t=T(v);if(doc.getTextWidth(t)<=w)return t;
+      while(t.length>1&&doc.getTextWidth(t+'...')>w)t=t.slice(0,-1);return t.trimEnd()+'...'};
+    const cell=(i,v,o={})=>{const[ ,w,a]=cols[i];txt(fit(v,w-8,o.b),a==='right'?x+w-4:x+4,y,{s:8.5,a:a||'left',...o});x+=w};
+    cell(0,f.name,{b:1});cell(1,locLabel(f)||'—',{c:MUTED});cell(2,d.exp?bu(d.exp):'—');
+    {const w=cols[3][1],bw=36;if(d.exp){doc.setFillColor(...SOFT);doc.roundedRect(x+4,y-6,bw,6,3,3,'F');if(s>0){doc.setFillColor(...ACC);doc.rect(x+4,y-6,bw*Math.min(1,s),6,'F')}
+      if(h>0&&s<1){doc.setFillColor(...GRAIN);doc.rect(x+4+bw*Math.min(1,s),y-6,bw*Math.min(1-Math.min(1,s),h),6,'F')}}
+      txt(d.exp?pct(s)+(d.hed?' · '+pct(h):''):'—',x+bw+8,y,{s:8.5});x+=w}
+    cell(4,d.ppa==null?'—':usd(d.ppa,0),{b:1,c:d.ppa==null?INK:d.ppa<0?BAD:GOOD});
+    cell(5,ins==null?'—':pct(ins),{b:1,c:ins!=null&&ins>1?BAD:INK});
+    cell(6,d.next?`${new Date(d.next.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} · ${d.next.title}`:'Nothing due',{c:d.next?INK:MUTED});
+    cell(7,d.bad?`${d.bad} critical`:d.warn?`${d.warn} watch`:'Clear',{b:1,c:d.bad?BAD:d.warn?GRAIN:GOOD});
+    y+=6;rule(y);y+=13});
+  // everything flagged, critical first, grouped under each farm name
+  const items=D.flatMap(d=>d.items).sort((a,b)=>(a.c==='bad'?0:1)-(b.c==='bad'?0:1)||a.farm.localeCompare(b.farm));
+  y+=10;need(40);txt('NEEDS ATTENTION',M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=13;
+  if(!items.length){txt('Nothing flagged.',M,y,{c:MUTED});y+=14}
+  items.forEach(it=>{doc.setFont('helvetica','normal');doc.setFontSize(8.5);const lines=doc.splitTextToSize(T(it.t),CW-150);need(11*lines.length+4);
+    doc.setFillColor(...(it.c==='bad'?BAD:GRAIN));doc.circle(M+3,y-3,2.2,'F');txt(it.farm,M+10,y,{b:1,s:8.5,w:130});
+    doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...INK);doc.text(lines,M+150,y);y+=11*lines.length+4});
+  // program deadlines in the next 30 days, once each
+  const prog={};D.forEach(d=>d.shared.forEach(x=>{const k=x.d+'|'+x.title;(prog[k]||(prog[k]={...x,n:0})).n++}));
+  const pl=Object.values(prog).sort((a,b)=>a.d.localeCompare(b.d));
+  if(pl.length){y+=10;need(40);txt('PROGRAM DEADLINES · NEXT 30 DAYS',M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=13;
+    pl.forEach(x=>{need(14);txt(fmtDate(x.d),M,y,{b:1,s:8.5});txt(`${x.title} · ${x.n} farm${x.n>1?'s':''}`,M+80,y,{s:8.5});y+=13})}
+  footer();
+  return doc.output('blob')}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="sumpdf"]');if(!t||!S.downloads||S.sumBusy)return;
+  const F=dashFilter(),name=`${(F.brokerName||'All brokers').replace(/[^\w\- ]+/g,'').trim()||'Clients'} client summary ${S.year} ${TODAY}.pdf`;
+  S.sumBusy=true;render();
+  summaryPdf().then(blob=>S.downloads.save({filename:name,data:blob})).then(()=>toast('Summary saved'))
+    .catch(err=>{if(err&&err.code==='declined')return;toast(err&&err.message==='load'?"Couldn't load the PDF maker. Check your connection and try again.":"Couldn't make the PDF here.",true)})
+    .finally(()=>{S.sumBusy=false;render()})});
 
 /* ---------- intel: advisor posts ---------- */
 // posts live in market/intel (everyone reads, only the consultant writes); each post targets all clients, one state, or one broker's clients
