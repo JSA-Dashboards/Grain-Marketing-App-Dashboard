@@ -11,3 +11,10 @@ hosted/secrets/
 __pycache__/
 *.pdf
 preview-hosted.html
+
+# SSH keys never go in the repo
+Consulting
+Consulting.pub
+*.pem
+id_*
+
