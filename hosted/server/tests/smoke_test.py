@@ -66,6 +66,7 @@ H = {'x-grain-desk': '1'}
 with TestClient(main.app) as anon:
     print('sign-in')
     check('page asks to sign in', anon.get('/', follow_redirects=False).headers.get('location') == '/login')
+    check('sign-in page carries the JSA disclaimer', 'substantial risk of loss' in anon.get('/login').text)
     check('API refuses without sign-in', anon.get('/api/me').status_code == 401)
     n = len(links)
     anon.post('/login', data={'email': 'nobody@example.com'}, follow_redirects=False)

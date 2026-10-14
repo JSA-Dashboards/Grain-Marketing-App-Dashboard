@@ -441,6 +441,9 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .rnote{white-space:pre-wrap;margin:0;font-size:.86rem}
 .rfoot{margin:22px 0 0;padding-top:8px;border-top:1px solid #D6DED6;font-size:.68rem;color:#5A675E}
 @media (max-width:640px){.paper{padding:18px 14px}.rkpi{grid-template-columns:repeat(2,minmax(0,1fr))}.rcols{grid-template-columns:1fr}.rhead{flex-direction:column}.rr{text-align:left}}
+/* JSA disclaimer: small print under every page and on the client report */
+.disclaimer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:.7rem;line-height:1.5;color:var(--muted);max-width:110ch}
+.paper .rdisc{margin:8px 0 0;font-size:.62rem;line-height:1.45;color:#5A675E}
 /* number boxes: no up/down arrows, so a stray click can't change a price */
 input[type=number]{-moz-appearance:textfield;appearance:textfield}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -582,6 +585,7 @@ dialog{max-height:calc(100vh - 32px);overflow:auto}
     <div class="who" id="who"></div>
   </div>
   <div id="app"><div class="empty" style="margin-top:40px"><b>Loading your farm records…</b>Connecting to saved data.</div></div>
+  <footer class="disclaimer" id="disclaimer"></footer>
 </div>
 <dialog id="dlg"><form id="dlgform" method="dialog"></form></dialog>
 <div class="toast" id="toast" hidden></div>
@@ -618,6 +622,10 @@ const CROPS=['Corn','Soybeans','Wheat','Sorghum','Barley','Oats','Canola','Sunfl
 const SALE_CROPS=['Corn','Soybeans','Wheat'];
 const TODAY=new Date().toISOString().slice(0,10);
 const THIS_YEAR=new Date().getFullYear();
+// JSA's required disclaimer (same wording as the JSA dashboards). Shown under every page and on every PDF.
+// Change it here only; the hosted sign-in page has its own copy in hosted/server/app/main.py.
+const DISCLAIMER=`Trading commodity futures, options on futures, cash commodities, and over-the-counter derivative products involves substantial risk of loss and may not be suitable for all investors. This communication is provided for informational purposes only and does not constitute investment advice, a recommendation, or an offer or solicitation to buy or sell any futures, options, cash commodities, or derivative products. John Stewart & Associates, Inc. does not accept orders to buy or sell any financial instruments via email. The information contained herein has been obtained from sources believed to be reliable; however, its accuracy and completeness are not guaranteed. Any opinions expressed are solely those of the author, are subject to change without notice, and should not be relied upon as a basis for investment decisions. Past performance is not indicative of future results. This message may contain confidential or proprietary information intended solely for the use of the designated recipient. © John Stewart & Associates, Inc. ${THIS_YEAR}`;
+document.getElementById('disclaimer').textContent=DISCLAIMER;
 
 const S={mode:'loading',admin:false,role:'',db:null,user:null,uid:null,owner:false,farms:{},current:null,tab:'overview',year:THIS_YEAR,note:'',names:{},
   section:'home',flt:{q:'',crop:'',type:'',buyer:'',status:'',month:'',source:''},sort:{k:'date',dir:-1},by:'crop',downloads:null,brokerF:''};
@@ -2327,6 +2335,7 @@ function tabReport(f){
       <div><h4>Watch list</h4>${R.attn.length?`<ul>${R.attn.slice(0,RPT_MAX).map(x=>`<li class="${x.c}">${esc(x.t)}</li>`).join('')}</ul>`:'<p class="muted">Nothing flagged.</p>'}</div></div>
     ${f.reportNote?`<h4>Advisor's note</h4><p class="rnote">${esc(f.reportNote)}</p>`:''}
     <p class="rfoot">Estimates from this farm's records and futures prices${R.asOf?` as of ${fmtDate(R.asOf)}`:''}, with your estimated basis. Not a guarantee of prices or insurance terms.</p>
+    <p class="rdisc">${esc(DISCLAIMER)}</p>
   </div></section>`}
 // saving the note: on change (leaving the box), not every keystroke
 document.addEventListener('change',e=>{if(e.target.id!=='rptNote')return;const f=S.farms[S.current];if(!f)return;const v=e.target.value.trim();if(v===(f.reportNote||''))return;f.reportNote=v;persist(S.current)});
@@ -2387,8 +2396,12 @@ async function reportPdf(f){
   y=Math.max(y1,y2);
   if(R.f.reportNote){h4("Advisor's note");const lines=doc.setFont('helvetica','normal').setFontSize(9.5).splitTextToSize(T(R.f.reportNote),CW);doc.setTextColor(...INK);doc.text(lines.slice(0,10),M,y);y+=12*Math.min(10,lines.length)}
   // footer
-  rule(752);txt(`Estimates from this farm's records and futures prices${R.asOf?` as of ${fmtDate(R.asOf)}`:''}, with estimated basis. Not a guarantee of prices or insurance terms.`,M,764,{s:7,c:MUTED});
-  txt('Grain Marketing Desk',W-M,764,{s:7,c:MUTED,a:'right'});
+  // footer at the bottom of the page: the estimates note, then JSA's disclaimer (a second page only if the content ran long)
+  doc.setFont('helvetica','normal');doc.setFontSize(6.3);const dl=doc.splitTextToSize(T(DISCLAIMER),CW),top=780-dl.length*7.3-16;
+  if(y>top-6)doc.addPage();
+  rule(top);txt(`Estimates from this farm's records and futures prices${R.asOf?` as of ${fmtDate(R.asOf)}`:''}, with estimated basis. Not a guarantee of prices or insurance terms.`,M,top+10,{s:7,c:MUTED});
+  txt('Grain Marketing Desk',W-M,top+10,{s:7,c:MUTED,a:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(6.3);doc.setTextColor(...MUTED);doc.text(dl,M,top+20,{lineHeightFactor:1.16});
   return doc.output('blob')}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="rptpdf"]');if(!t)return;const f=S.farms[S.current];if(!f||!S.downloads||S.rptBusy)return;
   S.rptBusy=true;render();
@@ -2453,6 +2466,9 @@ async function summaryPdf(){
   const pl=Object.values(prog).sort((a,b)=>a.d.localeCompare(b.d));
   if(pl.length){y+=10;need(40);txt('PROGRAM DEADLINES · NEXT 30 DAYS',M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=13;
     pl.forEach(x=>{need(14);txt(fmtDate(x.d),M,y,{b:1,s:8.5});txt(`${x.title} · ${x.n} farm${x.n>1?'s':''}`,M+80,y,{s:8.5});y+=13})}
+  // JSA's disclaimer once, after the last section
+  doc.setFont('helvetica','normal');doc.setFontSize(6.5);const dl=doc.splitTextToSize(T(DISCLAIMER),CW);
+  y+=14;need(dl.length*7.6+10);rule(y);y+=10;doc.setTextColor(...MUTED);doc.text(dl,M,y,{lineHeightFactor:1.16});
   footer();
   return doc.output('blob')}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="sumpdf"]');if(!t||!S.downloads||S.sumBusy)return;

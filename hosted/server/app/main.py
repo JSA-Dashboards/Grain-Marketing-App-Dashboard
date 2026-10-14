@@ -56,7 +56,20 @@ main{{background:#fff;border-radius:14px;padding:28px;max-width:380px;width:100%
 h1{{font-size:1.3rem;margin:0 0 6px}} p{{color:#5A675E;margin:0 0 16px}} label{{display:grid;gap:6px;font-weight:600;font-size:.9rem}}
 input{{font:inherit;padding:10px 12px;border:1.5px solid #c9d3c9;border-radius:10px}} button{{margin-top:14px;width:100%;padding:11px;border:0;border-radius:10px;background:#1D6A4D;color:#fff;font:600 1rem system-ui}}
 .note{{background:#EEF3EC;border-radius:10px;padding:12px;color:#17201A}}
-</style></head><body><main><h1>Grain Marketing Desk</h1>{body}</main></body></html>"""
+.wrap{{max-width:640px;width:100%;display:grid;justify-items:center;gap:18px}} .disc{{font-size:.68rem;line-height:1.45;color:#5A675E;margin:0}}
+</style></head><body><div class="wrap"><main><h1>Grain Marketing Desk</h1>{body}</main><p class="disc">{disc}</p></div></body></html>"""
+
+# JSA's required disclaimer, same wording as the app (DISCLAIMER in grain-desk.html) and the JSA dashboards
+DISCLAIMER = ("Trading commodity futures, options on futures, cash commodities, and over-the-counter derivative products involves "
+              "substantial risk of loss and may not be suitable for all investors. This communication is provided for informational "
+              "purposes only and does not constitute investment advice, a recommendation, or an offer or solicitation to buy or sell "
+              "any futures, options, cash commodities, or derivative products. John Stewart &amp; Associates, Inc. does not accept "
+              "orders to buy or sell any financial instruments via email. The information contained herein has been obtained from "
+              "sources believed to be reliable; however, its accuracy and completeness are not guaranteed. Any opinions expressed are "
+              "solely those of the author, are subject to change without notice, and should not be relied upon as a basis for "
+              "investment decisions. Past performance is not indicative of future results. This message may contain confidential or "
+              "proprietary information intended solely for the use of the designated recipient. "
+              "&copy; John Stewart &amp; Associates, Inc. {year}")
 
 _recent = {}
 
@@ -76,7 +89,7 @@ def login_page(sent: int = 0, bad: int = 0):
     else:
         msg = '<p class="note">That link has expired or was already used. Ask for a new one.</p>' if bad else '<p>Enter your email and we\'ll send you a sign-in link.</p>'
         body = msg + '<form method="post" action="/login"><label>Email<input name="email" type="email" required autocomplete="email" autofocus></label><button type="submit">Send sign-in link</button></form>'
-    return PAGE.format(body=body)
+    return PAGE.format(body=body, disc=DISCLAIMER.format(year=time.localtime().tm_year))
 
 
 @app.post('/login')
