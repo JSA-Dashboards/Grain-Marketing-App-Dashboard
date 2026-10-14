@@ -21,3 +21,7 @@ id_*
 .venv/
 hosted/.venv/
 hosted/devdata/
+# customer spreadsheets stay on this computer
+*.xlsx
+*.xls
+*.xlsm
