@@ -808,11 +808,16 @@ function years(f){const s=new Set([THIS_YEAR]);f.crops.forEach(c=>s.add(+c.year)
 
 /* ---------- saving ---------- */
 let queue=Promise.resolve();
+// where a farm is stored: the consultant's and farmers' farms under farms/, a broker's customers in that
+// broker's own private section (brokers/<their id>/farms/) in the Claude app; the hosted server keeps all under farms/
+const farmPath=id=>(S.farmPaths&&S.farmPaths[id])||(S.role==='broker'&&!S.hosted?`brokers/${S.uid}/farms/${id}`:'farms/'+id);
 function persist(id){
-  const f=S.farms[id];f.updatedAt=new Date().toISOString();render();
+  const f=S.farms[id];f.updatedAt=new Date().toISOString();
+  if(S.role==='broker'&&S.myName)f.broker=S.myName;   // a broker's customers are always filed under their name
+  render();
   if(S.mode!=='live'){toast('Preview only — not saved');return}
-  const data=clone(f);
-  queue=queue.then(()=>S.db.doc('farms/'+id).set(data)).then(()=>toast('Saved')).catch(e=>{
+  const data=clone(f),path=farmPath(id);
+  queue=queue.then(()=>S.db.doc(path).set(data)).then(()=>toast('Saved')).catch(e=>{
     toast(e&&e.code==='invalid_argument'?"You don't have permission to save. Ask your consultant to share this app with you as an Editor.":e&&e.code==='quota_exceeded'?'Storage is full. Remove old records and try again.':"Couldn't save. Check your connection and try again.",true)})}
 
 /* ---------- forms ---------- */
@@ -2739,7 +2744,7 @@ document.addEventListener('click',e=>{
     nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;persist(S.current)},S.admin?(f.broker||''):undefined,{state:f.state,county:f.county})}
   if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
     const id=S.current;delete S.farms[id];S.current=null;S.confirmRemove=false;render();
-    if(S.mode==='live')S.db.doc('farms/'+id).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
+    if(S.mode==='live')S.db.doc(farmPath(id)).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
 });
 const setBrokerF=v=>{S.brokerF=v;try{localStorage.setItem('gd.brokerFilter',v)}catch(_){}render()};
 document.addEventListener('change',e=>{if(e.target.id==='yearSel'){S.year=+e.target.value;render()}
@@ -2815,19 +2820,36 @@ async function boot(){
   S.db=db;S.user=user;S.uid=await user.id();S.owner=await user.isOwner();
   // owner = works with many client farms (consultant, or a broker on the hosted version);
   // admin = also manages what every client sees (Intel, program deadlines, broker assignments, Snowflake export)
-  S.role=user.role?await user.role():(S.owner?'admin':'farmer');S.admin=S.role==='admin';S.hosted=!!c.hosted;
+  // in the Claude app, someone the consultant shares with as an Editor is a broker with their own customers
+  S.hosted=!!c.hosted;
+  S.role=user.role?await user.role():S.owner?'admin':(await user.canEdit().catch(()=>false))?'broker':'farmer';
+  S.admin=S.role==='admin';if(S.role==='broker')S.owner=true;
   if(!S.uid&&!S.owner){S.mode='noid';render();return}
   S.mode='live';
-  const me=await user.me();$('#who').textContent=S.admin?'Consultant · '+(me.name||'you'):S.role==='broker'?'Broker · '+(me.name||''):(me.name||'');
+  const me=await user.me();S.myName=(me&&me.name)||'';
+  $('#who').textContent=S.admin?'Consultant · '+(S.myName||'you'):S.role==='broker'?'Broker · '+S.myName:S.myName;
   const onErr=e=>{if(e&&e.code==='revoked'){S.note='Access to saved records has ended for this page.';render()}};
   // shared futures prices written by the evening sync; everyone reads, only the owner writes
   db.doc('market/futures').onSnapshot(d=>{S.market=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   db.doc('market/bids').onSnapshot(d=>{S.bids=d.exists?clone(d.data()):null;if(!$('#dlg').open&&S.section==='quotes')render()},onErr);
   db.doc('market/intel').onSnapshot(d=>{S.intel=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
   db.doc('market/deadlines').onSnapshot(d=>{S.deadlines=d.exists?clone(d.data()):null;if(!$('#dlg').open)render()},onErr);
-  if(S.owner){
-    db.collection('farms').onSnapshot(snap=>{const next={};snap.docs.forEach(d=>{if(d.exists)next[d.id]=normalize(d.data())});
-      S.farms=next;if(S.current&&!next[S.current])S.current=null;if(!$('#dlg').open)render()},onErr);
+  // farms arrive from several places (the consultant's own list, each broker's section); merge them into one view
+  const sources={};
+  const setSource=(k,prefix)=>snap=>{sources[k]=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,data:normalize(d.data()),path:prefix+d.id}));
+    const next={},paths={};Object.values(sources).flat().forEach(x=>{next[x.id]=x.data;paths[x.id]=x.path});
+    S.farms=next;S.farmPaths=paths;if(S.current&&!next[S.current])S.current=null;if(!$('#dlg').open)render()};
+  if(S.role==='broker'&&!S.hosted){
+    // the broker's own section: a profile (so the consultant can find it) and their customers' farms
+    const prof=db.doc('brokers/'+S.uid);
+    prof.get().then(d=>{const p=d.exists?d.data():null;if(!p||p.name!==S.myName)return prof.set({name:S.myName,since:p&&p.since||TODAY})}).catch(()=>{});
+    db.collection('brokers/'+S.uid+'/farms').onSnapshot(setSource('mine',`brokers/${S.uid}/farms/`),onErr);
+  }else if(S.owner){
+    db.collection('farms').onSnapshot(setSource('main','farms/'),onErr);
+    // the consultant also sees every broker's customers (the Claude app keeps them in each broker's section)
+    if(!S.hosted){const seen=new Set();
+      db.collection('brokers').onSnapshot(snap=>snap.docs.forEach(d=>{if(!d.exists||seen.has(d.id))return;seen.add(d.id);
+        db.collection('brokers/'+d.id+'/farms').onSnapshot(setSource('b:'+d.id,`brokers/${d.id}/farms/`),onErr)}),onErr)}
   }else{
     S.current=S.uid;
     db.doc('farms/'+S.uid).onSnapshot(d=>{if(d.exists)S.farms[S.uid]=normalize(d.data());else delete S.farms[S.uid];if(!$('#dlg').open)render()},onErr);

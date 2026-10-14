@@ -56,10 +56,14 @@ def cmd_relink(_):
 
 
 def cmd_import(a):
-    """Load JSON files saved from the Claude app (ArtifactData list with out_dir): <folder>/farms/*.json, <folder>/market/*.json."""
+    """Load JSON files saved from the Claude app (ArtifactData list with out_dir): <folder>/farms/*.json,
+    <folder>/market/*.json, and each broker's customers at <folder>/brokers/<id>/farms/*.json (all become farms/)."""
     n = 0
-    for coll in ('farms', 'market'):
-        d = os.path.join(a.folder, coll)
+    dirs = [('farms', os.path.join(a.folder, 'farms')), ('market', os.path.join(a.folder, 'market'))]
+    bdir = os.path.join(a.folder, 'brokers')
+    if os.path.isdir(bdir):
+        dirs += [('farms', os.path.join(bdir, b, 'farms')) for b in sorted(os.listdir(bdir))]
+    for coll, d in dirs:
         if not os.path.isdir(d):
             continue
         for fn in sorted(os.listdir(d)):
