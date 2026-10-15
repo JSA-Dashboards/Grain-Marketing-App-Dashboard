@@ -24,10 +24,13 @@ SCHEDULE = [  # (job, hour, minute, weekdays 0=Mon)
 
 
 def run_job(name):
+    """Run one job; returns False if it failed (a one-off run then exits non-zero, so cron-alert emails)."""
     try:
         log.info('%s: %s', name, JOBS[name]().replace('\n', ' | '))
+        return True
     except Exception:
         log.exception('%s failed', name)
+        return False
 
 
 def main():
