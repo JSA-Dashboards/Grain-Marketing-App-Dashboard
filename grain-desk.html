@@ -2417,8 +2417,9 @@ function arcVals(d,code,o){
   const [bmY,actY,rate]=pr,k=o.crop,plcY=(c.plcY||{})[k],P=d.price[k]||{};
   if(o.mode==='actual'){const plcRate=Math.max(0,(FSA_ERP[k]??0)-n0(P.nat));
     return{name:c.n,prac:v[o.prac]?o.prac:v.A?'A':v.N?'N':'I',bmY,actY,bmP:P.bmP,price:P.nat,rateRaw:rate,arc:rate*.85,plc:plcY!=null?plcRate*plcY*.85:null,plcY,base:(c.base||{})[k]}}
-  const bmP=ARC_BMP[k]??P.bmP,br=bmY*bmP,y=bmY*o.yld/100,pp=Math.max(o.price,ARC26.loan[k]??0),act=y*pp,rr=Math.min(.12*br,Math.max(0,.9*br-act));
-  return{name:c.n,prac:v[o.prac]?o.prac:v.A?'A':v.N?'N':'I',bmY,actY:y,bmP,price:o.price,rateRaw:rr,arc:rr*.85,plc:plcY!=null?Math.max(0,(FSA_ERP[k]??0)-pp)*plcY*.85:null,plcY,base:(c.base||{})[k]}}
+  // 2026: FSA's program-year 2026 county benchmark yields when the document has them (b26), else 2025's
+  const b26=v.b26||{},bY=b26[o.prac]??b26.A??b26.N??b26.I??bmY,bmP=P.bmP26??ARC_BMP[k]??P.bmP,br=bY*bmP,y=bY*o.yld/100,pp=Math.max(o.price,ARC26.loan[k]??0),act=y*pp,rr=Math.min(.12*br,Math.max(0,.9*br-act));
+  return{name:c.n,prac:b26[o.prac]!=null?o.prac:b26.A!=null?'A':v[o.prac]?o.prac:v.A?'A':v.N?'N':'I',bmY:bY,actY:y,bmP,price:o.price,rateRaw:rr,arc:rr*.85,plc:plcY!=null?Math.max(0,(FSA_ERP[k]??0)-pp)*plcY*.85:null,plcY,base:(c.base||{})[k]}}
 const arcBin=v=>v==null?-1:v<=0?0:ARC_BINS.filter(b=>v>b).length;
 const arcFill=b=>b<0?'var(--surface)':b===0?'var(--soft)':`color-mix(in srgb,var(--accent) ${[0,22,40,58,78,100][b]}%,var(--surface))`;
 function arcOpts(f){
@@ -2470,7 +2471,7 @@ function arcBody(f,d,o){
       ['PLC yield',r.plcY==null?'—':r.plcY.toFixed(1)+' bu'],['Base acres in county',r.base?bu(r.base):'—']].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></div>`
     :`<div class="arcdet"><p class="muted" style="margin:0;font-size:.85rem">Click a county for its numbers.</p></div>`;
   const note=o.mode==='actual'?`FSA’s final 2025 numbers (as of ${fmtDate(d.asOf)}): ARC-CO pays 85% of the county rate per base acre; PLC = (effective reference price ${usd(FSA_ERP[o.crop])} − 2025 season price ${usd(d.price[o.crop].nat)}) × the county’s average PLC yield × 85%. Before the 5.7% sequestration and payment limits. Paid October 2026.`
-    :`Estimate for 2026 crops using each county’s 2025 benchmark yield (FSA’s 2026 benchmarks may differ a little), the ${usd(ARC_BMP[o.crop])} benchmark price, your season price and county yield. Every county is assumed to have the same yield percentage, so this shows how price drives payments. Start with USDA’s October forecast (${usd(ARC26.price[o.crop])}).`;
+    :`Estimate for 2026 crops using ${d.source26?'FSA’s 2026 county benchmark yields':'each county’s 2025 benchmark yield'}, the ${usd(d.price[o.crop].bmP26??ARC_BMP[o.crop])} benchmark price, your season price and county yield. Every county is assumed to have the same yield percentage, so this shows how price drives payments. Start with USDA’s October forecast (${usd(ARC26.price[o.crop])}).`;
   const rows=all.slice().sort((a,b)=>b.v-a.v||a.r.name.localeCompare(b.r.name));
   return`${kpi}<div class="arcwrap"><div class="panel calc arcmap">${svg}${legend}</div>${det}</div>
     <p class="muted" style="font-size:.76rem;margin:10px 0 0">${note}</p>
