@@ -2344,7 +2344,11 @@ function reportData(f){
   const soon=[...deadlinesFor(f).map(x=>({d:x.d,t:x.title})),...deliveries(f).filter(d=>!d.st.done&&d.deliveryEnd>=TODAY).map(d=>({d:d.deliveryEnd,t:`${d.crop} delivery to ${d.buyer||'buyer'} closes (${bu(remaining(d))} bu left)`}))]
     .filter(x=>daysUntil(x.d)<=60).sort((a,b)=>a.d.localeCompare(b.d));
   const attn=D.items.slice().sort((a,b)=>(a.c==='bad'?0:1)-(b.c==='bad'?0:1));
-  return{f,crops,exp:D.exp,sold:D.sold,hed:D.hed,acres,profit,ppa:pAc?profit/pAc:null,guar,soon,attn,
+  // rolled HTAs and hedges: first month → current month, net spread and fees
+  const rolls=f.sales.filter(s=>+s.year===+S.year&&ROLLABLE.includes(s.type)&&(s.rolls||[]).length).map(s=>{const rs=s.rolls.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    return{crop:s.crop,what:`${s.type==='HTA'?'HTA':'Hedge'}${s.buyer?' · '+s.buyer:''}`,bu:qty(s),months:`${rs[0].from||'—'} → ${s.futuresMonth||rs[rs.length-1].to||'—'}`,n:rs.length,
+      spread:rollSpread(s),fee:rollFees(s),cost:rollFees(s)*qty(s),after:rolledFutures(s)}});
+  return{f,crops,exp:D.exp,sold:D.sold,hed:D.hed,acres,profit,ppa:pAc?profit/pAc:null,guar,soon,attn,rolls,
     asOf:S.market&&S.market.asOf||null,made:TODAY}}
 const RPT_MAX=6;
 function tabReport(f){
@@ -2367,6 +2371,9 @@ function tabReport(f){
         <td class="n">${x.avg!=null?usd(x.avg):'—'}</td><td class="n">${x.be!=null?usd(x.be):'—'}</td><td class="n">${x.mkt!=null?usd(x.mkt):'—'}</td>
         <td class="n ${x.ppa==null?'':x.ppa<0?'neg':'pos'}"><b>${x.ppa!=null?usd(x.ppa,0):'—'}</b></td></tr>`).join('')}</tbody></table>`
       :'<p class="muted">No crops set up for this year yet.</p>'}
+    ${R.rolls.length?`<h4>Rolled contracts</h4><table class="rtab"><thead><tr><th>Crop</th><th>Contract</th><th class="n">Bushels</th><th>Rolled</th><th class="n">Spread</th><th class="n">Fees</th><th class="n">After rolls</th></tr></thead><tbody>
+      ${R.rolls.slice(0,RPT_MAX).map(x=>`<tr><td><b>${esc(x.crop)}</b></td><td>${esc(x.what)}</td><td class="n">${bu(x.bu)}</td><td style="white-space:nowrap">${esc(x.months)}${x.n>1?` <small>(${x.n} rolls)</small>`:''}</td>
+        <td class="n ${x.spread<0?'neg':''}">${x.spread<0?'−':'+'}${usd(Math.abs(x.spread))}</td><td class="n">${x.fee?`${usd(x.fee)}<small> · ${usd(x.cost,0)}</small>`:'—'}</td><td class="n"><b>${usd(x.after)}</b></td></tr>`).join('')}</tbody></table>`:''}
     <h4>Crop insurance</h4>
     ${c.some(x=>x.ins)?`<table class="rtab"><thead><tr><th>Crop</th><th>Plan</th><th class="n">Coverage</th><th class="n">Revenue guarantee</th><th class="n">Insured bu</th><th class="n">Contracted of insured</th></tr></thead><tbody>
       ${c.filter(x=>x.ins).map(x=>`<tr><td><b>${esc(x.crop)}</b></td><td>${esc(x.ins.plan)}</td><td class="n">${x.ins.cov}%</td><td class="n">${usd(x.ins.guar,0)}</td><td class="n">${bu(x.ins.insured)}</td>
@@ -2389,7 +2396,7 @@ const loadJsPDF=()=>jspdfP||(jspdfP=new Promise((res,rej)=>{if(window.jspdf)retu
 async function reportPdf(f){
   const note=$('#rptNote');if(note&&note.value.trim()!==(f.reportNote||'')){f.reportNote=note.value.trim();persist(S.current)}
   const JsPDF=await loadJsPDF(),R=reportData(f),doc=new JsPDF({unit:'pt',format:'letter'});
-  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...');
+  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...').replace(/ → /g,' to ');
   const INK=[23,32,26],MUTED=[90,103,94],ACC=[29,106,77],GRAIN=[181,134,43],BAD=[174,61,43],GOOD=[44,122,76],LINE=[214,222,214],SOFT=[238,243,236];
   const W=612,M=40,CW=W-2*M;let y=48;
   const txt=(s,x,yy,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||9);doc.setTextColor(...(o.c||INK));doc.text(T(s),x,yy,{align:o.a||'left',maxWidth:o.w})};
@@ -2417,6 +2424,10 @@ async function reportPdf(f){
     R.crops.map(x=>[{t:x.crop,b:1},x.acres?bu(x.acres):'—',x.yld?x.yld.toFixed(0):'—',x.exp?bu(x.exp):'—',{bar:[x.sp||0,x.hp||0],t:x.sp==null?'—':pct(x.sp)+(x.hed?' · '+pct(x.hp):'')},
       x.avg!=null?usd(x.avg):'—',x.be!=null?usd(x.be):'—',x.mkt!=null?usd(x.mkt):'—',{t:x.ppa!=null?usd(x.ppa,0):'—',b:1,c:x.ppa==null?INK:x.ppa<0?BAD:GOOD}]));
   else{txt('No crops set up for this year yet.',M,y,{c:MUTED});y+=12}
+  if(R.rolls.length){h4('Rolled contracts');
+    table([['Crop',56],['Contract',130],['Bushels',58,'right'],['Rolled',118],['Spread',50,'right'],['Fees',66,'right'],['After rolls',54,'right']],
+      R.rolls.slice(0,RPT_MAX).map(x=>[{t:x.crop,b:1},x.what.length>27?x.what.slice(0,26)+'…':x.what,bu(x.bu),x.months+(x.n>1?` (${x.n} rolls)`:''),{t:(x.spread<0?'-':'+')+usd(Math.abs(x.spread)),c:x.spread<0?BAD:INK},
+        x.fee?`${usd(x.fee)} · ${usd(x.cost,0)}`:'—',{t:usd(x.after),b:1}]))}
   h4('Crop insurance');
   const ins=R.crops.filter(x=>x.ins);
   if(ins.length)table([['Crop',80],['Plan',80],['Coverage',70,'right'],['Revenue guarantee',110,'right'],['Insured bu',90,'right'],['Contracted of insured',102,'right']],
@@ -2454,7 +2465,7 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 /* ---------- client summary PDF: the dashboard's filtered farms, for emailing a broker ---------- */
 async function summaryPdf(){
   const JsPDF=await loadJsPDF(),F=dashFilter(),D=F.ids.map(id=>dashFarm(id,F.crop)),doc=new JsPDF({unit:'pt',format:'letter',orientation:'landscape'});
-  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...');
+  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...').replace(/ → /g,' to ');
   const INK=[23,32,26],MUTED=[90,103,94],ACC=[29,106,77],GRAIN=[181,134,43],BAD=[174,61,43],GOOD=[44,122,76],LINE=[214,222,214],SOFT=[238,243,236];
   const W=792,H=612,M=40,CW=W-2*M,BOTTOM=H-48;let y=46,page=1;
   const txt=(s,x,yy,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||9);doc.setTextColor(...(o.c||INK));doc.text(T(s),x,yy,{align:o.a||'left',maxWidth:o.w})};
