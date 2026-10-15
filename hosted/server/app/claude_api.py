@@ -7,8 +7,6 @@ safety-classifier decline is retried on a fallback model inside the same call.
 import base64
 import re
 
-import anthropic
-
 from . import config
 
 _client = None
@@ -26,6 +24,7 @@ def client():
     if _client is None:
         if not config.ANTHROPIC_API_KEY:
             raise ClaudeError('not_configured', 'Contract scanning is not set up on this server yet.')
+        import anthropic     # imported on first use: it is slow to load, and most sessions never scan a contract
         _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     return _client
 
@@ -49,6 +48,7 @@ def ask(messages, images=(), max_tokens=16000, effort='medium'):
         raise ClaudeError('bad_request', 'The last message must be from the user.')
     if images:
         msgs[-1]['content'] = [*(_image_block(u) for u in list(images)[:4]), {'type': 'text', 'text': msgs[-1]['content']}]
+    import anthropic
     try:
         r = client().beta.messages.create(
             model=config.CLAUDE_MODEL,

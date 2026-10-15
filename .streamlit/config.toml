@@ -1,0 +1,12 @@
+[server]
+enableStaticServing = true      # serves static/ (the ZIP-code files) at /app/static/
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#1D6A4D"
+backgroundColor = "#D6E5CF"
+secondaryBackgroundColor = "#EEF3EC"
+textColor = "#17201A"

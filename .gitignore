@@ -25,3 +25,9 @@ hosted/devdata/
 *.xlsx
 *.xls
 *.xlsm
+
+# Streamlit version: secrets and local data stay on this computer
+.streamlit/secrets.toml
+.local-data/
+dev_run.py
+.claude/

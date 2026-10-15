@@ -219,6 +219,32 @@ def use_login_token(t):
         return r['user_id']
 
 
+_code_tries = {}
+
+
+def new_login_code(uid):
+    """6-digit sign-in code (the Streamlit version; reuses login_tokens). Any earlier one for this person is voided."""
+    code = f'{secrets.randbelow(10**6):06d}'
+    with tx() as c:
+        c.execute('DELETE FROM login_tokens WHERE user_id=? OR expires<?', (uid, time.time()))
+        c.execute('INSERT INTO login_tokens(hash,user_id,expires) VALUES(?,?,?)',
+                  (_hash(uid + ':' + code), uid, time.time() + config.LOGIN_CODE_MINUTES * 60))
+    _code_tries[uid] = 0
+    return code
+
+
+def use_login_code(uid, code):
+    if _code_tries.get(uid, 0) >= 5:
+        return False
+    with tx() as c:
+        r = c.execute('SELECT * FROM login_tokens WHERE hash=?', (_hash(uid + ':' + (code or '').strip()),)).fetchone()
+        if not r or r['used'] or r['expires'] < time.time():
+            _code_tries[uid] = _code_tries.get(uid, 0) + 1
+            return False
+        c.execute('DELETE FROM login_tokens WHERE user_id=?', (uid,))
+        return True
+
+
 def new_session(uid):
     t = secrets.token_urlsafe(32)
     with tx() as c:
@@ -269,3 +295,10 @@ def delete_asset(aid):
         os.remove(os.path.join(config.ASSET_DIR, aid))
     except FileNotFoundError:
         pass
+
+
+# The Streamlit version keeps everything in Snowflake: same function names, so the page bridge,
+# the access rules and the nightly jobs run unchanged.
+if config.STORE_BACKEND == 'snowflake':
+    from .store_sf import *                        # noqa: F401,F403,E402
+    from .store_sf import VersionConflict, split   # noqa: F401,E402

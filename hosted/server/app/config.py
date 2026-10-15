@@ -36,3 +36,11 @@ SNOWFLAKE_PRIVATE_KEY_PATH = _env('SNOWFLAKE_PRIVATE_KEY_PATH', '/secrets/snowfl
 SNOWFLAKE_ROLE = _env('SNOWFLAKE_ROLE')
 SNOWFLAKE_WAREHOUSE = _env('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH')
 TIMEZONE = _env('TIMEZONE', 'America/Chicago')
+
+# storage: 'sqlite' (the Docker version, DB_PATH) or 'snowflake' (the Streamlit version, JSA.GRAIN_DESK)
+STORE_BACKEND = _env('STORE_BACKEND', 'sqlite').lower()
+SNOWFLAKE_PRIVATE_KEY = os.environ.get('SNOWFLAKE_PRIVATE_KEY', '')     # PEM text (Streamlit secrets); or use the path above
+SNOWFLAKE_DATABASE = _env('GRAIN_DESK_DATABASE', 'JSA')
+SNOWFLAKE_SCHEMA = _env('GRAIN_DESK_SCHEMA', 'GRAIN_DESK')
+MAX_ASSET_BYTES_SF = 7 * 1024 * 1024                                    # a Snowflake BINARY holds up to 8 MB
+LOGIN_CODE_MINUTES = int(_env('LOGIN_CODE_MINUTES', '10'))
