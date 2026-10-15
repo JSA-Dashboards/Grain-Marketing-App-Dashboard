@@ -1,5 +1,4 @@
-streamlit>=1.56
-snowflake-connector-python>=3.12,<4
-cryptography>=42
-anthropic>=1.13,<2
-requests>=2.32,<3
+streamlit>=1.50
+snowflake-connector-python>=3.12
+anthropic>=1.0
+requests>=2.32
