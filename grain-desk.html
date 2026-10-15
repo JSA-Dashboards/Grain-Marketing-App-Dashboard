@@ -401,6 +401,40 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .ikpi{margin-bottom:14px} .ikpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.ikpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ikpi>div:last-child{grid-column:1/-1}}
 .ivtabs{margin-bottom:12px}
+.instop{margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ccsplit .warn{color:var(--warn)}
+/* ARC / PLC map */
+.arcctl{display:grid;gap:8px;margin-bottom:14px}.arcctl .chips{margin:0}.arcsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+.arcsl{margin-top:4px} input.arcsl{accent-color:var(--accent)}
+.arcwrap{display:grid;gap:14px;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);align-items:start}
+@media (max-width:820px){.arcwrap{grid-template-columns:1fr}}
+.arcsvg{width:100%;height:auto;display:block;max-height:520px}
+.arcsvg path{stroke:var(--surface);stroke-width:.6;cursor:pointer}.arcsvg path:hover{stroke:var(--ink);stroke-width:1.2}
+.arcsvg .farmring{fill:none;stroke:var(--grain);stroke-width:2.2;pointer-events:none}.arcsvg .selring{fill:none;stroke:var(--ink);stroke-width:2;pointer-events:none}
+.arcleg{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.74rem;margin-top:10px}.arcleg i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--line)}
+.arcdet{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}.arcdet .mkt{margin:8px 0 4px}
+/* descriptions */
+.learn details{border-bottom:1px solid var(--line);padding:10px 0}.learn details:last-of-type{border-bottom:0}
+.learn summary{cursor:pointer;font-weight:700;font-size:.98rem}
+.learn dl{margin:10px 0 4px;display:grid;gap:4px}.learn dt{font-weight:650;margin-top:8px;font-size:.9rem}.learn dd{margin:0;font-size:.88rem;line-height:1.5;color:var(--ink)}
+/* price checks */
+.pcgrid2{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.pcchart{width:100%;height:auto;display:block;margin-top:4px}
+.pcchart .pcgrid{stroke:var(--line);stroke-width:1} .pcchart .pcax{font-size:10px;fill:var(--muted);font-family:var(--f-data)}
+.pcchart .pcday{fill:none;stroke:var(--muted);stroke-width:1.5;opacity:.55} .pcchart .pcdot{fill:var(--muted);stroke:var(--surface);stroke-width:1.5}
+.pcchart .pcavg{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round} .pcchart .pcavgdot{fill:var(--accent);stroke:var(--surface);stroke-width:2}
+.pcchart .pcref{stroke:var(--grain);stroke-width:1.5;stroke-dasharray:5 4} .pcchart .pcpt:hover .pcdot{fill:var(--ink)}
+.pclegend{display:flex;gap:14px;flex-wrap:wrap;font-size:.76rem;color:var(--muted);margin-top:4px}.pclegend i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.pclegend i.d{border-color:var(--muted);opacity:.6}.pclegend i.a{border-color:var(--accent);border-top-width:3px}.pclegend i.r{border-color:var(--grain);border-top-style:dashed}
+.pcmeans p{margin:0 0 10px;font-size:.88rem}
+.pcthr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.pcthr>div{background:var(--soft);border-radius:10px;padding:8px 10px;display:grid;gap:1px;font-size:.8rem}.pcthr b{font-size:1rem}.pcthr em{font-style:normal;color:var(--muted);font-size:.74rem}
+.pcthr>div.hit{background:color-mix(in srgb,var(--good) 14%,var(--surface))}.pcthr>div.hit em{color:var(--good);font-weight:600}
+@media (max-width:560px){.pcthr{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pcnext{font-size:.85rem;padding-top:10px;border-top:1px solid var(--line)}
+.pcbar{position:relative;height:8px;background:var(--soft);border-radius:4px}.pcbar::after{content:'';position:absolute;left:50%;top:-3px;bottom:-3px;border-left:1px solid var(--muted)}
+.pcbar span{position:absolute;top:0;bottom:0;border-radius:4px}.pcbar .up{background:var(--accent)}.pcbar .dn{background:var(--grain)}
+.pchist .neg{color:var(--bad)}
 /* consultant dashboard */
 .dkpi{grid-template-columns:repeat(5,minmax(0,1fr));margin:6px 0 10px}
 @media (max-width:900px){.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -2166,6 +2200,8 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 /* ---------- crop insurance (policy, coverage levels, payout estimator, SCO/ECO) and FSA ARC/PLC ---------- */
 // planning estimates only: each crop is treated as one unit; premiums are the farmer-paid $/ac from the agent's quote
 const FSA_REF={corn:4.10,soybeans:10.00,wheat:6.35},FSA_LOAN={corn:2.42,soybeans:6.82,wheat:3.72}; // 2025 law: statutory reference prices, 2026+ loan rates
+// what PLC actually pays against (2025 and 2026 crops), and the national ARC-CO benchmark price for 2025/2026
+const FSA_ERP={corn:4.42,soybeans:10.71,wheat:6.35},ARC_BMP={corn:5.03,soybeans:12.17};
 const INS_VIEWS=[['policy','Policy'],['levels','Coverage levels'],['pays','What it pays'],['addons','SCO / ECO'],['fsa','ARC / PLC']];
 const scoTop=c=>num(c.scoTop)??(+c.year>=2027?90:86); // SCO covers up to 90% starting 2027, 86% before
 // o: {cov, harvest, yield (bu/ac), cntyPct (county revenue or yield as a share of expected)}
@@ -2183,18 +2219,25 @@ function insCalc(c,o={}){
   return{ac,aph,cov,p,h,y,gBu,gPrice,guar,base,sco:sco.pay,eco:eco.pay,scoLiab:sco.liab,ecoLiab:eco.liab,pay,prem,net:pay-prem,crop:ac*y*h}}
 // FSA: PLC pays when the marketing-year price falls below the reference price; ARC-CO when county revenue falls below 90% of benchmark (capped at 12%)
 function fsaCalc(c){
-  const k=key(c.crop),ba=n0(c.baseAcres),ref=num(c.refPrice)??FSA_REF[k]??null,loan=num(c.loanRate)??FSA_LOAN[k]??0;
+  const k=key(c.crop),ba=n0(c.baseAcres),ref=num(c.refPrice)??FSA_ERP[k]??null,loan=num(c.loanRate)??FSA_LOAN[k]??0;
   const est=futFor(c).price!=null?futFor(c).price+n0(c.estBasis):null,mya=num(c.myaPrice)??est;
   if(!ba||mya==null||ref==null)return{ba,ref,loan,mya,est};
   const pr=Math.max(mya,loan),plcRate=Math.max(0,ref-pr),plc=num(c.plcYield)!=null?plcRate*n0(c.plcYield)*ba*.85:null;
-  const bmY=num(c.arcBmYield),bmP=num(c.arcBmPrice)??ref,cy=num(c.arcCntyYield);
+  const bmY=num(c.arcBmYield),bmP=num(c.arcBmPrice)??ARC_BMP[k]??ref,cy=num(c.arcCntyYield);
   let arc=null,arcRate=null,bm=null,act=null;
   if(bmY!=null&&cy!=null){bm=bmY*bmP;act=cy*pr;arcRate=Math.min(.12*bm,Math.max(0,.9*bm-act));arc=arcRate*ba*.85}
   return{ba,ref,loan,mya,est,pr,plcRate,plc,bm,act,arcRate,arc}}
 
+// top of the insurance tab: farm overview, one crop in detail, the state ARC/PLC map, RMA price checks, plain-language descriptions
+const INS_TOP=[['overview','Overview'],['crop','By crop'],['map','ARC / PLC map'],['prices','Price checks'],['learn','Descriptions']];
 function tabInsurance(f){
-  const list=f.crops.filter(c=>+c.year===+S.year);
-  if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div><div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div></section>`;
+  const top=S.insTop||'overview',list=f.crops.filter(c=>+c.year===+S.year);
+  const nav=`<div class="chips instop" role="tablist">${INS_TOP.map(([k,l])=>`<button class="chip" role="tab" data-instop="${k}" aria-pressed="${k===top}">${l}</button>`).join('')}</div>`;
+  const noCrops=`<div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div>`;
+  if(top!=='crop'){
+    const body=top==='map'?insMap(f):top==='prices'?insPrices(f):top==='learn'?insLearn():list.length?insOverview(f,list):noCrops;
+    return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(f.name)}</div></div></div>${nav}${body}</section>`}
+  if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div>${nav}${noCrops}</section>`;
   const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None',view=S.insView||'policy',cov=n0(sel.coverage);
   if(!S.insEst||S.insEst.id!==sel.id){const p=projOf(sel),h=harvOf(sel);S.insEst={id:sel.id,y:100,h:p&&h?Math.max(-40,Math.min(40,Math.round((h/p-1)*20)*5)):0,c:null}}
   const chip=(k,v,label)=>`<button class="chip" data-ichip="${k}" data-v="${v}" aria-pressed="${String(sel[k]??'')===String(v)}">${label}</button>`;
@@ -2248,19 +2291,19 @@ function tabInsurance(f){
     body=`<p class="muted" style="font-size:.85rem;margin:0 0 16px">FSA programs on your <b>base acres</b> (not planted acres). Choose ARC-CO or PLC each year for each crop.</p>
     <div class="clab">Your election</div>
     <div class="chips">${chip('fsaElect','PLC','PLC')}${chip('fsaElect','ARC-CO','ARC-CO')}${chip('fsaElect','','Not elected')}</div>
-    <div class="pgrid">${fld('baseAcres','Base acres')}${fld('plcYield','PLC yield (bu/ac)')}${fld('myaPrice','Season avg price ($/bu)',F.est!=null?`est. ${F.est.toFixed(2)}`:'')}${fld('refPrice','Reference price ($/bu)',FSA_REF[k]!=null?FSA_REF[k].toFixed(2):'')}</div>
+    <div class="pgrid">${fld('baseAcres','Base acres')}${fld('plcYield','PLC yield (bu/ac)')}${fld('myaPrice','Season avg price ($/bu)',F.est!=null?`est. ${F.est.toFixed(2)}`:'')}${fld('refPrice','Effective reference price ($/bu)',FSA_ERP[k]!=null?FSA_ERP[k].toFixed(2):'')}</div>
     <div class="clab" style="margin-top:18px">ARC-CO county numbers</div>
-    <div class="pgrid">${fld('arcBmYield','Benchmark yield (bu/ac)')}${fld('arcBmPrice','Benchmark price ($/bu)',FSA_REF[k]!=null?FSA_REF[k].toFixed(2):'')}${fld('arcCntyYield','County yield this year')}${fld('loanRate','Loan rate ($/bu)',FSA_LOAN[k]!=null?FSA_LOAN[k].toFixed(2):'')}</div>
+    <div class="pgrid">${fld('arcBmYield','Benchmark yield (bu/ac)')}${fld('arcBmPrice','Benchmark price ($/bu)',(ARC_BMP[k]??FSA_ERP[k])!=null?(ARC_BMP[k]??FSA_ERP[k]).toFixed(2):'')}${fld('arcCntyYield','County yield this year')}${fld('loanRate','Loan rate ($/bu)',FSA_LOAN[k]!=null?FSA_LOAN[k].toFixed(2):'')}</div>
     <div id="fsaOut">${fsaOut(sel)}</div>`}
   return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(sel.crop)}${has?` · ${esc(sel.insType)} ${cov}%${sel.unitType?` · ${esc(sel.unitType)} units`:''}`:''}</div></div></div>
-  <div class="chips" style="margin-bottom:12px">${list.map(c=>`<button class="chip" data-inscrop="${c.id}" aria-pressed="${c.id===sel.id}">${esc(c.crop)}</button>`).join('')}</div>
+  ${nav}<div class="chips" style="margin-bottom:12px">${list.map(c=>`<button class="chip" data-inscrop="${c.id}" aria-pressed="${c.id===sel.id}">${esc(c.crop)}</button>`).join('')}</div>
   <div id="insHead">${insHead(f,sel)}</div>
   <div class="chips ivtabs">${INS_VIEWS.map(([k,l])=>`<button class="chip sm" data-insview="${k}" aria-pressed="${k===view}">${l}</button>`).join('')}</div>
   <div class="panel calc">${body}</div></section>
   <details class="explain"><summary>How these are figured</summary>
   <p><b>Revenue guarantee</b> = acres × APH × coverage × guarantee price. RP uses the higher of the projected and harvest price; RP-HPE and YP use the projected price. A policy pays the guarantee minus acres × your yield × harvest price (YP: bushels short × projected price).</p>
   <p><b>SCO and ECO</b> pay on the county's revenue (or yield for YP) falling below the top of their band, in full once it reaches the bottom. Starting with 2027 crops, SCO covers up to 90%.</p>
-  <p><b>PLC</b> = (reference price − higher of season price and loan rate) × PLC yield × 85% of base acres. <b>ARC-CO</b> pays 90% of benchmark revenue minus county yield × that price, capped at 12% of benchmark, × 85% of base acres. FSA pays in October after the marketing year, before sequestration and payment limits.</p>
+  <p><b>PLC</b> = (effective reference price − higher of season price and loan rate) × PLC yield × 85% of base acres. <b>ARC-CO</b> pays 90% of benchmark revenue minus county yield × that price, capped at 12% of benchmark, × 85% of base acres. FSA pays in October after the marketing year, before sequestration and payment limits.</p>
   <p><b>Corn and soybean prices</b> fill in automatically each evening, the way RMA figures them: the projected price is February's average of December corn / November soybean futures, the harvest price is October's average. Until October ends the harvest price is the average so far. A price you type in always wins. Wheat prices depend on class and state, so enter those from your agent.</p>
   <p>Every crop is treated as one unit. These are planning estimates, not policy terms. Your agent and FSA office have the official numbers.</p></details>`}
 // where the projected and harvest prices come from, with a one-tap way back to RMA's numbers if someone typed their own
@@ -2276,6 +2319,209 @@ function insHead(f,sel){
   return`<div class="cckpi ikpi"><div><span>${esc(sel.crop)} guarantee</span><b>${r?usd(r.guar,0):'—'}</b><em>${r?usd(r.guar/r.ac)+' per acre':'set up the policy'}</em></div>
     <div><span>Premium you pay</span><b>${r&&r.prem?usd(r.prem,0):'—'}</b><em>${r&&r.prem?usd(r.prem/r.ac)+' per acre':'from your agent'}</em></div>
     <div><span>All crops guaranteed</span><b>${totG?usd(totG,0):'—'}</b><em>${totP?usd(totP,0)+' total premium':'&nbsp;'}</em></div></div>`}
+// Overview: every crop's policy at a glance, Crop Overview style, with farm totals
+function insOverview(f,list){
+  const pos=position(f,S.year),rows=list.map(c=>({c,r:insCalc(c),p:pos.find(x=>key(x.crop)===key(c.crop))||{}}));
+  const ins=rows.filter(x=>x.r),totG=ins.reduce((a,x)=>a+x.r.guar,0),totP=ins.reduce((a,x)=>a+x.r.prem,0),totA=ins.reduce((a,x)=>a+x.r.ac,0);
+  const payNow=ins.reduce((a,x)=>a+insCalc(x.c,{yield:x.r.aph}).pay,0),anyHarv=ins.some(x=>harvOf(x.c)!=null);
+  const kpi=`<div class="cckpi okpi ikpi">
+    <div><span>All crops guaranteed</span><b>${totG?kfmt(totG):'—'}</b><em>${totA?`${bu(totA)} insured acres · ${usd(totG/totA,0)}/ac`:'set up a policy'}</em></div>
+    <div><span>Premium you pay</span><b>${totP?kfmt(totP):'—'}</b><em>${totP&&totA?usd(totP/totA)+' per insured acre':'from your agent'}</em></div>
+    <div><span>Crops insured</span><b>${ins.length} of ${list.length}</b><em>${ins.map(x=>esc(x.c.crop)).join(', ')||'none yet'}</em></div>
+    <div class="${payNow>0?'pos':''}"><span>Pays at APH yield</span><b>${ins.length&&anyHarv?kfmt(payNow):'—'}</b><em>${anyHarv?'at today’s harvest price':'once the harvest price starts'}</em></div></div>`;
+  const card=({c,r,p})=>{const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(c.crop)],row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`;
+    const head=`<header><h2><span class="cdot"></span>${esc(c.crop)} <span class="muted">${S.year}</span></h2>
+      <div class="ccfut">${r?`<span>${esc(c.insType)}${c.unitType?' · '+esc(c.unitType):''}</span><b>${r.cov}%</b>`:`<span>&nbsp;</span><b class="muted" style="font-size:.95rem">No policy</b>`}</div></header>`;
+    if(!r)return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">${head}
+      <p class="ccsub">${c.insType==='None'?'Marked as not insured.':'Needs plan, coverage, acres, APH and a projected price.'}</p>
+      <div><button class="small" data-instop="crop" data-inscrop="${c.id}">${c.insType==='None'?'Review':'Set up'} ${esc(c.crop.toLowerCase())} insurance</button></div></article>`;
+    const h=harvOf(c),rr=rmaFor(c),now=insCalc(c,{yield:r.aph}),startY=c.insType==='YP'?r.gBu/r.ac:r.guar/(r.ac*r.h);
+    const sh=p.insured?p.sold/p.insured:null,shTone=sh==null?'':sh>1?'neg':sh>0.8?'warn':'pos';
+    const priceTxt=h==null?`projected ${usd(r.p)}`:`${c.insType==='RP'&&h>r.p?'harvest':'projected'} ${usd(r.gPrice)}`;
+    return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">${head}
+      <p class="ccsub">${n0(c.acres).toLocaleString('en-US')} ac · APH ${n0(c.aph).toFixed(0)} · guarantee price ${priceTxt}</p>
+      <div class="cckpi">
+        <div><span>Guarantee</span><b>${kfmt(r.guar)}</b></div>
+        <div><span>Premium</span><b>${r.prem?kfmt(r.prem):'—'}</b></div>
+        <div><span>Per acre</span><b>${usd(r.guar/r.ac,0)}</b></div></div>
+      <div class="ccsplit">
+        <div class="ccsplit-r"><span>Guaranteed bushels</span><b>${bu(r.gBu)} <small class="muted">(${(r.gBu/r.ac).toFixed(1)}/ac)</small></b></div>
+        <div class="ccsplit-r"><span>Contracted bushels</span><b>${bu(p.sold||0)}</b></div>
+        <div class="ccsplit-r tot"><span style="padding-left:0">Contracted of insured</span><b class="${shTone}">${sh==null?'—':pct(sh)}</b></div>
+        <p class="ccsplit-n">${h==null?(['corn','soybeans'].includes(key(c.crop))?'The harvest price is set in October.':`Enter ${esc(c.crop.toLowerCase())}’s harvest price from your agent once it’s published.`):now.pay>0?`At APH yield and today’s harvest price (${usd(h)}), it would pay about <b>${kfmt(now.pay)}</b>.`:`At today’s harvest price (${usd(h)}${rr&&!rr.harvFinal?', October so far':''}), it starts paying if yield falls below <b>${startY.toFixed(0)} bu/ac</b>.`}</p></div>
+      <details class="ccmore"><summary>Show all numbers</summary>
+        <dl class="cclist">${row('Plan',esc(c.insType))}${row('Coverage',r.cov+'%')}${row('Units',esc(c.unitType||'—'))}${row('Acres',n0(c.acres).toLocaleString('en-US'))}
+          ${row('APH',n0(c.aph).toFixed(0)+' bu')}${row('Projected price',usd(r.p))}${row('Harvest price',h==null?'—':usd(h)+(rr&&rr.harvDays&&!rr.harvFinal?' so far':''))}${row('Guarantee price',usd(r.gPrice))}
+          ${row('Premium / acre',r.prem?usd(r.prem/r.ac):'—')}${row('SCO',c.sco?`on${num(c.scoPrem)!=null?' · '+usd(num(c.scoPrem))+'/ac':''}`:'off')}${row('ECO',n0(c.eco)?`${n0(c.eco)}%${num(c.ecoPrem)!=null?' · '+usd(num(c.ecoPrem))+'/ac':''}`:'off')}${row('ARC / PLC',esc(c.fsaElect||'not set'))}
+          ${row('Company',esc(c.insCompany||'—'))}${row('Policy #',esc(c.policyNo||'—'))}</dl></details>
+      <div><button class="small" data-instop="crop" data-inscrop="${c.id}">Open ${esc(c.crop.toLowerCase())} details</button></div></article>`};
+  return`${kpi}<div class="ccards" style="margin-top:6px">${rows.map(card).join('')}</div>
+    <p class="muted" style="font-size:.76rem;margin:12px 0 0">Guarantee = acres × APH × coverage × guarantee price (RP uses the higher of projected and harvest). "Pays at APH yield" is what the policies would pay with a normal crop at today’s harvest price: a price-only loss. Premium is what you pay after subsidy, from your agent’s quote.</p>`}
+// Price checks: RMA projected (February) and harvest (October) prices as they form, plus every year since 2008
+function pcChart(pts,ref,refLabel){
+  if(!pts||!pts.length)return'<p class="muted" style="font-size:.85rem;margin:8px 0">No trading days yet.</p>';
+  const avg=[];let s=0;pts.forEach(([d,p],i)=>{s+=p;avg.push(s/(i+1))});
+  const vals=[...pts.map(x=>x[1]),...avg,...(ref!=null?[ref]:[])],lo=Math.min(...vals),hi=Math.max(...vals),pad=Math.max((hi-lo)*.15,.05);
+  const W=520,H=190,L=46,R=12,T=12,B=26,n=Math.max(pts.length,20),x=i=>L+(W-L-R)*(n<=1?0:i/(n-1)),y=v=>T+(H-T-B)*(1-(v-(lo-pad))/((hi+pad)-(lo-pad)));
+  const ticks=[lo-pad,(lo+hi)/2,hi+pad].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="pcgrid"/><text x="${L-6}" y="${y(v)+3}" class="pcax" text-anchor="end">${v.toFixed(2)}</text>`).join('');
+  const line=a=>a.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(''),last=pts.length-1,md=d=>new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  return`<svg viewBox="0 0 ${W} ${H}" class="pcchart" role="img" aria-label="Daily futures and running average">${ticks}
+    ${ref!=null?`<line x1="${L}" x2="${W-R}" y1="${y(ref)}" y2="${y(ref)}" class="pcref"/><text x="${W-R}" y="${y(ref)-5}" class="pcax" text-anchor="end">${esc(refLabel)} ${usd(ref)}</text>`:''}
+    <path d="${line(pts.map(p=>p[1]))}" class="pcday"/><path d="${line(avg)}" class="pcavg"/>
+    ${pts.map(([d,p],i)=>`<g class="pcpt"><circle cx="${x(i)}" cy="${y(p)}" r="3.2" class="pcdot"/><circle cx="${x(i)}" cy="${y(p)}" r="10" fill="transparent"><title>${md(d)}: settle ${usd(p,4)} · average so far ${usd(avg[i],4)}</title></circle></g>`).join('')}
+    <circle cx="${x(last)}" cy="${y(avg[last])}" r="4.5" class="pcavgdot"/>
+    <text x="${L}" y="${H-8}" class="pcax">${md(pts[0][0])}</text><text x="${x(last)}" y="${H-8}" class="pcax" text-anchor="${last>n*.8?'end':'middle'}">${md(pts[last][0])}</text></svg>
+    <div class="pclegend"><span><i class="d"></i>Daily settle</span><span><i class="a"></i>Average so far</span>${ref!=null?`<span><i class="r"></i>${esc(refLabel)}</span>`:''}</div>`}
+function insPrices(f){
+  const crop=S.pcCrop||'corn',name=crop==='corn'?'Corn':'Soybeans',yr=String(S.year),R=(S.market&&S.market.rma)||{},D=(S.market&&S.market.rmaDaily)||{};
+  const r=(R[yr]||{})[crop],d=(D[yr]||{})[crop]||{feb:[],oct:[]},mo=crop==='corn'?'December':'November';
+  const chips=`<div class="chips" style="margin-bottom:14px">${[['corn','Corn'],['soybeans','Soybeans']].map(([k,l])=>`<button class="chip" data-pccrop="${k}" aria-pressed="${k===crop}">${l}</button>`).join('')}</div>`;
+  if(!r)return chips+`<div class="panel calc"><p class="muted" style="margin:0">No RMA price data for ${yr} ${name.toLowerCase()} yet. It fills in from the nightly futures update.</p></div>`;
+  const h=r.harvDays?Math.min(r.harv,2*r.proj):null,chg=h!=null&&r.proj?h/r.proj-1:null,gp=h!=null?Math.max(r.proj,h):r.proj;
+  const kpi=`<div class="cckpi okpi ikpi">
+    <div><span>Projected price</span><b>${r.proj!=null?usd(r.proj):'—'}</b><em>${r.projFinal?'February average · final':r.projDays?`February so far · ${r.projDays} days`:'set in February'}</em></div>
+    <div><span>Harvest price</span><b>${h!=null?usd(h):'—'}</b><em>${r.harvFinal?'October average · final':r.harvDays?`October so far · ${r.harvDays} of ~22 days`:'set in October'}</em></div>
+    <div class="${chg==null?'':chg<0?'neg':'pos'}"><span>Harvest vs projected</span><b>${chg==null?'—':(chg>0?'+':'')+pct(chg)}</b><em>${chg==null?'&nbsp;':chg<0?'below projected':'above projected'}</em></div>
+    <div><span>RP guarantee price</span><b>${gp!=null?usd(gp):'—'}</b><em>${h!=null&&h>r.proj?'harvest price (higher)':'projected price'}</em></div></div>`;
+  const means=h==null?`<p>The harvest price is the average of ${mo} ${name.toLowerCase()} futures settles across October. Until then, RP guarantees use the projected price.</p>`
+    :h>=r.proj?`<p>The harvest price${r.harvFinal?' is':' is running'} <b>above</b> the projected price. Revenue Protection guarantees rise to ${usd(h)}, which helps if yields come up short, but a normal crop won’t collect on price alone.</p>`
+    :`<p>The harvest price${r.harvFinal?' is':' is running'} <b>${pct(-chg)} below</b> projected. A policy pays on price alone (at a normal APH yield) only when the harvest price falls further below projected than the coverage level allows:</p>
+      <div class="pcthr">${[85,80,75,70].map(c=>{const t=r.proj*c/100;return`<div class="${h<t?'hit':''}"><b>${c}%</b><span>below ${usd(t)}</span><em>${h<t?'would pay':'no price-only pay'}</em></div>`}).join('')}</div>`;
+  const nextSym=(crop==='corn'?'ZCZ':'ZSX')+String(+yr+1).slice(2),nextP=S.market&&S.market.prices?S.market.prices[nextSym]:null,nr=(R[String(+yr+1)]||{})[crop];
+  const next=`<div class="pcnext"><b>${+yr+1} projected price</b> ${nr&&nr.projDays?`${nr.projFinal?'set at':'running at'} <b>${usd(nr.proj)}</b> (${nr.projDays} February days)`:`is set from February 1–28, ${+yr+1}, the average of ${mo} ${+yr+1} futures.${nextP!=null?` Today ${symLabel(nextSym)} ${name.toLowerCase()} settled at <b>${usd(nextP)}</b>.`:''}`}</div>`;
+  const yrs=Object.keys(R).filter(y=>+y<=+yr&&R[y][crop]&&R[y][crop].proj!=null&&R[y][crop].harv!=null).sort((a,b)=>b-a);
+  const hist=yrs.map(y=>{const x=R[y][crop],hv=Math.min(x.harv,2*x.proj),c=hv/x.proj-1;return{y,p:x.proj,h:hv,c,fin:x.harvFinal}});
+  const fin=hist.filter(x=>x.fin),down=fin.filter(x=>x.c<0).length,mx=Math.max(.3,...hist.map(x=>Math.abs(x.c)));
+  const table=`<div class="tablewrap"><table class="ilv pchist"><thead><tr><th>Crop year</th><th class="n">Projected</th><th class="n">Harvest</th><th class="n">Change</th><th style="width:38%"></th></tr></thead><tbody>
+    ${hist.map(x=>`<tr class="${x.y===yr?'cur':''}"><td><b>${x.y}</b>${x.fin?'':' <span class="tag bin">so far</span>'}</td><td class="n">${usd(x.p)}</td><td class="n">${usd(x.h)}</td><td class="n ${x.c<0?'neg':''}"><b>${x.c>0?'+':''}${pct(x.c)}</b></td>
+      <td><div class="pcbar"><span class="${x.c<0?'dn':'up'}" style="${x.c<0?'right':'left'}:50%;width:${(Math.abs(x.c)/mx*50).toFixed(1)}%"></span></div></td></tr>`).join('')}</tbody></table></div>
+    <p class="muted" style="font-size:.76rem;margin:8px 0 0">The harvest price came in below the projected price in ${down} of ${fin.length} finished years. Prices are the averages of JSA’s daily ${mo} futures settles, rounded to the cent like RMA, which can differ from RMA’s published price by a cent. RP caps the harvest price at 200% of projected.</p>`;
+  return`${chips}${kpi}
+    <div class="pcgrid2"><div class="panel calc"><div class="clab">October · harvest price ${r.harvFinal?'':'(forming)'}</div>${pcChart(d.oct,r.proj,'Projected')}</div>
+      <div class="panel calc"><div class="clab">February · projected price</div>${pcChart(d.feb,null,'')}</div></div>
+    <div class="panel calc pcmeans" style="margin-top:14px"><div class="clab">What it means for ${yr} policies</div>${means}${next}</div>
+    <div class="panel calc" style="margin-top:14px"><div class="clab">Every year since ${hist.length?hist[hist.length-1].y:''} · ${name.toLowerCase()}</div>${table}</div>`}
+// ARC / PLC county map: FSA's final 2025 county numbers (market/arcplc_<state FIPS>), or a 2026 estimate from sliders.
+// County outlines come from us-atlas (already projected); farm's county is outlined.
+const ARC_STATES=[['17','IL','Illinois'],['19','IA','Iowa'],['31','NE','Nebraska']];
+const ARC26={price:{corn:4.70,soybeans:12.00},loan:{corn:2.42,soybeans:6.82}}; // USDA Oct 2026 season-price forecast; 2026 loan rates
+const ARC_BINS=[0,10,25,50,75];
+let geoP=null;
+function loadGeo(){return geoP||(geoP=new Promise((res,rej)=>{const go=()=>fetch('https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/counties-albers-10m.json').then(r=>r.json()).then(us=>{
+    const paths={};window.topojson.feature(us,us.objects.counties).features.forEach(ft=>{const g=ft.geometry;if(!g)return;
+      const polys=g.type==='Polygon'?[g.coordinates]:g.coordinates;paths[ft.id]=polys.map(p=>p.map(r=>'M'+r.map(c=>c[0].toFixed(1)+','+c[1].toFixed(1)).join('L')+'Z').join('')).join('')});
+    res(paths)}).catch(rej);
+  if(window.topojson)return go();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js';s.onload=go;s.onerror=()=>{geoP=null;rej(new Error('load'))};document.head.appendChild(s)}))}
+function arcVals(d,code,o){
+  const c=d.c[code];if(!c||!c[o.crop])return null;const v=c[o.crop],pr=v[o.prac]||v.A||v.N||v.I;if(!pr)return null;
+  const [bmY,actY,rate]=pr,k=o.crop,plcY=(c.plcY||{})[k],P=d.price[k]||{};
+  if(o.mode==='actual'){const plcRate=Math.max(0,(FSA_ERP[k]??0)-n0(P.nat));
+    return{name:c.n,prac:v[o.prac]?o.prac:v.A?'A':v.N?'N':'I',bmY,actY,bmP:P.bmP,price:P.nat,rateRaw:rate,arc:rate*.85,plc:plcY!=null?plcRate*plcY*.85:null,plcY,base:(c.base||{})[k]}}
+  const bmP=ARC_BMP[k]??P.bmP,br=bmY*bmP,y=bmY*o.yld/100,pp=Math.max(o.price,ARC26.loan[k]??0),act=y*pp,rr=Math.min(.12*br,Math.max(0,.9*br-act));
+  return{name:c.n,prac:v[o.prac]?o.prac:v.A?'A':v.N?'N':'I',bmY,actY:y,bmP,price:o.price,rateRaw:rr,arc:rr*.85,plc:plcY!=null?Math.max(0,(FSA_ERP[k]??0)-pp)*plcY*.85:null,plcY,base:(c.base||{})[k]}}
+const arcBin=v=>v==null?-1:v<=0?0:ARC_BINS.filter(b=>v>b).length;
+const arcFill=b=>b<0?'var(--surface)':b===0?'var(--soft)':`color-mix(in srgb,var(--accent) ${[0,22,40,58,78,100][b]}%,var(--surface))`;
+function arcOpts(f){
+  const a=S.arcMap||(S.arcMap={});const fs=(ARC_STATES.find(s=>s[1]===f.state)||[])[0];
+  if(!a.st)a.st=fs||'17';a.crop=a.crop||'corn';a.mode=a.mode||'actual';a.prog=a.prog||'arc';a.prac=a.prac||'N';
+  if(a.mode==='est'&&a.crop==='wheat')a.crop='corn';a.yld=a.yld??100;a.price=a.price||{...ARC26.price};
+  return{...a,price:a.price[a.crop]}}
+function insMap(f){
+  const o=arcOpts(f),S2=S.arcData||(S.arcData={}),d=S2[o.st],st=ARC_STATES.find(s=>s[0]===o.st);
+  if(d===undefined){S2[o.st]=null;(S.db?S.db.doc('market/arcplc_'+o.st).get():Promise.reject()).then(x=>{S2[o.st]=x.exists?x.data():'none';if(S.insTop==='map')render()}).catch(()=>{S2[o.st]='err';if(S.insTop==='map')render()})}
+  if(!S.arcGeo){loadGeo().then(p=>{S.arcGeo=p;if(S.insTop==='map')render()}).catch(()=>{S.arcGeo='err';if(S.insTop==='map')render()})}
+  const chip=(k,v,l,dis)=>`<button class="chip sm" data-arc="${k}" data-v="${v}" aria-pressed="${String(S.arcMap[k])===String(v)}"${dis?' disabled':''}>${l}</button>`;
+  const ctl=`<div class="arcctl">
+    <div class="chips">${ARC_STATES.map(([fp,ab,nm])=>chip('st',fp,nm+(ab===f.state?' · this farm':''))).join('')}</div>
+    <div class="chips">${chip('mode','actual','2025 actual')}${chip('mode','est','2026 estimate')}<span class="arcsep"></span>${chip('prog','arc','ARC-CO')}${chip('prog','plc','PLC')}</div>
+    <div class="chips">${chip('crop','corn','Corn')}${chip('crop','soybeans','Soybeans')}${chip('crop','wheat','Wheat',o.mode==='est')}<span class="arcsep"></span>${chip('prac','N','Non-irrigated')}${chip('prac','I','Irrigated')}</div>
+    ${o.mode==='est'?`<div class="pgrid2 arcsl"><label class="pf"><span>2026 season price · <b id="arc_p_o">${usd(o.price)}</b></span><input class="arcsl" data-s="price" type="range" min="${o.crop==='corn'?3:8}" max="${o.crop==='corn'?6:15}" step="0.05" value="${o.price}"></label>
+      <label class="pf"><span>County yield · <b id="arc_y_o">${o.yld}% of benchmark</b></span><input class="arcsl" data-s="yld" type="range" min="60" max="120" step="1" value="${o.yld}"></label></div>`:''}</div>`;
+  const msg=t=>`${ctl}<div class="panel calc"><p class="muted" style="margin:0">${t}</p></div>`;
+  if(d===null||d===undefined||!S.arcGeo)return msg('Loading the county map…');
+  if(d==='none')return msg(`County ARC/PLC numbers for ${st[2]} aren’t loaded yet.`);
+  if(d==='err'||S.arcGeo==='err')return msg('Couldn’t load the county map. Check your connection and open this view again.');
+  return`${ctl}<div id="arcbody">${arcBody(f,d,o)}</div>`}
+function arcBody(f,d,o){
+  const st=ARC_STATES.find(s=>s[0]===o.st),codes=Object.keys(d.c),vals={};codes.forEach(k=>vals[k]=arcVals(d,k,o));
+  const val=k=>vals[k]?o.prog==='arc'?vals[k].arc:vals[k].plc:null;
+  const farmCode=f.state===st[1]&&f.county?codes.find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))):null;
+  const sel=S.arcMap.sel&&S.arcMap.sel.startsWith(o.st)?S.arcMap.sel.slice(2):farmCode;
+  const geo=S.arcGeo,ids=codes.filter(k=>geo[o.st+k]);let bb=[1e9,1e9,-1e9,-1e9];
+  ids.forEach(k=>{geo[o.st+k].replace(/[ML]([\d.]+),([\d.]+)/g,(m,x,y)=>{x=+x;y=+y;if(x<bb[0])bb[0]=x;if(y<bb[1])bb[1]=y;if(x>bb[2])bb[2]=x;if(y>bb[3])bb[3]=y;return''})});
+  const pad=4,vb=`${bb[0]-pad} ${bb[1]-pad} ${bb[2]-bb[0]+2*pad} ${bb[3]-bb[1]+2*pad}`;
+  const svg=`<svg viewBox="${vb}" class="arcsvg" role="img" aria-label="${st[2]} county ${o.prog==='arc'?'ARC-CO':'PLC'} payments per base acre">
+    ${ids.map(k=>{const v=val(k),b=arcBin(v);return`<path d="${geo[o.st+k]}" data-cty="${o.st}${k}" fill="${arcFill(b)}" class="${k===sel?'sel':''}${k===farmCode?' farm':''}"><title>${esc(d.c[k].n)}: ${v==null?'no data':usd(v)+' per base acre'}</title></path>`}).join('')}
+    ${[farmCode,sel].filter(Boolean).map(k=>geo[o.st+k]?`<path d="${geo[o.st+k]}" class="${k===sel?'selring':'farmring'}"/>`:'').join('')}</svg>`;
+  const legend=`<div class="arcleg"><span><i style="background:var(--soft)"></i>$0</span>${ARC_BINS.map((b,i)=>`<span><i style="background:${arcFill(i+1)}"></i>${i<ARC_BINS.length-1?`$${b}–${ARC_BINS[i+1]}`:`over $${b}`}</span>`).join('')}<span class="muted">per base acre</span></div>`;
+  const all=codes.map(k=>({k,v:val(k),r:vals[k]})).filter(x=>x.v!=null),paying=all.filter(x=>x.v>0),bw=all.reduce((a,x)=>a+n0(x.r.base),0),avg=bw?all.reduce((a,x)=>a+x.v*n0(x.r.base),0)/bw:null;
+  const top=all.slice().sort((a,b)=>b.v-a.v)[0],pn=o.prog==='arc'?'ARC-CO':'PLC',cn=o.crop==='corn'?'corn':o.crop==='soybeans'?'soybean':'wheat';
+  const kpi=`<div class="cckpi okpi ikpi"><div><span>Counties paying</span><b>${paying.length} of ${all.length}</b><em>${pn} · ${cn}</em></div>
+    <div><span>State average</span><b>${avg==null?'—':usd(avg)}</b><em>per base acre, weighted by base acres</em></div>
+    <div><span>Highest</span><b>${top&&top.v>0?usd(top.v):'—'}</b><em>${top&&top.v>0?esc(top.r.name):'no county pays'}</em></div>
+    <div><span>${farmCode?esc(d.c[farmCode].n)+' (this farm)':'This farm’s county'}</span><b>${farmCode&&val(farmCode)!=null?usd(val(farmCode)):'—'}</b><em>${farmCode?'per base acre':f.state===st[1]?'add the farm’s county':'farm is in another state'}</em></div></div>`;
+  const r=sel&&vals[sel],pl={A:'All practices',I:'Irrigated',N:'Non-irrigated'};
+  const det=r?`<div class="arcdet"><div class="clab">${esc(r.name)} County · ${pl[r.prac]}${sel===farmCode?' · this farm':''}</div>
+    <div class="mkt"><div class="${r.arc>0?'p-gain':''}"><span>ARC-CO</span><b>${usd(r.arc)}</b><span>per base acre</span></div><div class="${n0(r.plc)>0?'p-gain':''}"><span>PLC</span><b>${r.plc==null?'—':usd(r.plc)}</b><span>per base acre</span></div></div>
+    <dl class="cclist">${[['Benchmark yield',r.bmY.toFixed(1)+' bu'],[o.mode==='actual'?'2025 county yield':'Assumed county yield',r.actY==null?'—':r.actY.toFixed(1)+' bu'],['Benchmark price',usd(r.bmP)],[o.mode==='actual'?'2025 season price':'Season price',usd(r.price)],
+      ['Benchmark revenue',usd(r.bmY*r.bmP,0)+'/ac'],['Guarantee (90%)',usd(.9*r.bmY*r.bmP,0)+'/ac'],['County revenue',r.actY==null?'—':usd(r.actY*Math.max(r.price,o.mode==='actual'?0:(ARC26.loan[o.crop]??0)),0)+'/ac'],['ARC rate (before 85%)',usd(r.rateRaw)],
+      ['PLC yield',r.plcY==null?'—':r.plcY.toFixed(1)+' bu'],['Base acres in county',r.base?bu(r.base):'—']].map(([a,b])=>`<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></div>`
+    :`<div class="arcdet"><p class="muted" style="margin:0;font-size:.85rem">Click a county for its numbers.</p></div>`;
+  const note=o.mode==='actual'?`FSA’s final 2025 numbers (as of ${fmtDate(d.asOf)}): ARC-CO pays 85% of the county rate per base acre; PLC = (effective reference price ${usd(FSA_ERP[o.crop])} − 2025 season price ${usd(d.price[o.crop].nat)}) × the county’s average PLC yield × 85%. Before the 5.7% sequestration and payment limits. Paid October 2026.`
+    :`Estimate for 2026 crops using each county’s 2025 benchmark yield (FSA’s 2026 benchmarks may differ a little), the ${usd(ARC_BMP[o.crop])} benchmark price, your season price and county yield. Every county is assumed to have the same yield percentage, so this shows how price drives payments. Start with USDA’s October forecast (${usd(ARC26.price[o.crop])}).`;
+  const rows=all.slice().sort((a,b)=>b.v-a.v||a.r.name.localeCompare(b.r.name));
+  return`${kpi}<div class="arcwrap"><div class="panel calc arcmap">${svg}${legend}</div>${det}</div>
+    <p class="muted" style="font-size:.76rem;margin:10px 0 0">${note}</p>
+    <details class="ccmore" style="margin-top:10px"><summary>All ${st[2]} counties (table)</summary><div class="tablewrap"><table class="ilv"><thead><tr><th>County</th><th>Practice</th><th class="n">${pn} per base acre</th><th class="n">Benchmark yield</th><th class="n">${o.mode==='actual'?'2025 yield':'Assumed yield'}</th></tr></thead><tbody>
+      ${rows.map(x=>`<tr class="${x.k===farmCode?'cur':''}"><td>${esc(x.r.name)}</td><td>${pl[x.r.prac]}</td><td class="n"><b>${usd(x.v)}</b></td><td class="n">${x.r.bmY.toFixed(1)}</td><td class="n">${x.r.actY==null?'—':x.r.actY.toFixed(1)}</td></tr>`).join('')}</tbody></table></div></details>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-arc],[data-cty]');if(!t||!S.arcMap)return;
+  if(t.dataset.cty){S.arcMap.sel=t.dataset.cty;}else{const k=t.dataset.arc;S.arcMap[k]=t.dataset.v;if(k==='st')S.arcMap.sel=null}
+  render()});
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('arcsl')||!S.arcMap)return;const f=S.farms[S.current];
+  if(t.dataset.s==='price'){S.arcMap.price[S.arcMap.crop]=+t.value;$('#arc_p_o').textContent=usd(+t.value)}else{S.arcMap.yld=+t.value;$('#arc_y_o').textContent=t.value+'% of benchmark'}
+  const d=S.arcData&&S.arcData[S.arcMap.st],b=$('#arcbody');if(b&&d&&typeof d==='object')b.innerHTML=arcBody(f,d,arcOpts(f))});
+// Descriptions: plain-language reference, grouped; each group opens on its own
+const INS_LEARN=[
+  ['Policy types',[
+    ['Revenue Protection (RP)','Protects revenue, not just bushels. The guarantee is acres × APH × coverage level × the higher of the projected or harvest price. It pays when your actual yield × the harvest price comes in under that guarantee, from a short crop, a price drop or both. Because the guarantee can rise with the harvest price, it helps replace bushels you contracted but couldn’t grow.'],
+    ['RP with harvest price exclusion (RP-HPE)','The same as RP, except the guarantee always uses the projected price, even if the harvest price is higher. The premium is lower; the trade-off is less protection for contracted bushels in a short-crop, high-price year.'],
+    ['Yield Protection (YP)','Protects bushels only. It pays when your yield falls below APH × coverage level, valued at the projected price. Harvest price changes don’t matter.'],
+    ['APH (Actual Production History)','Your insured yield: the average of 4 to 10 years of your yields on the unit, with adjustments such as trend-adjusted yields, yield exclusions for disaster years and substitute yields for very low years.'],
+  ]],
+  ['Coverage and units',[
+    ['Coverage level','The share of your APH guarantee that is insured, from 50% to 85% in 5-point steps. Higher levels cover more but cost more per acre and get a smaller premium subsidy. The first 15% to 50% of a loss is yours to carry.'],
+    ['Premium you pay','The farmer-paid premium after the federal subsidy. The subsidy is higher at lower coverage levels and with enterprise units. Use the quote from your agent; it varies by county, practice and unit type.'],
+    ['Basic units','All of a crop in a county that you farm under the same ownership or share arrangement. A loss on one field can be offset by good yields elsewhere in the unit.'],
+    ['Optional units','Basic units split further, usually by section, when you have separate production records. Losses are counted field group by field group, so the premium is higher.'],
+    ['Enterprise units','All of a crop in the county combined into one unit. Good and bad fields offset each other, so it pays less often, but the subsidy is the largest and the premium the lowest.'],
+  ]],
+  ['Prices and dates',[
+    ['Projected price','Set in February: the average of daily settles of December corn or November soybean futures (most Midwest counties). It sets the starting guarantee for RP, RP-HPE and YP.'],
+    ['Harvest price','Set in October: the average of daily settles of the same futures contracts. RP uses it to value what you produced, and raises the guarantee if it is higher than projected. It is capped at 200% of the projected price.'],
+    ['Price-only payment','At a normal (APH) yield, RP pays on price alone only when the harvest price falls further below the projected price than your coverage level allows. For example, at 80% coverage the harvest price must be more than 20% below projected.'],
+    ['Key dates (corn and soybeans, most Midwest counties)','Sales closing and change deadline: March 15. Projected price: February average. Final planting date: varies by county. Acreage report: July 15. Premium billed: August 15. Harvest price: October average. End of insurance period: December 10. Report damage to your agent within 72 hours of finding it.'],
+  ]],
+  ['County add-ons: SCO and ECO',[
+    ['SCO (Supplemental Coverage Option)','An add-on that pays on the county’s loss, not your farm’s. It covers the band from your coverage level up to 86% (90% starting with 2027 crops). It can pay when your farm is fine but the county is short, and may not pay when only your farm has a loss. Under the 2025 farm law, acres enrolled in ARC can also carry SCO.'],
+    ['ECO (Enhanced Coverage Option)','Another county-based add-on that covers a higher band, from the top of SCO (or your coverage level) up to 90% or 95% of expected county revenue or yield.'],
+  ]],
+  ['FSA programs: ARC and PLC',[
+    ['Base acres','FSA program acres tied to the farm, not to what you plant this year. ARC-CO and PLC pay on 85% of base acres, whatever crop is planted.'],
+    ['PLC (Price Loss Coverage)','Pays when the national marketing-year average (MYA) price falls below the effective reference price. Payment = (effective reference price − the higher of the MYA price or loan rate) × your PLC yield × 85% of base acres. 2025 farm law statutory reference prices: corn $4.10, soybeans $10.00, wheat $6.35. Effective reference prices for 2025 and 2026: corn $4.42, soybeans $10.71.'],
+    ['ARC-CO (Agriculture Risk Coverage, county)','Pays when the county’s actual revenue (county yield × the higher of the MYA price or loan rate) falls below 90% of its benchmark revenue. Benchmark revenue = the 5-year Olympic average county yield × the 5-year Olympic average price (at least the effective reference price). Payments are capped at 12% of benchmark revenue and paid on 85% of base acres.'],
+    ['Election and timing','You choose ARC-CO or PLC for each crop on each farm, each year. For 2025 only, the 2025 law pays the higher of the two automatically. For 2026 the election is due December 11, 2026. Payments come the October after the crop year ends (2025 crops are being paid in October 2026), less sequestration and subject to payment limits.'],
+    ['Loan rate','The marketing assistance loan rate, which also sets the floor price in PLC and ARC math. Starting with 2026 crops: corn $2.42, soybeans $6.82.'],
+  ]],
+  ['Terms used in this app',[
+    ['Guarantee','Acres × APH × coverage × guarantee price: the revenue (or for YP, bushels × projected price) the policy protects.'],
+    ['Insured bushels','Acres × APH × coverage level: the bushels the policy guarantees. Contracting more than this leaves you exposed if the crop comes up short.'],
+    ['Contracted of insured','Contracted bushels as a share of insured bushels. Over 100% is shown in red.'],
+    ['Pays at APH yield','What the policies would pay with a normal crop at today’s harvest price: a price-only loss.'],
+  ]],
+];
+function insLearn(){
+  return`<div class="panel calc learn">${INS_LEARN.map(([g,items],i)=>`<details${i===0?' open':''}><summary>${esc(g)}</summary><dl>${items.map(([t,d])=>`<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('')}</dl></details>`).join('')}
+    <p class="muted" style="font-size:.76rem;margin:12px 0 0">Plain-language summaries for planning. Policy terms, county dates and program rules come from your crop insurance agent, RMA and your FSA office.</p></div>`}
 function insResult(f,sel){
   const r=position(f,S.year).find(x=>key(x.crop)===key(sel.crop))||{},ac=n0(sel.acres),cpa=costOf(sel);
   const perAc=ac?r.revGuar/ac:null,costShare=cpa&&perAc!=null?perAc/cpa:null,sh=r.insured?r.sold/r.insured:null;
@@ -2341,7 +2587,9 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList)return;co
   if(sub){sel[k]=sel[k]||{};if(v==null)delete sel[k][sub];else sel[k][sub]=v}else if(v==null)delete sel[k];else sel[k]=v;
   S.insDirty=true;insRefresh()});
 document.addEventListener('change',e=>{const c=e.target.classList;if(c&&(c.contains('iinp')||c.contains('itxt'))&&S.insDirty){S.insDirty=false;persist(S.current)}});
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-inscrop],[data-ichip],[data-insview],[data-act="iestlink"],[data-act="userma"]');if(!t||t.closest('dialog'))return;
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-pccrop],[data-instop],[data-inscrop],[data-ichip],[data-insview],[data-act="iestlink"],[data-act="userma"]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.pccrop){S.pcCrop=t.dataset.pccrop;render();return}
+  if(t.dataset.instop){S.insTop=t.dataset.instop;if(t.dataset.inscrop){S.insCrop=t.dataset.inscrop;S.insView='policy'}render();return}
   if(t.dataset.act==='userma'){const sel=insSel(),r=sel&&rmaFor(sel);if(!r)return;
     if(num(sel.projPrice)!=null&&r.proj!=null)delete sel.projPrice;if(num(sel.harvestPrice)!=null&&r.harvFinal)delete sel.harvestPrice;persist(S.current);return}
   if(t.dataset.inscrop){S.insCrop=t.dataset.inscrop;render();return}

@@ -55,7 +55,8 @@ if ($fci -and $fci.Count -gt 0) {
 # projected = average of February settles, harvest = average of October settles, of December corn / November soybeans.
 # Rounded to the cent like RMA. "final" once the month is over; before that it is the average so far.
 $yr = (Get-Date).Year; $today = (Get-Date).ToString('yyyy-MM-dd')
-$rmaSyms = @(($yr - 1)..($yr + 1) | ForEach-Object { $yy = '{0:d2}' -f ($_ % 100); "'ZCZ$yy'"; "'ZSX$yy'" }) -join ','
+# every crop year back to 2008 (the price-check history table); daily settles for the last two years and next
+$rmaSyms = @(2008..($yr + 1) | ForEach-Object { $yy = '{0:d2}' -f ($_ % 100); "'ZCZ$yy'"; "'ZSX$yy'" }) -join ','
 $rmaRows = Invoke-Snow @"
 WITH s AS (SELECT DATE, SYMBOL, PRICE_CENTS FROM JSA.BASIS_TRACKER.FUTURES_PRICES WHERE SYMBOL IN ($rmaSyms)
            QUALIFY ROW_NUMBER() OVER (PARTITION BY DATE, SYMBOL ORDER BY CAPTURED_AT DESC) = 1)
@@ -75,10 +76,27 @@ foreach ($r in @($rmaRows)) {
     harv = if ($r.HARV -ne $null) { [math]::Round([double]$r.HARV, 2) } else { $null }; harvDays = [int]$r.HARV_DAYS; harvFinal = ($today -ge "$y-11-01") }
 }
 
+# daily settles in each price-discovery month (February, October) for last year, this year and next, for the Price checks chart
+$daySyms = @(($yr - 1)..($yr + 1) | ForEach-Object { $yy = '{0:d2}' -f ($_ % 100); "'ZCZ$yy'"; "'ZSX$yy'" }) -join ','
+$dayRows = Invoke-Snow @"
+SELECT DATE, SYMBOL, PRICE_CENTS FROM JSA.BASIS_TRACKER.FUTURES_PRICES
+WHERE SYMBOL IN ($daySyms) AND LEFT(DATE,7) IN ('20' || RIGHT(SYMBOL,2) || '-02', '20' || RIGHT(SYMBOL,2) || '-10')
+QUALIFY ROW_NUMBER() OVER (PARTITION BY DATE, SYMBOL ORDER BY CAPTURED_AT DESC) = 1
+ORDER BY SYMBOL, DATE
+"@
+$rmaDaily = [ordered]@{}
+foreach ($r in @($dayRows)) {
+  $y = '20' + $r.SYMBOL.Substring(3, 2); $crop = if ($r.SYMBOL -like 'ZC*') { 'corn' } else { 'soybeans' }
+  $m = if (([string]$r.DATE).Substring(5, 2) -eq '02') { 'feb' } else { 'oct' }
+  if (-not $rmaDaily.Contains($y)) { $rmaDaily[$y] = [ordered]@{} }
+  if (-not $rmaDaily[$y].Contains($crop)) { $rmaDaily[$y][$crop] = [ordered]@{ feb = @(); oct = @() } }
+  $rmaDaily[$y][$crop][$m] += , @([string]$r.DATE, [math]::Round([double]$r.PRICE_CENTS / 100, 4))
+}
+
 $doc = [ordered]@{
   asOf = $asOf; prevDate = $prevDate; syncedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  source = 'JSA.BASIS_TRACKER.FUTURES_PRICES'; prices = $prices; prev = $prev; hist = $hist; fci = $fciDoc; rma = $rma
+  source = 'JSA.BASIS_TRACKER.FUTURES_PRICES'; prices = $prices; prev = $prev; hist = $hist; fci = $fciDoc; rma = $rma; rmaDaily = $rmaDaily
 }
 $out = Join-Path $outDir 'market-futures.json'
-[System.IO.File]::WriteAllText($out, ($doc | ConvertTo-Json -Depth 5 -Compress), (New-Object System.Text.UTF8Encoding $false))
+[System.IO.File]::WriteAllText($out, ($doc | ConvertTo-Json -Depth 8 -Compress), (New-Object System.Text.UTF8Encoding $false))
 "asOf=$asOf prev=$prevDate contracts=$($prices.Count) fci=$(if($fciDoc){$fciDoc.asOf}else{'none'}) rma=$(($rma.Keys | ForEach-Object { $k=$_; "$k corn $($rma[$k].corn.proj)/$($rma[$k].corn.harv) soy $($rma[$k].soybeans.proj)/$($rma[$k].soybeans.harv)" }) -join '; ') bytes=$((Get-Item $out).Length) file=$out"

@@ -44,14 +44,15 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY DATE, SYMBOL ORDER BY CAPTURED_AT DESC) 
                'hist': [round(float(r['FCI_VALUE']), 3) for r in f]}
 
     doc = {'asOf': as_of, 'prevDate': prev_date, 'syncedAt': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-           'source': 'JSA.BASIS_TRACKER.FUTURES_PRICES', 'prices': prices, 'prev': prev, 'hist': hist, 'fci': fci, 'rma': rma()}
+           'source': 'JSA.BASIS_TRACKER.FUTURES_PRICES', 'prices': prices, 'prev': prev, 'hist': hist, 'fci': fci, 'rma': rma(), 'rmaDaily': rma_daily()}
     store.put_doc('market/futures', doc)
     return f"futures asOf={as_of} contracts={len(prices)}"
 
 
 def rma():
     today = date.today()
-    yrs = range(today.year - 1, today.year + 2)
+    # every crop year back to 2008, for the Price checks history table
+    yrs = range(2008, today.year + 2)
     syms = ','.join(f"'ZCZ{y % 100:02d}','ZSX{y % 100:02d}'" for y in yrs)
     rows = query(f"""
 WITH s AS (SELECT DATE, SYMBOL, PRICE_CENTS FROM JSA.BASIS_TRACKER.FUTURES_PRICES WHERE SYMBOL IN ({syms})
@@ -70,4 +71,22 @@ FROM s GROUP BY SYMBOL""")
             'symbol': r['SYMBOL'],
             'proj': round(float(r['PROJ']), 2) if r['PROJ'] is not None else None, 'projDays': int(r['PROJ_DAYS']), 'projFinal': t >= f'{y}-03-01',
             'harv': round(float(r['HARV']), 2) if r['HARV'] is not None else None, 'harvDays': int(r['HARV_DAYS']), 'harvFinal': t >= f'{y}-11-01'}
+    return out
+
+
+def rma_daily():
+    """Daily settles in each price-discovery month (February, October), last year through next, for the Price checks chart."""
+    today = date.today()
+    syms = ','.join(f"'ZCZ{y % 100:02d}','ZSX{y % 100:02d}'" for y in range(today.year - 1, today.year + 2))
+    rows = query(f"""
+SELECT DATE, SYMBOL, PRICE_CENTS FROM JSA.BASIS_TRACKER.FUTURES_PRICES
+WHERE SYMBOL IN ({syms}) AND LEFT(DATE,7) IN ('20' || RIGHT(SYMBOL,2) || '-02', '20' || RIGHT(SYMBOL,2) || '-10')
+QUALIFY ROW_NUMBER() OVER (PARTITION BY DATE, SYMBOL ORDER BY CAPTURED_AT DESC) = 1
+ORDER BY SYMBOL, DATE""")
+    out = {}
+    for r in rows:
+        y = '20' + r['SYMBOL'][3:5]
+        crop = 'corn' if r['SYMBOL'].startswith('ZC') else 'soybeans'
+        m = 'feb' if str(r['DATE'])[5:7] == '02' else 'oct'
+        out.setdefault(y, {}).setdefault(crop, {'feb': [], 'oct': []})[m].append([str(r['DATE']), round(float(r['PRICE_CENTS']) / 100, 4)])
     return out
