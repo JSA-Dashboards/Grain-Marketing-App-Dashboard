@@ -57,8 +57,11 @@ def one(key, lat, lon):
     periods = [{'name': x['name'], 'start': x['startTime'], 'day': bool(x['isDaytime']), 'temp': x['temperature'], 'pop': _pop(x),
                 'wind': x['windSpeed'], 'windMax': _mph(x['windSpeed']), 'dir': x['windDirection'], 'short': x['shortForecast'],
                 'detail': x['detailedForecast']} for x in fc['properties']['periods']]
-    hourly = [{'t': x['startTime'], 'temp': x['temperature'], 'short': x['shortForecast'], 'wind': _mph(x['windSpeed']), 'pop': _pop(x)}
-              for x in hr['properties']['periods'][:24]]
+    # 72 hours, with relative humidity (%) and dew point (°F) for the bin-fan outlook
+    hourly = [{'t': x['startTime'], 'temp': x['temperature'], 'short': x['shortForecast'], 'wind': _mph(x['windSpeed']), 'pop': _pop(x),
+               'rh': (x.get('relativeHumidity') or {}).get('value'),
+               'dew': round((x.get('dewpoint') or {}).get('value') * 9 / 5 + 32) if (x.get('dewpoint') or {}).get('value') is not None else None}
+              for x in hr['properties']['periods'][:72]]
     rain = None
     qp = grid and grid['properties'].get('quantitativePrecipitation')
     if qp:

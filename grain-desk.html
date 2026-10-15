@@ -167,6 +167,24 @@ tfoot td{border-top:1px solid var(--line);border-bottom:0;background:var(--soft)
 .chip.sm{padding:5px 12px;font-size:.82rem}
 /* storage: bin cards */
 .bingrid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+/* grain bin fans */
+.fans .fanctl{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.fantgt{display:flex;align-items:center;gap:10px}.fantgt span{color:var(--muted);font-size:.88rem}.fantgt b{font-size:1.15rem;min-width:4.2ch;text-align:center;font-variant-numeric:tabular-nums}
+.fantgt button{min-width:36px}
+.fanstat{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:16px;padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--soft)}
+.fanstat>div{display:grid;gap:2px}.fanstat b{font-size:1.15rem;font-weight:780;letter-spacing:.02em}.fanstat span{font-size:.84rem;color:var(--muted)}
+.fanstat .fanemc{text-align:right}.fanstat .fanemc b{font-size:1.5rem;font-variant-numeric:tabular-nums}
+.fanstat.on{border-color:var(--good);background:color-mix(in srgb,var(--good) 10%,var(--surface))}.fanstat.on>div:first-child b{color:var(--good)}
+.fanstat.cool{border-color:var(--grain);background:color-mix(in srgb,var(--grain) 10%,var(--surface))}.fanstat.cool>div:first-child b{color:var(--warn)}
+.fanstat.off{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--surface))}.fanstat.off>div:first-child b{color:var(--bad)}
+.fanwins{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px}
+.fanwins li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:baseline;font-size:.92rem}
+.fanwins .fanico{font-size:1.05rem;line-height:1}.fanwins li.on .fanico{color:var(--good)}.fanwins li.cool .fanico{color:var(--grain)}
+.fanstrip{display:grid;grid-template-columns:repeat(36,1fr);gap:2px;height:22px}.fanstrip i{border-radius:3px;background:var(--line)}
+.fanstrip i.on,.fanleg i.on{background:var(--good)}.fanstrip i.cool,.fanleg i.cool{background:var(--grain)}.fanstrip i.off,.fanleg i.off{background:color-mix(in srgb,var(--bad) 55%,var(--surface))}
+.fanaxis{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-top:3px}
+.fanleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.74rem;color:var(--muted);margin-top:8px}.fanleg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+@media (max-width:520px){.fanstat{flex-direction:column;align-items:flex-start}.fanstat .fanemc{text-align:left}}
 .bincard2{padding:16px 18px;border-radius:14px;border-top:4px solid var(--crop)}
 .bc2head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .bc2head b{font-family:var(--f-display);font-size:1.05rem}
@@ -1343,7 +1361,7 @@ function homeScreen(f){
     ['insurance','Crop insurance','Coverage, insured bushels and your revenue guarantee.',ins?`<b>${usd(ins,0)}</b> guaranteed`:'Set up coverage for each crop'],
     ['quotes','Quotes','Daily corn, soybean and wheat futures. Cash bids coming soon.',cfi&&cfi.price!=null?`Corn ${cfi.symbol?symLabel(cfi.symbol):''} <b>${usd(cfi.price,4)}</b>`:'Futures prices'],
     ['weather','Weather','7-day forecast, rain totals, and field and spray days.',(()=>{const k=wxKey(f);ensureWx(k);const w=k&&S.wx[k];if(!k)return'Add your ZIP code';if(!w)return'Forecast coming with the next update';
-      const n=(w.hourly||[])[0],d=wxDays(w),fd=d.filter(x=>x.field).length;return`${n?`<b>${n.temp}°</b> ${esc(n.short)} · `:''}${w.rain7!=null?w.rain7.toFixed(2)+' in rain this week · ':''}${fd} field days`})()],
+      const n=wxNow(w),d=wxDays(w),fd=d.filter(x=>x.field).length;return`${n?`<b>${n.temp}°</b> ${esc(n.short)} · `:''}${w.rain7!=null?w.rain7.toFixed(2)+' in rain this week · ':''}${fd} field days`})()],
     ['intel','Intel','Market updates and insights from your advisor.',(()=>{const ps=intelFor(f),n=intelNewCount(f);return ps.length?`${n?`<b>${n} new</b> · `:''}${esc(ps[0].title)}`:'No updates yet'})()]];
   return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
       <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
@@ -2004,9 +2022,59 @@ function binCards(f){
       ${b.short>0?`<p class="binnote">Contracts set to deliver from the bin call for ${bu(b.short)} bu more than is in storage. Change some to Harvest if they'll be hauled from the field.</p>`:''}</div></div>`).join('')}</div>
   <p class="muted" style="font-size:.78rem;margin-top:8px;max-width:85ch">Each picture combines every bin holding that crop. "Sold" is grain already committed to open contracts and not yet delivered, so it doesn't matter which bin it comes out of.</p></section>`}
 // Storage: crop bin pictures, then one editable card per bin (type bushels, capacity, moisture in place)
+/* ---------- grain bin fans: aeration timing from the hourly forecast ---------- */
+// Equilibrium moisture content (% wet basis) by air temperature (rows 35–100°F by 5) and relative humidity (columns 25–90% by 5).
+// University of Arkansas Extension FSA-1074, Tables A (corn), B (soybeans) and E (wheat, durum).
+const EMC_T=[35,40,45,50,55,60,65,70,75,80,85,90,95,100],EMC_RH=[25,30,35,40,45,50,55,60,65,70,75,80,85,90];
+const EMC_TAB={
+  corn:`9.3 10.3 11.2 12.1 13.0 13.9 14.8 15.7 16.6 17.6 18.7 19.8 21.2 22.9|9.1 10.0 10.9 11.8 12.7 13.5 14.4 15.3 16.2 17.1 18.2 19.3 20.7 22.3|8.8 9.8 10.6 11.5 12.3 13.2 14.0 14.9 15.8 16.7 17.7 18.9 20.2 21.8|8.6 9.5 10.4 11.2 12.0 12.9 13.7 14.5 15.4 16.3 17.3 18.5 19.8 21.4|8.4 9.3 10.1 11.0 11.8 12.6 13.4 14.2 15.1 16.0 17.0 18.1 19.3 20.9|8.2 9.1 9.9 10.7 11.5 12.3 13.1 13.9 14.8 15.7 16.6 17.7 18.9 20.5|8.0 8.9 9.7 10.5 11.3 12.0 12.8 13.6 14.5 15.3 16.3 17.4 18.6 20.1|7.9 8.7 9.5 10.3 11.0 11.8 12.6 13.4 14.2 15.0 16.0 17.0 18.2 19.8|7.7 8.5 9.3 10.1 10.8 11.6 12.3 13.1 13.9 14.8 15.7 16.7 17.9 19.4|7.6 8.4 9.1 9.9 10.6 11.4 12.1 12.9 13.7 14.5 15.4 16.4 17.6 19.1|7.4 8.2 9.0 9.7 10.4 11.2 11.9 12.6 13.4 14.3 15.2 16.2 17.3 18.8|7.3 8.1 8.8 9.5 10.3 11.0 11.7 12.4 13.2 14.0 14.9 15.9 17.0 18.5|7.2 7.9 8.7 9.4 10.1 10.8 11.5 12.2 13.0 13.8 14.7 15.6 16.8 18.2|7.1 7.8 8.5 9.2 9.9 10.6 11.3 12.0 12.8 13.6 14.5 15.4 16.5 17.9`,
+  soybeans:`5.9 6.5 7.1 7.8 8.6 9.4 10.3 11.5 12.8 14.4 16.4 19.1 22.9 28.9|5.8 6.4 7.1 7.7 8.5 9.3 10.2 11.3 12.6 14.2 16.2 18.9 22.7 28.7|5.8 6.4 7.0 7.7 8.4 9.2 10.1 11.2 12.5 14.1 16.1 18.7 22.5 28.4|5.7 6.3 6.9 7.6 8.3 9.1 10.0 11.1 12.4 14.0 16.0 18.6 22.3 28.2|5.7 6.2 6.8 7.5 8.2 9.0 10.0 11.0 12.3 13.8 15.8 18.4 22.1 28.0|5.6 6.2 6.8 7.4 8.1 8.9 9.9 10.9 12.2 13.7 15.7 18.3 21.9 27.8|5.6 6.1 6.7 7.4 8.1 8.9 9.8 10.8 12.1 13.6 15.5 18.1 21.7 27.6|5.5 6.1 6.6 7.3 8.0 8.8 9.7 10.7 11.9 13.5 15.4 17.9 21.6 27.3|5.4 6.0 6.6 7.2 7.9 8.7 9.6 10.6 11.8 13.3 15.2 17.8 21.4 27.1|5.4 5.9 6.5 7.1 7.8 8.6 9.5 10.5 11.7 13.2 15.1 17.6 21.2 26.9|5.3 5.9 6.4 7.1 7.7 8.5 9.4 10.4 11.6 13.1 15.0 17.5 21.0 26.7|5.3 5.8 6.4 7.0 7.7 8.4 9.3 10.3 11.5 13.0 14.8 17.3 20.8 26.5|5.2 5.7 6.3 6.9 7.6 8.3 9.2 10.2 11.4 12.8 14.7 17.1 20.7 26.3|5.2 5.7 6.2 6.9 7.5 8.3 9.1 10.1 11.3 12.7 14.5 17.0 20.5 26.1`,
+  wheat:`8.3 8.9 9.6 10.2 10.9 11.5 12.2 13.0 13.8 14.7 15.8 17.1 18.8 21.3|8.2 8.8 9.5 10.1 10.7 11.4 12.1 12.8 13.7 14.6 15.7 17.0 18.7 21.1|8.1 8.8 9.4 10.0 10.6 11.3 12.0 12.7 13.5 14.4 15.5 16.8 18.5 20.9|8.0 8.7 9.3 9.9 10.5 11.2 11.9 12.6 13.4 14.3 15.4 16.6 18.3 20.7|7.9 8.6 9.2 9.8 10.4 11.1 11.7 12.5 13.3 14.2 15.2 16.5 18.1 20.5|7.8 8.5 9.1 9.7 10.3 10.9 11.6 12.3 13.1 14.0 15.1 16.3 18.0 20.4|7.8 8.4 9.0 9.6 10.2 10.8 11.5 12.2 13.0 13.9 14.9 16.2 17.8 20.2|7.7 8.3 8.9 9.5 10.1 10.7 11.4 12.1 12.8 13.7 14.7 16.0 17.6 20.0|7.6 8.2 8.8 9.4 10.0 10.6 11.2 11.9 12.7 13.6 14.6 15.8 17.4 19.8|7.5 8.1 8.7 9.3 9.9 10.5 11.1 11.8 12.6 13.4 14.4 15.7 17.3 19.6|7.4 8.0 8.6 9.2 9.8 10.4 11.0 11.7 12.4 13.3 14.3 15.5 17.1 19.4|7.3 7.9 8.5 9.1 9.6 10.2 10.9 11.5 12.3 13.1 14.1 15.3 16.9 19.2|7.2 7.8 8.4 9.0 9.5 10.1 10.7 11.4 12.2 13.0 14.0 15.2 16.7 19.0|7.2 7.7 8.3 8.8 9.4 10.0 10.6 11.3 12.0 12.8 13.8 15.0 16.5 18.8`};
+const EMC=Object.fromEntries(Object.entries(EMC_TAB).map(([k,v])=>[k,v.split('|').map(r=>r.split(' ').map(Number))]));
+// read between table values; temperatures outside 35–100°F use the nearest row; humidity above 90% carries the 85→90% slope on
+function emcAt(crop,tempF,rh){const g=EMC[crop];if(!g||tempF==null||rh==null)return null;
+  const ti=Math.max(0,Math.min(EMC_T.length-1.0001,(tempF-35)/5)),t0=Math.floor(ti),ft=ti-t0,row=j=>g[t0][j]+(g[t0+1][j]-g[t0][j])*ft;
+  const r=Math.max(25,rh);if(r>=90){const a=row(12),b=row(13);return b+(b-a)*(r-90)/5}
+  const ri=(r-25)/5,r0=Math.floor(ri),fr=ri-r0;return row(r0)+(row(r0+1)-row(r0))*fr}
+const FAN_TARGET={corn:15.0,soybeans:13.0,wheat:13.5};
+// the forecast hour we're in now (the hourly list starts when the morning update ran)
+function wxNow(w){const h=(w&&w.hourly)||[],now=Date.now();let cur=h[0]||null;for(const x of h){if(new Date(x.t).getTime()<=now)cur=x;else break}return cur}
+function fanPanel(f){
+  const k=wxKey(f);if(k)ensureWx(k);const w=k&&S.wx?S.wx[k]:null;
+  const binCrop=(f.bins.find(b=>n0(b.bu)>0&&EMC[key(b.crop)])||{}).crop,fan=f.fans||{},crop=fan.crop||(binCrop?key(binCrop):'corn'),target=num((fan.target||{})[crop])??FAN_TARGET[crop];
+  const head=`<section><div class="sechead"><div><h2>Grain bin fans</h2><div class="muted" style="font-size:.82rem;margin-top:2px">When the outside air will dry or hold your grain, from the hourly temperature and humidity forecast${w&&w.place?` for ${esc(w.place)}`:''}</div></div></div><div class="panel calc fans">`;
+  const ctl=`<div class="fanctl"><div class="chips" style="margin:0">${[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([c,l])=>`<button class="chip" data-fancrop="${c}" aria-pressed="${c===crop}">${l}</button>`).join('')}</div>
+    <div class="fantgt"><span>Target moisture</span><button class="small" data-fanstep="-0.5" aria-label="Lower target">−</button><b>${target.toFixed(1)}%</b><button class="small" data-fanstep="0.5" aria-label="Raise target">+</button></div></div>`;
+  if(!k)return head+ctl+`<p class="muted" style="margin:14px 0 0">Set this farm’s location on the Weather tab to get fan timing.</p></div></section>`;
+  const hrs=((w&&w.hourly)||[]).filter(x=>x.rh!=null);
+  if(!w||!hrs.length)return head+ctl+`<p class="muted" style="margin:14px 0 0">${w?'Humidity arrives with the next morning weather update.':'Loading the forecast…'}</p></div></section>`;
+  const now=Date.now(),cur=wxNow({hourly:hrs}),ahead=hrs.filter(x=>new Date(x.t).getTime()+36e5>now).slice(0,36);
+  const cls=e=>e==null?'na':e<=target?'on':e<=target+1?'cool':'off';
+  const rows=ahead.map(x=>({...x,e:emcAt(crop,x.temp,x.rh)})),c=cur?{...cur,e:emcAt(crop,cur.temp,cur.rh)}:null,st=c?cls(c.e):'na';
+  const stale=!cur||new Date(cur.t).getTime()+2*36e5<now;
+  const msg={on:['Fans on','The air will dry or hold your grain at the target.'],cool:['Fans OK for cooling','The air is a little damp: fine for cooling runs, slow or no drying.'],off:['Fans off','The air would add moisture to the grain.'],na:['No reading','']}[st];
+  // good stretches in the next 36 hours: consecutive hours at or below target + 1 point
+  const wins=[];rows.forEach(x=>{const g=x.e!=null&&x.e<=target+1,l=wins[wins.length-1];if(g){if(l&&l.open)l.h.push(x);else wins.push({h:[x],open:true})}else if(l)l.open=false});
+  const day=d=>{const t=new Date(d),td=new Date();return t.toDateString()===td.toDateString()?'':t.toLocaleDateString('en-US',{weekday:'short'})+' '};
+  const hm=d=>new Date(d).toLocaleTimeString('en-US',{hour:'numeric'}).replace(':00','');
+  const wtxt=v=>{const a=v.h[0].t,b=new Date(new Date(v.h[v.h.length-1].t).getTime()+36e5).toISOString(),avg=v.h.reduce((s,x)=>s+x.e,0)/v.h.length,best=Math.min(...v.h.map(x=>x.e));
+    return`<li class="${best<=target?'on':'cool'}"><span class="fanico" aria-hidden="true">✣</span><span>${day(a)}${hm(a)} – ${day(b)}${hm(b)} <small class="muted">(${v.h.length} hr${v.h.length>1?'s':''})</small></span><span class="muted">~${avg.toFixed(1)}% EMC</span></li>`};
+  const strip=`<div class="fanstrip" role="img" aria-label="Next 36 hours, hour by hour">${rows.map(x=>`<i class="${cls(x.e)}" title="${new Date(x.t).toLocaleString('en-US',{weekday:'short',hour:'numeric'})}: ${x.temp}°F, ${x.rh}% humidity → ${x.e==null?'—':x.e.toFixed(1)+'% EMC'}"></i>`).join('')}</div>
+    <div class="fanaxis"><span>${hm(rows[0].t)}</span><span>+12h</span><span>+24h</span><span>+36h</span></div>`;
+  return head+ctl+`<div class="fanstat ${st}"><div><b>${msg[0]}</b><span>${msg[1]}</span></div><div class="fanemc"><b>${c&&c.e!=null?c.e.toFixed(1)+'%':'—'}</b><span>air EMC now · ${c?`${c.temp}°F, ${c.rh}% RH`:''}</span></div></div>
+    ${stale?'<p class="muted" style="font-size:.78rem;margin:6px 0 0">The forecast is out of date; it refreshes with the morning weather update.</p>':''}
+    <div class="clab" style="margin-top:18px">Good fan hours · next 36h</div>
+    ${wins.length?`<ul class="fanwins">${wins.slice(0,6).map(wtxt).join('')}</ul>`:`<p class="muted" style="margin:0 0 6px">No good hours for ${target.toFixed(1)}% ${crop==='soybeans'?'beans':crop} in the next 36 hours.</p>`}
+    ${strip}<div class="fanleg"><span><i class="on"></i>Dries or holds (EMC at or below target)</span><span><i class="cool"></i>Within 1 point: cooling only</span><span><i class="off"></i>Fans off</span></div>
+    <p class="muted" style="font-size:.76rem;margin:12px 0 0">EMC is the moisture grain settles to in this air, from the University of Arkansas extension tables (FSA-1074${crop==='wheat'?'; wheat uses the durum table':''}) and the National Weather Service hourly forecast. Fall cooling: run fans to bring grain to within 10–15°F of the average outdoor temperature, toward 30–40°F for winter. Estimates; check with your moisture meter and grain temperature cables.</p></div></section>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fancrop],[data-fanstep]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  const fan=f.fans=f.fans||{},binCrop=(f.bins.find(b=>n0(b.bu)>0&&EMC[key(b.crop)])||{}).crop,crop=fan.crop||(binCrop?key(binCrop):'corn');
+  if(t.dataset.fancrop)fan.crop=t.dataset.fancrop;
+  else{fan.target=fan.target||{};const v=(num(fan.target[crop])??FAN_TARGET[crop])+(+t.dataset.fanstep);fan.target[crop]=Math.max(9,Math.min(22,Math.round(v*10)/10))}
+  persist(S.current)});
 function tabStorage(f){
   const cropChoices=[...SALE_CROPS,''];
-  return binCards(f)+`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
+  return binCards(f)+fanPanel(f)+`<section><div class="sechead"><h2>Bins & storage sites</h2><div class="sp"></div><button class="primary" data-add="bin">Add bin</button></div>
   ${f.bins.length?`<div class="bingrid2">${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0,ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(b.crop)];
     const fld=(k,label,step='any')=>`<label class="pf"><span>${label}</span><input class="binp" id="bi_${b.id}_${k}" data-bin="${b.id}" data-k="${k}" type="number" step="${step}" inputmode="decimal" value="${b[k]??''}"></label>`;
     return`<div class="panel bincard2" style="--crop:${ck?`var(--c-${ck})`:'var(--line)'}">
@@ -2926,7 +2994,7 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 const wxKey=f=>f&&f.bidHome&&f.bidHome.lat!=null?`wx_${(+f.bidHome.lat).toFixed(2)}_${(+f.bidHome.lon).toFixed(2)}`:null;
 S.wx={};const wxSubs={};
 function ensureWx(k){if(!k||wxSubs[k]||!S.db)return;
-  wxSubs[k]=S.db.doc('market/'+k).onSnapshot(d=>{S.wx[k]=d.exists?clone(d.data()):null;if(!$('#dlg').open&&(S.section==='weather'||S.section==='home'))render()},()=>{})}
+  wxSubs[k]=S.db.doc('market/'+k).onSnapshot(d=>{S.wx[k]=d.exists?clone(d.data()):null;if(!$('#dlg').open&&(S.section==='weather'||S.section==='home'||S.tab==='storage'))render()},()=>{})}
 const WX_ICON={sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   partly:'<circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1"/><path d="M9 20h9a4 4 0 0 0 0-8 5 5 0 0 0-9.6 1.5A3.3 3.3 0 0 0 9 20z"/>',
   cloud:'<path d="M7 19h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2A3.5 3.5 0 0 0 7 19z"/>',
@@ -2948,8 +3016,8 @@ function tabWeather(f){
   const zipBox=`<form class="zipform" id="zipform" style="margin-top:12px"><label class="pf"><span>Your ZIP code</span><input id="zipIn" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="e.g. 50421" value="${esc(f.bidHome&&f.bidHome.zip||'')}"></label><button class="primary" type="submit">Save</button></form>`;
   if(!k)return`<section><div class="panel calc"><b style="font-size:1.1rem">Where's your farm?</b><p class="muted" style="margin:6px 0 0">Enter your ZIP code to get your local forecast. It's also used for cash bids near you.</p>${zipBox}</div></section>`;
   if(!w)return`<section><div class="panel"><div class="empty"><b>Your forecast is on its way</b>Weather for ${esc(f.bidHome.label)} is pulled from the National Weather Service each morning, so it shows up after the next update.</div></div></section>`;
-  const days=wxDays(w),now=(w.hourly||[])[0],today=days[0]||{},fieldDays=days.filter(d=>d.field),sprayDays=days.filter(d=>d.spray);
-  const hrs=(w.hourly||[]).slice(0,24),tmin=Math.min(...hrs.map(h=>h.temp)),tmax=Math.max(...hrs.map(h=>h.temp)),tr=(tmax-tmin)||1;
+  const days=wxDays(w),now=wxNow(w),today=days[0]||{},fieldDays=days.filter(d=>d.field),sprayDays=days.filter(d=>d.spray);
+  const hrs=(a=>(a.length?a:(w.hourly||[])).slice(0,24))((w.hourly||[]).filter(x=>new Date(x.t).getTime()+36e5>Date.now())),tmin=Math.min(...hrs.map(h=>h.temp)),tmax=Math.max(...hrs.map(h=>h.temp)),tr=(tmax-tmin)||1;
   const hourChart=hrs.length?`<svg viewBox="0 0 480 110" class="wxhours" role="img" aria-label="Next 24 hours: temperature and chance of rain">
       ${hrs.map((h,i)=>`<rect x="${i*20+3}" y="${100-h.pop*.4}" width="14" height="${h.pop*.4}" class="popbar"><title>${new Date(h.t).toLocaleTimeString('en-US',{hour:'numeric'})}: ${h.pop}% rain</title></rect>`).join('')}
       <polyline points="${hrs.map((h,i)=>`${i*20+10},${(58-(h.temp-tmin)/tr*44).toFixed(1)}`).join(' ')}" class="templine"/>

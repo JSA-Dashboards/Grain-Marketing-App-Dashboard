@@ -47,10 +47,12 @@ foreach ($l in @($locs)) {
       name = $_.name; start = $_.startTime; day = [bool]$_.isDaytime; temp = $_.temperature
       pop = if ($_.probabilityOfPrecipitation -and $null -ne $_.probabilityOfPrecipitation.value) { [int]$_.probabilityOfPrecipitation.value } else { 0 }
       wind = $_.windSpeed; windMax = (& $mph $_.windSpeed); dir = $_.windDirection; short = $_.shortForecast; detail = $_.detailedForecast } })
-    # next 24 hours
-    $hourly = @($hr.properties.periods | Select-Object -First 24 | ForEach-Object { [ordered]@{
+    # next 72 hours (covers "now" until the next morning's run, plus the bin-fan outlook); rh = relative humidity %, dew = dew point °F
+    $hourly = @($hr.properties.periods | Select-Object -First 72 | ForEach-Object { [ordered]@{
       t = $_.startTime; temp = $_.temperature; short = $_.shortForecast; wind = (& $mph $_.windSpeed)
-      pop = if ($_.probabilityOfPrecipitation -and $null -ne $_.probabilityOfPrecipitation.value) { [int]$_.probabilityOfPrecipitation.value } else { 0 } } })
+      pop = if ($_.probabilityOfPrecipitation -and $null -ne $_.probabilityOfPrecipitation.value) { [int]$_.probabilityOfPrecipitation.value } else { 0 }
+      rh = if ($_.relativeHumidity -and $null -ne $_.relativeHumidity.value) { [int]$_.relativeHumidity.value } else { $null }
+      dew = if ($_.dewpoint -and $null -ne $_.dewpoint.value) { [math]::Round([double]$_.dewpoint.value * 9 / 5 + 32) } else { $null } } })
     # expected rain over the next 7 days, from the grid's precipitation amounts (mm -> inches)
     $rain = $null
     if ($grid -and $grid.properties.quantitativePrecipitation) {
