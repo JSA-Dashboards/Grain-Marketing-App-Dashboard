@@ -302,6 +302,13 @@ table.heat td.n{font-family:var(--f-data)}
 .cckpi b{font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cckpi .pos{background:color-mix(in srgb,var(--good) 13%,var(--surface))} .cckpi .pos b{color:var(--good)}
 .cckpi .neg{background:color-mix(in srgb,var(--bad) 11%,var(--surface))} .cckpi .neg b{color:var(--bad)}
+/* how total profit adds up: sold + unsold at market + hedges − costs */
+.ccsplit{margin:12px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--soft);font-size:.84rem}
+.ccsplit-h{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.ccsplit-r{display:flex;align-items:center;gap:8px;padding:2px 0}.ccsplit-r span{flex:1}.ccsplit-r b{font-variant-numeric:tabular-nums}
+.ccsplit-r i{width:9px;height:9px;border-radius:2px;flex:none}.ccsplit-r i.sold{background:var(--accent)}.ccsplit-r i.hedged{background:var(--grain)}.ccsplit-r i.unpriced{background:var(--line)}.ccsplit-r i.cost{background:var(--bad)}
+.ccsplit-r.tot{align-items:baseline;border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:700}.ccsplit-r.tot span{padding-left:17px}
+.ccsplit .neg{color:var(--bad)}.ccsplit .pos{color:var(--good)}.ccsplit-n{margin:6px 0 0;color:var(--muted);font-size:.78rem}
 .cc .pos{color:var(--good)} .cc .neg{color:var(--bad)}
 .ccpos{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center}
 .ccpos .pie{width:76px;height:76px}
@@ -1355,6 +1362,12 @@ function cropCard(f,r){
       <div class="${tone(m.ppa)}"><span>Profit / acre</span><b>${sgn(m.ppa)}</b></div>
       <div class="${tone(m.profit)}"><span>Total profit</span><b>${m.profit==null?'—':(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
       <div><span>Dynamic B/E</span><b>${dynTxt} ${dynDir}</b></div></div>
+    ${m.full&&m.cost!=null?(()=>{const parts=[['Sold contracts',m.soldVal,'sold'],['Unsold at today’s market',m.unsoldVal,'unpriced'],...(m.hedged?[['Hedges',m.hedgeVal||0,'hedged']]:[]),['Costs',-m.cost,'cost']];
+      // only unpriced bushels move with futures; hedged bushels are offset by the hedge
+      return`<div class="ccsplit"><div class="ccsplit-h">How total profit adds up</div>
+        ${parts.map(([l,v,c])=>`<div class="ccsplit-r"><i class="${c}"></i><span>${l}</span><b class="${v<0?'neg':''}">${v<0?'−':'+'}${kfmt(Math.abs(v))}</b></div>`).join('')}
+        <div class="ccsplit-r tot"><span>Total profit</span><b class="${m.profit<0?'neg':'pos'}">${(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
+        <p class="ccsplit-n">${m.unpriced?`Each 10¢ move in futures changes total profit by about <b>±${kfmt(m.unpriced*0.10)}</b> (${bu(m.unpriced)} unpriced bu).`:'Every bushel is sold or hedged; futures moves no longer change profit much.'}</p></div>`})():''}
     <div class="ccpos">${pieSVG([{v:m.sold,cls:'sold',label:'Sold'},{v:m.hedged,cls:'hedged',label:'Hedged'},{v:Math.max(0,total-m.sold-m.hedged),cls:'unpriced',label:'Unpriced'}],`${r.crop}: ${share(m.sold)} sold, ${share(m.hedged)} hedged`)}
       <div class="ccleg">
         <div><i class="sold"></i><span>Sold</span><b>${share(m.sold)}</b><em>${bu(m.sold)} bu · ${kfmt(m.soldVal)}</em></div>
