@@ -34,8 +34,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
     store.init()
     if len(sys.argv) > 1:
-        run_job(sys.argv[1])
-        return
+        sys.exit(0 if run_job(sys.argv[1]) else 1)
     tz, done = ZoneInfo(config.TIMEZONE), set()
     log.info('scheduler started (%s)', config.TIMEZONE)
     while True:
