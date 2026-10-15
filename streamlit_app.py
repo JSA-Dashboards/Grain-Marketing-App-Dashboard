@@ -31,7 +31,7 @@ def desk_page():
 
 
 def login_page():
-    _, mid, _ = st.columns([1, 2, 1])
+    _, mid, _ = st.columns([1, 3, 1])
     with mid:
         cookie = auth.login_screen()
     if cookie:

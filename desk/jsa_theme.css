@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap');
+/* JSA look, shared with the CFTC COT dashboard: light #f6f8f7 page, #32373c text, JSA green #5e7164,
+   EB Garamond headings, Source Sans 3 body, JPSI logo. Overrides the page's color variables only. */
+:root, :root[data-theme="light"]{
+  --bg:#f6f8f7; --surface:#ffffff; --soft:#eef2ef; --line:#d7e2dc;
+  --ink:#32373c; --muted:#5f7267;
+  --accent:#5e7164; --accent-ink:#ffffff;
+  --f-display:"EB Garamond",Georgia,serif;
+  --f-body:"Source Sans 3","Source Sans Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"Source Sans 3","Source Sans Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+h1{font-size:2rem;font-weight:600;font-stretch:100%}
+h2{font-size:1.35rem;font-weight:600;font-stretch:100%}
+h3{font-size:1.1rem;font-weight:600;font-stretch:100%}
+.brand{font-stretch:100%;font-weight:600;font-size:1.05rem}
+.brand::before{content:"";display:inline-block;width:128px;height:28px;margin-right:12px;padding-right:12px;
+  border-right:1px solid var(--line);background:url("https://www.jpsi.com/wp-content/themes/gate39media/img/logo-full.png") left center/contain no-repeat}
+@media (max-width:640px){.brand::before{display:none}}

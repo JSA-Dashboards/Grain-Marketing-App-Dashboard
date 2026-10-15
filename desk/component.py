@@ -23,9 +23,10 @@ KEY = 'gd_desk'
 
 def _page_with_shim():
     page = (ROOT / 'grain-desk.html').read_text(encoding='utf-8')
+    theme = '<style id="jsa-theme">' + (ROOT / 'desk' / 'jsa_theme.css').read_text(encoding='utf-8') + '</style>'
     shim = '<script>' + (ROOT / 'desk' / 'shim.js').read_text(encoding='utf-8') + '</script>'
-    i = page.find('<script>')      # the shim must run before the app's own script
-    return page[:i] + shim + page[i:] if i >= 0 else shim + page
+    i = page.find('<script>')      # the theme (after the page's own styles) and the shim must come before the app's script
+    return page[:i] + theme + shim + page[i:] if i >= 0 else theme + shim + page
 
 
 _JS = """

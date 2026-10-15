@@ -4,6 +4,7 @@
    every 20 seconds (and right after its own writes) and refetches only what changed. */
 (function () {
   'use strict';
+  document.documentElement.setAttribute('data-theme', 'light');   // JSA dashboards are light-only
   const POLL_MS = 20000;
   const rpc = (op, args) => parent.__gdRpc(op, args || {});
   async function api(op, args) {

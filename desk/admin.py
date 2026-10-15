@@ -5,9 +5,11 @@ import streamlit as st
 
 from app import store
 
+from . import branding
+
 
 def page():
-    st.title('People')
+    branding.header('People', 'Who can sign in &middot; John Stewart &amp; Associates')
     u = st.session_state.get('gd_user')
     if not u or u['role'] != 'admin':
         st.error('Admins only.')
@@ -18,7 +20,7 @@ def page():
     farms = {r['id']: len(store.list_ids('farms', r['id'])) for r in rows if r['role'] == 'broker'}
     st.dataframe(
         [{'Name': r['name'], 'Email': r['email'], 'Role': r['role'], 'Active': bool(r['active']),
-          'Farms': farms.get(r['id'], '-'), 'Last sign-in': str(r['last_login'] or '')[:16]} for r in rows],
+          'Farms': str(farms.get(r['id'], '-')), 'Last sign-in': str(r['last_login'] or '')[:16]} for r in rows],
         hide_index=True, width='stretch')
 
     with st.form('add_user', clear_on_submit=True):

@@ -16,7 +16,7 @@ import streamlit as st
 
 from app import config, store
 
-from . import mailer
+from . import branding, mailer
 
 COOKIE = 'gd_session'
 _sent = {}      # email -> time of the last code, in this server process (one code a minute per address)
@@ -46,7 +46,7 @@ def _gate_ok():
 
 def login_screen():
     """Draw the sign-in steps. Returns a {'value','days'} cookie dict the moment sign-in completes, else None."""
-    st.title('Grain Marketing Desk')
+    branding.header('Grain Marketing Desk', 'Broker grain marketing &middot; John Stewart &amp; Associates')
     ss = st.session_state
 
     if not _gate_ok():
