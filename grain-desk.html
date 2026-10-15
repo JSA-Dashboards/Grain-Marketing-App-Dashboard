@@ -2331,6 +2331,11 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   if(k==='coverage'&&n0(sel.eco)&&n0(sel.eco)<=Math.max(scoTop(sel),v))delete sel.eco;
   persist(S.current)});
 
+// rolled HTAs and hedges this year (optionally one crop): first month → current month, net spread and fees
+function rollRows(f,crop){
+  return f.sales.filter(s=>+s.year===+S.year&&ROLLABLE.includes(s.type)&&(s.rolls||[]).length&&(!crop||key(s.crop)===crop)).map(s=>{const rs=s.rolls.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    return{crop:s.crop,what:`${s.type==='HTA'?'HTA':'Hedge'}${s.buyer?' · '+s.buyer:''}`,bu:qty(s),months:`${rs[0].from||'—'} → ${s.futuresMonth||rs[rs.length-1].to||'—'}`,n:rs.length,
+      spread:rollSpread(s),fee:rollFees(s),cost:rollFees(s)*qty(s),after:rolledFutures(s)}})}
 /* ---------- one-page client report (on screen + PDF) ---------- */
 // everything the report shows, figured once so the screen and the PDF always match
 function reportData(f){
@@ -2344,10 +2349,7 @@ function reportData(f){
   const soon=[...deadlinesFor(f).map(x=>({d:x.d,t:x.title})),...deliveries(f).filter(d=>!d.st.done&&d.deliveryEnd>=TODAY).map(d=>({d:d.deliveryEnd,t:`${d.crop} delivery to ${d.buyer||'buyer'} closes (${bu(remaining(d))} bu left)`}))]
     .filter(x=>daysUntil(x.d)<=60).sort((a,b)=>a.d.localeCompare(b.d));
   const attn=D.items.slice().sort((a,b)=>(a.c==='bad'?0:1)-(b.c==='bad'?0:1));
-  // rolled HTAs and hedges: first month → current month, net spread and fees
-  const rolls=f.sales.filter(s=>+s.year===+S.year&&ROLLABLE.includes(s.type)&&(s.rolls||[]).length).map(s=>{const rs=s.rolls.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    return{crop:s.crop,what:`${s.type==='HTA'?'HTA':'Hedge'}${s.buyer?' · '+s.buyer:''}`,bu:qty(s),months:`${rs[0].from||'—'} → ${s.futuresMonth||rs[rs.length-1].to||'—'}`,n:rs.length,
-      spread:rollSpread(s),fee:rollFees(s),cost:rollFees(s)*qty(s),after:rolledFutures(s)}});
+  const rolls=rollRows(f);
   return{f,crops,exp:D.exp,sold:D.sold,hed:D.hed,acres,profit,ppa:pAc?profit/pAc:null,guar,soon,attn,rolls,
     asOf:S.market&&S.market.asOf||null,made:TODAY}}
 const RPT_MAX=6;
@@ -2506,6 +2508,20 @@ async function summaryPdf(){
     cell(6,d.next?`${new Date(d.next.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} · ${d.next.title}`:'Nothing due',{c:d.next?INK:MUTED});
     cell(7,d.bad?`${d.bad} critical`:d.warn?`${d.warn} watch`:'Clear',{b:1,c:d.bad?BAD:d.warn?GRAIN:GOOD});
     y+=6;rule(y);y+=13});
+  // every rolled HTA and hedge across these farms, with fee totals
+  const rr=D.flatMap(d=>rollRows(d.f,F.crop).map(r=>({...r,farm:d.f.name}))).sort((a,b)=>a.farm.localeCompare(b.farm)||a.crop.localeCompare(b.crop));
+  if(rr.length){const rc=[['Farm',150],['Crop',60],['Contract',140],['Bushels',62,'right'],['Rolled',130],['Spread',50,'right'],['Fees',66,'right'],['After rolls',54,'right']];
+    const rhead=()=>{let x=M;rc.forEach(([l,w,a])=>{txt(l,a==='right'?x+w-4:x+4,y,{b:1,s:7,c:MUTED,a:a||'left'});x+=w});y+=5;rule(y);y+=13};
+    const fit=(v,w,b)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(8.5);let t=T(v);if(doc.getTextWidth(t)<=w)return t;
+      while(t.length>1&&doc.getTextWidth(t+'...')>w)t=t.slice(0,-1);return t.trimEnd()+'...'};
+    const fees=rr.reduce((a,r)=>a+r.cost,0);
+    y+=10;need(60);txt('ROLLED CONTRACTS',M,y,{b:1,s:8,c:MUTED});
+    txt(`${rr.length} contract${rr.length>1?'s':''} · ${bu(rr.reduce((a,r)=>a+r.bu,0))} bu${fees?` · ${usd(fees,0)} in roll fees`:''}`,W-M,y,{s:8,c:MUTED,a:'right'});y+=14;rhead();
+    rr.forEach(r=>{if(y+16>BOTTOM){newPage();rhead()}let x=M;
+      const cell=(i,v,o={})=>{const[ ,w,a]=rc[i];txt(fit(v,w-8,o.b),a==='right'?x+w-4:x+4,y,{s:8.5,a:a||'left',...o});x+=w};
+      cell(0,r.farm,{b:1});cell(1,r.crop);cell(2,r.what);cell(3,bu(r.bu));cell(4,r.months+(r.n>1?` (${r.n} rolls)`:''));
+      cell(5,(r.spread<0?'-':'+')+usd(Math.abs(r.spread)),{c:r.spread<0?BAD:INK});cell(6,r.fee?`${usd(r.fee)} · ${usd(r.cost,0)}`:'—');cell(7,usd(r.after),{b:1});
+      y+=6;rule(y);y+=13})}
   // everything flagged, critical first, grouped under each farm name
   const items=D.flatMap(d=>d.items).sort((a,b)=>(a.c==='bad'?0:1)-(b.c==='bad'?0:1)||a.farm.localeCompare(b.farm));
   y+=10;need(40);txt('NEEDS ATTENTION',M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=13;
