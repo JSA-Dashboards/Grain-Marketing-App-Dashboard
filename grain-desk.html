@@ -622,7 +622,7 @@ const qty=s=>isAcc(s)?n0(s.accBu):n0(s.bu)+(ppDoubled(s)?ppDbl(s):0);
 const INS_TYPES=['RP','RP-HPE','YP','None'];
 const CROPS=['Corn','Soybeans','Wheat','Sorghum','Barley','Oats','Canola','Sunflowers'];
 const SALE_CROPS=['Corn','Soybeans','Wheat'];
-const TODAY=new Date().toISOString().slice(0,10);
+const TODAY=(d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10))(new Date());
 const THIS_YEAR=new Date().getFullYear();
 // JSA's required disclaimer (same wording as the JSA dashboards). Shown under every page and on every PDF.
 // Change it here only; the hosted sign-in page has its own copy in hosted/server/app/main.py.
@@ -650,9 +650,17 @@ function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
+// rolls (HTA and futures hedges): each roll moves the contract to a later futures month; the spread changes the
+// futures price (new month minus old, e.g. +0.12 carry) and the elevator or broker charges a fee per bushel
+const ROLLABLE=['HTA','Futures hedge'];
+const rollSpread=s=>(s.rolls||[]).reduce((a,r)=>a+n0(r.spread),0);
+const rollFees=s=>(s.rolls||[]).reduce((a,r)=>a+n0(r.fee),0);
+// the futures price after all rolls and their fees (null until a futures price is set)
+const rolledFutures=s=>num(s.price)==null?null:num(s.price)+rollSpread(s)-rollFees(s);
 function flatPrice(s){const p=num(s.price),b=num(s.basis);
   if(s.type==='Cash sale'||s.type==='Forward contract')return p;
-  if(s.type==='HTA'||s.type==='Basis contract'||isAcc(s))return(p!=null&&b!=null)?p+b:null;
+  if(s.type==='HTA')return(p!=null&&b!=null)?rolledFutures(s)+b:null;
+  if(s.type==='Basis contract'||isAcc(s))return(p!=null&&b!=null)?p+b:null;
   if(isMM(s))return(p!=null&&b!=null)?mmClamp(s,p)-n0(s.mmFee)+b:null;
   if(isOther(s))return num(s.otherFlat)??((p!=null&&b!=null)?p+b:null);
   // Premium Plus: base bushels at contract price + premium; doubled bushels at the strike
@@ -929,6 +937,14 @@ const FORMS={
     {k:'month',label:'Futures month',type:'text',list:'months',hint:'e.g. Dec 26'},
     {k:'note',label:'Note',type:'text',full:1},
   ]},
+  roll:{title:'Roll',fields:[
+    {k:'date',label:'Date rolled',type:'date',req:1},
+    {k:'from',label:'From futures month',type:'text',list:'months',hint:'e.g. Dec 26'},
+    {k:'to',label:'To futures month',type:'text',list:'months',req:1,hint:'e.g. Mar 27'},
+    {k:'spread',label:'Spread gained (+) or lost (−) ($/bu)',type:'number',step:'any',req:1,hint:'Rolling Dec to Mar at a 12¢ carry = 0.12'},
+    {k:'fee',label:'Roll fee ($/bu)',type:'number',step:'any',hint:'Elevator or broker charge for the roll, e.g. 0.02'},
+    {k:'note',label:'Note',type:'text',full:1},
+  ]},
   load:{title:'Load',fields:[
     {k:'date',label:'Date delivered',type:'date',req:1},
     {k:'ticket',label:'Scale ticket #',type:'text'},
@@ -1012,6 +1028,11 @@ $('#dlgform').addEventListener('click',e=>{
     onSave:live((s,rec)=>{s.loads=[...(s.loads||[]),rec];s.status=remaining(s)<=0?'Delivered':'Open'})});
   if(act==='load-del'){const id=a.dataset.id;if(detail.confirmLoad!==id){detail.confirmLoad=id;drawSale();return}
     s.loads=s.loads.filter(l=>l.id!==id);s.status=remaining(s)<=0?'Delivered':'Open';detail.confirmLoad=null;persist(S.current);drawSale()}
+  if(act==='roll-add')openForm('roll',null,{title:`Record a roll · ${s.crop} ${typeName(s)}`,vals:{date:TODAY,from:s.futuresMonth||''},back,
+    onSave:live((s,rec)=>{s.rolls=[...(s.rolls||[]),rec];if(rec.to)s.futuresMonth=rec.to})});
+  if(act==='roll-del'){const id=a.dataset.id;if(detail.confirmRoll!==id){detail.confirmRoll=id;drawSale();return}
+    const r=(s.rolls||[]).find(x=>x.id===id);s.rolls=(s.rolls||[]).filter(x=>x.id!==id);
+    if(r&&r.from&&r.to&&s.futuresMonth===r.to)s.futuresMonth=r.from;detail.confirmRoll=null;persist(S.current);drawSale()}
   if(act==='acc-update')openForm('accupd',null,{title:`Update accumulated · ${s.crop} accumulator`,vals:{date:TODAY,accBu:s.accBu??'',sched:accScheduled(s)},back,
     onSave:live((s,rec)=>{s.accBu=rec.accBu;s.accLog=[...(s.accLog||[]),{id:rec.id,date:rec.date,accBu:rec.accBu,note:rec.note}];if(s.trackLoads)s.status=remaining(s)<=0?'Delivered':'Open'})});
   if(act==='acc-knock')openForm('knock',null,{title:`Record knock-out · ${s.crop} accumulator`,vals:{date:TODAY,accBu:s.accBu??''},back,
@@ -1103,6 +1124,15 @@ function drawSale(){
       :`<p class="muted" style="font-size:.85rem">No loads logged yet.</p>`)+`<div style="margin-top:10px"><button type="button" class="small" data-act="sale-load">Add load</button></div>`
     :`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px"><button type="button" class="small" data-act="sale-toggle">${s.status==='Delivered'?'Reopen contract':'Mark delivered'}</button>
       <button type="button" class="link" data-act="sale-track" style="font-size:.85rem">Track loads instead</button></div>`}`:''}
+  ${ROLLABLE.includes(s.type)?(()=>{const rolls=(s.rolls||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')),sp=rollSpread(s),fe=rollFees(s),sgn=v=>(v<0?'−':'+')+usd(Math.abs(v));
+    return`<h3 class="dsub">Rolls</h3>
+    ${rolls.length?`<div class="tablewrap"><table class="mini"><thead><tr><th>Date</th><th>From → To</th><th class="n">Spread</th><th class="n">Fee</th><th></th></tr></thead><tbody>
+      ${rolls.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${esc(r.from||'—')} → ${esc(r.to||'—')}${r.note?` <span class="muted">· ${esc(r.note)}</span>`:''}</td><td class="n">${sgn(n0(r.spread))}</td><td class="n">${num(r.fee)?'−'+usd(n0(r.fee)):'—'}</td>
+        <td class="n"><button type="button" class="small danger" data-act="roll-del" data-id="${r.id}">${detail.confirmRoll===r.id?'Confirm':'Remove'}</button></td></tr>`).join('')}</tbody></table></div>
+      <dl class="facts" style="margin-top:10px">${fact('Original futures',usd(num(s.price)))}${fact('Spread from rolls',sgn(sp))}${fact('Roll fees',fe?'−'+usd(fe):'—')}${fact('Futures after rolls',`<b>${usd(rolledFutures(s))}</b>`)}${fact('Fees on contract',fe?usd(fe*qty(s),0):'—')}</dl>`
+      :`<p class="muted" style="font-size:.85rem">Not rolled. Record a roll when the ${s.type==='HTA'?'HTA':'hedge'} moves to a later futures month.</p>`}
+    <div style="margin-top:10px"><button type="button" class="small" data-act="roll-add">Record a roll</button></div>
+    <p class="muted" style="font-size:.78rem;margin:8px 0 0">Spread is what the roll added (+, a carry) or took away (−, an inverse) per bushel. Fees come off the price. ${s.type==='HTA'?'Flat price = original futures + spreads − fees + basis.':'Hedge value uses the futures after rolls.'} Recording a roll moves the futures month to the new month.</p>`})():''}
   ${(s.pricing||[]).length?`<h3 class="dsub">Pricing history</h3><ul class="hist">${s.pricing.map(p=>`<li><span class="mono">${fmtDate(p.date)}</span><span>${esc(p.leg)} ${p.leg==='Basis'?fmtBasis(p.value):usd(num(p.value))}${p.month?' · '+esc(p.month):''}${p.note?` <span class="muted">· ${esc(p.note)}</span>`:''}</span></li>`).join('')}</ul>`:''}
   <div class="dlgfoot"><button type="button" class="danger" data-act="sale-del">${detail.confirmDel?'Confirm delete':'Delete'}</button><div class="sp"></div>
     <button type="button" data-act="close">Close</button><button type="button" class="primary" data-act="sale-edit">Edit</button></div>`}
@@ -1297,11 +1327,11 @@ function cropMarket(f,r){
   // sold value: priced contracts at their flat price; open legs estimated from today's futures / est. basis
   let soldVal=0,estBu=0,missBu=0;
   sales.filter(s=>CONTRACT_TYPES.includes(s.type)).forEach(s=>{const q=qty(s),fp=flatPrice(s);if(fp!=null){soldVal+=q*fp;return}
-    const fu=isMM(s)?(mmClamp(s,num(s.price)??fut)==null?null:mmClamp(s,num(s.price)??fut)-n0(s.mmFee)):isPP(s)&&num(s.price)!=null?num(s.price)+n0(s.premium):num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
+    const fu=isMM(s)?(mmClamp(s,num(s.price)??fut)==null?null:mmClamp(s,num(s.price)??fut)-n0(s.mmFee)):isPP(s)&&num(s.price)!=null?num(s.price)+n0(s.premium):s.type==='HTA'?rolledFutures(s)??fut:num(s.price)??fut,ba=num(s.basis)??basis;if(fu!=null&&ba!=null){soldVal+=q*(fu+ba);estBu+=q}else missBu+=q});
   let hedgeVal=null,itmBu=0,premium=0;
   // pending Premium Plus double-ups that would trigger at today's futures
   sales.filter(s=>isPP(s)&&!s.ppOutcome&&ppTriggers(s,fut)).forEach(s=>itmBu+=ppDbl(s));
-  if(fut!=null){hedgeVal=0;sales.filter(s=>HEDGE_TYPES.includes(s.type)).forEach(s=>{hedgeVal+=(n0(s.price)-fut)*qty(s)})}
+  if(fut!=null){hedgeVal=0;sales.filter(s=>HEDGE_TYPES.includes(s.type)).forEach(s=>{hedgeVal+=(n0(rolledFutures(s))-fut)*qty(s)})}
   const cost=r.plan&&costOf(pl)!=null?n0(pl.acres)*costOf(pl):null;
   const unsoldVal=mkt!=null?unsold*mkt:null,unpricedVal=mkt!=null?unpriced*mkt:null;
   // with a market price: everything valued (sold + unsold + hedges − put premiums − cost); without: profit on priced bushels only
@@ -1491,7 +1521,7 @@ function tabSales(f){
     return`<li class="srow" data-sale="${s.id}" tabindex="0"><span class="sdot" style="background:${ck?`var(--c-${ck})`:'var(--muted)'}"></span>
       <div class="smain"><div class="stitle"><b>${esc(s.crop)} · ${esc(typeName(s))}</b>${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</div><span class="ssub">${sub}</span>
         <span class="spills">${saleStatus(s)}${isDel&&left>0&&s.trackLoads?`<span class="muted" style="font-size:.76rem">${bu(left)} bu left</span>`:''}</span></div>
-      <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(num(s.price))}`:'price open'}</span>
+      <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(rolledFutures(s))}`:'price open'}</span>
         ${isDel&&!s.trackLoads?`<label class="sdel" title="Mark this contract delivered without opening it"><input type="checkbox" data-deliver="${s.id}" ${s.status==='Delivered'?'checked':''}> Delivered</label>`:''}</div></li>`};
   return`<section><div class="sechead"><div><h2>${S.year} sales & contracts</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${all.length} contract${all.length===1?'':'s'}${filtered?` · ${list.length} shown`:''}</div></div><div class="sp"></div>
     ${S.mode==='live'?'<button class="small" data-act="scan">Scan a contract</button>':''}<button class="primary" data-add="sale">+ Add contract</button></div>
@@ -1690,10 +1720,10 @@ function baseProfit(f,plan,F,b,yieldPct){
   const sales=f.sales.filter(s=>+s.year===+plan.year&&key(s.crop)===key(plan.crop));
   let rev=0,sold=0,hedge=0;
   sales.forEach(s=>{
-    if(HEDGE_TYPES.includes(s.type)){hedge+=(n0(s.price)-F)*qty(s);return}
+    if(HEDGE_TYPES.includes(s.type)){hedge+=(n0(rolledFutures(s))-F)*qty(s);return}
     const q=qty(s),fp=flatPrice(s);sold+=q;
     if(fp!=null)rev+=q*fp;
-    else{const ba=num(s.basis)??b,fu=isMM(s)?mmClamp(s,num(s.price)??F)-n0(s.mmFee):isOther(s)&&num(s.otherFlat)!=null?num(s.otherFlat)-ba:isPP(s)?(num(s.price)??F)+n0(s.premium):num(s.price)??F;rev+=q*(fu+ba)}
+    else{const ba=num(s.basis)??b,fu=isMM(s)?mmClamp(s,num(s.price)??F)-n0(s.mmFee):isOther(s)&&num(s.otherFlat)!=null?num(s.otherFlat)-ba:isPP(s)?(num(s.price)??F)+n0(s.premium):s.type==='HTA'?rolledFutures(s)??F:num(s.price)??F;rev+=q*(fu+ba)}
     if(isPP(s)&&!s.ppOutcome&&num(s.strike)!=null&&F>=num(s.strike)){const d=ppDbl(s);sold+=d;rev+=d*(num(s.strike)+(num(s.basis)??b))}});
   const unsold=prod-sold;// negative = more sold than produced, bought back at harvest price
   return{profit:rev+unsold*(F+b)+hedge-cost,prod,sold,cost,ac}}
