@@ -31,3 +31,7 @@ hosted/devdata/
 .local-data/
 dev_run.py
 .claude/
+
+# data export for the hosted import (customer data; never commit)
+export-for-kolten/
+export-for-kolten.zip
