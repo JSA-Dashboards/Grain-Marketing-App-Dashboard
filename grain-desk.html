@@ -471,6 +471,7 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .drow,.dhead{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.4fr) 88px 92px minmax(0,1.2fr) 116px;gap:14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
 .dhead{padding:8px 16px;font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
 .drow{cursor:pointer} .drow:hover{background:var(--soft)} .drow:last-child{border-bottom:0}
+.dgroup{background:color-mix(in srgb,var(--accent) 6%,var(--surface))}.dgroupkids{border-bottom:1px solid var(--line)}.dgroupkids .drow{padding-left:34px;border-bottom:1px dashed var(--line)}.dgroupkids .drow:last-child{border-bottom:0}
 .dname{display:grid;gap:2px;min-width:0}
 .dsold,.ddue{display:grid;gap:4px;min-width:0}
 .dsold span,.dnum span,.ddue span{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -705,7 +706,7 @@ const key=s=>String(s||'').trim().toLowerCase();
 const fmtDate=d=>{if(!d)return '—';const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
 const daysUntil=d=>Math.round((new Date(d+'T12:00:00')-new Date(TODAY+'T12:00:00'))/864e5);
 const clone=o=>JSON.parse(JSON.stringify(o));
-function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',bidHome:d.bidHome||null,sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],reportNote:d.reportNote||'',updatedAt:d.updatedAt||null}}
+function normalize(d){d=clone(d||{});return{name:d.name||'Unnamed farm',broker:d.broker||'',state:d.state||'',county:d.county||'',bidHome:d.bidHome||null,sample:!!d.sample,crops:d.crops||[],sales:d.sales||[],bins:d.bins||[],scenarios:d.scenarios||[],deadlines:d.deadlines||[],reportNote:d.reportNote||'',group:d.group||'',fans:d.fans||null,updatedAt:d.updatedAt||null}}
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast'+(err?' err':'');t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,err?6000:1800)}
 
 /* ---------- calculations ---------- */
@@ -1202,7 +1203,7 @@ function render(){
   if(S.mode==='loading')return;
   if(S.mode==='noid'){app.innerHTML=`<div class="onboard"><h1>Sign in to keep your records</h1><p>Your farm records are saved to your claude.ai account. Sign in, then reopen this link.</p></div>`;return}
   const note=S.note?`<div class="banner">${esc(S.note)}</div>`:'';
-  if(S.owner&&!S.current){app.innerHTML=note+renderClients();return}
+  if(S.owner&&!S.current){app.innerHTML=note+(S.groupView?renderGroup(S.groupView):renderClients());return}
   const f=S.farms[S.current];
   if(!f){app.innerHTML=note+renderOnboard();return}
   // keep the cursor where it was when a save or a live update redraws the page
@@ -1252,6 +1253,53 @@ function dashFilter(){
   const ids=allIds.filter(byBroker).filter(id=>!sf||S.farms[id].state===sf);
   const brokerName=bf?(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):'';
   return{allIds,brokers,hasUnassigned,bf,statesUsed,sf,crop,cropName,ids,brokerName}}
+// customer groups: one customer farming under several entities (farm.group); combined numbers add the entities together
+const groupList=()=>[...new Set(Object.values(S.farms).map(f=>f.group).filter(Boolean).map(g=>g.trim()))].sort();
+const groupIds=g=>Object.keys(S.farms).filter(id=>key(S.farms[id].group)===key(g)).sort((a,b)=>S.farms[a].name.localeCompare(S.farms[b].name));
+function groupRow(g,mem){
+  const sum=k=>mem.reduce((a,d)=>a+(d[k]||0),0),exp=sum('exp'),sold=sum('sold'),hed=sum('hed'),s=exp?sold/exp:0,h=exp?hed/exp:0;
+  const wp=mem.filter(d=>d.profit!=null),profit=wp.length===mem.length?sum('profit'):null,ac=wp.reduce((a,d)=>a+(d.ppa?d.profit/d.ppa:0),0),ppa=profit!=null&&ac?profit/ac:null;
+  const insured=sum('insured'),ins=insured?sum('insSold')/insured:null,next=mem.map(d=>d.next).filter(Boolean).sort((a,b)=>a.d.localeCompare(b.d))[0],bad=sum('bad'),warn=sum('warn');
+  return`<li class="drow dgroup" data-group="${esc(g)}" tabindex="0">
+    <div class="dname"><div class="stitle"><b>${esc(g)}</b><span class="pill neutral">Combined · ${mem.length}</span></div><span class="ssub">${mem.map(d=>esc(d.f.name)).join(' + ')}</span></div>
+    <div class="dsold">${exp?`<div class="dbar" aria-hidden="true"><i class="s" style="width:${Math.min(100,s*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-s*100,h*100)).toFixed(1)}%"></i></div>
+      <span><b>${pct(s)}</b> sold${hed?` · ${pct(h)} hedged`:''} · ${bu(exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
+    <div class="dnum dprof ${ppa==null?'':ppa<0?'neg':'pos'}"><b>${ppa==null?'—':usd(ppa,0)}</b><span>profit/ac</span></div>
+    <div class="dnum dins ${ins==null?'':ins>1?'neg':ins>.8?'warn':''}"><b>${ins==null?'—':pct(ins)}</b><span>of insured sold</span></div>
+    <div class="ddue">${next?`<b>${fmtDate(next.d)}</b><span>${esc(next.title)}</span>`:'<span>Nothing due</span>'}</div>
+    <div class="dflag">${bad?`<span class="pill bad">${bad} critical</span>`:''}${warn?`<span class="pill warn">${warn} watch</span>`:''}${!bad&&!warn?'<span class="pill good">Clear</span>':''}</div></li>`}
+// the combined view: each crop added up across the entities, with each entity's share underneath
+function renderGroup(g){
+  const ids=groupIds(g);if(!ids.length){S.groupView=null;return renderClients()}
+  const per=ids.map(id=>({id,f:S.farms[id],rows:position(S.farms[id],S.year)}));
+  const order=k=>{const i=SALE_CROPS.findIndex(c=>key(c)===k);return i<0?99:i};
+  const crops=[...new Set(per.flatMap(p=>p.rows.map(r=>key(r.crop))))].sort((a,b)=>order(a)-order(b));
+  const C=crops.map(k=>{const parts=per.map(p=>{const r=p.rows.find(x=>key(x.crop)===k);return r?{p,r,m:r.plan?cropMarket(p.f,r):null}:null}).filter(Boolean);
+    const sum=fn=>parts.reduce((a,x)=>a+n0(fn(x)),0),exp=sum(x=>x.r.expected),sold=sum(x=>x.r.sold),hed=sum(x=>x.r.hedged),pb=sum(x=>x.r.pricedBu),pr=sum(x=>x.r.pricedRev),cost=sum(x=>x.r.totalCost),ac=sum(x=>x.r.plan&&x.r.plan.acres);
+    const allCost=parts.every(x=>x.r.plan&&n0(costOf(x.r.plan))),full=parts.every(x=>x.m&&x.m.full&&x.m.profit!=null);
+    return{k,crop:parts[0].r.crop,parts,exp,sold,hed,ac,avg:pb?pr/pb:null,be:allCost&&exp?cost/exp:null,dynBe:allCost&&exp-pb>0?(cost-pr)/(exp-pb):null,profit:full?sum(x=>x.m.profit):null,
+      insured:sum(x=>x.r.insured)}});
+  const tExp=C.reduce((a,c)=>a+c.exp,0),tSold=C.reduce((a,c)=>a+c.sold,0),tHed=C.reduce((a,c)=>a+c.hed,0),tAc=C.reduce((a,c)=>a+c.ac,0),tP=C.length&&C.every(c=>c.profit!=null)?C.reduce((a,c)=>a+c.profit,0):null;
+  const brokers=[...new Set(per.map(p=>p.f.broker).filter(Boolean))];
+  const card=c=>{const ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[c.k],s=c.exp?c.sold/c.exp:0,h=c.exp?c.hed/c.exp:0;
+    return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}"><header><h2><span class="cdot"></span>${esc(c.crop)} <span class="muted">${S.year}</span></h2><div class="ccfut"><span>combined</span><b>${pct(s)} sold</b></div></header>
+      <p class="ccsub">${bu(c.ac)} ac · ${bu(c.exp)} bu expected${c.hed?` · ${pct(h)} hedged`:''}</p>
+      <div class="cckpi"><div><span>Sold</span><b>${bu(c.sold)}</b></div><div><span>Avg priced</span><b>${c.avg!=null?usd(c.avg):'—'}</b></div><div class="${c.profit==null?'':c.profit<0?'neg':'pos'}"><span>Est. profit</span><b>${c.profit==null?'—':(c.profit>0?'+':'')+kfmt(c.profit)}</b></div></div>
+      <div class="dbar" aria-hidden="true"><i class="s" style="width:${Math.min(100,s*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-s*100,h*100)).toFixed(1)}%"></i></div>
+      <div class="tablewrap"><table class="mini"><thead><tr><th>Entity</th><th class="n">Acres</th><th class="n">Yield</th><th class="n">Expected</th><th class="n">Sold</th><th class="n">% sold</th></tr></thead><tbody>
+        ${c.parts.map(x=>`<tr data-open="${esc(x.p.id)}" style="cursor:pointer"><td><b>${esc(x.p.f.name)}</b></td><td class="n">${x.r.plan?bu(n0(x.r.plan.acres)):'—'}</td><td class="n">${x.r.yld?x.r.yld.toFixed(0):'—'}</td><td class="n">${bu(x.r.expected)}</td><td class="n">${bu(x.r.sold)}</td><td class="n">${x.r.expected?pct(x.r.sold/x.r.expected):'—'}</td></tr>`).join('')}
+        <tr class="tot"><td><b>Combined</b></td><td class="n"><b>${bu(c.ac)}</b></td><td class="n">${c.ac?(c.exp/c.ac).toFixed(0):'—'}</td><td class="n"><b>${bu(c.exp)}</b></td><td class="n"><b>${bu(c.sold)}</b></td><td class="n"><b>${c.exp?pct(c.sold/c.exp):'—'}</b></td></tr></tbody></table></div>
+      <p class="muted" style="font-size:.76rem;margin:0">${c.be!=null?`Break-even ${usd(c.be)}/bu across the entities${c.dynBe!=null?` · on unpriced bushels ${usd(c.dynBe)}`:''}.`:'Add cost per acre on every entity to see a combined break-even.'}</p></article>`};
+  const yrs=[...new Set([THIS_YEAR,THIS_YEAR+1,THIS_YEAR-1,...ids.flatMap(id=>years(S.farms[id]))])].sort((a,b)=>b-a);
+  return`<div class="farmhead"><div><button class="link" data-act="groupback">← All client farms</button><div class="label" style="margin-top:6px">Customer group · combined</div><h1>${esc(g)}</h1>
+      <div class="muted" style="font-size:.85rem;margin-top:2px">${per.map(p=>`<button class="link" data-open="${esc(p.id)}">${esc(p.f.name)}</button>`).join(' + ')}${brokers.length?` · ${brokers.map(esc).join(', ')}`:''}</div></div><div class="sp"></div>
+    <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label></div>
+    <div class="cckpi okpi" style="margin-top:16px"><div><span>Expected bushels</span><b>${tExp?bu(tExp):'—'}</b><em>${bu(tAc)} acres · ${ids.length} entities</em></div>
+      <div><span>Sold</span><b>${tExp?pct(tSold/tExp):'—'}</b><em>${tExp?`${pct((tSold+tHed)/tExp)} with hedges`:''}</em></div>
+      <div class="${tP==null?'':tP<0?'neg':'pos'}"><span>Est. profit</span><b>${kfmt(tP)}</b><em>${tP!=null&&tAc?usd(tP/tAc,0)+'/ac at today’s market':'needs futures, basis and costs on every entity'}</em></div>
+      <div><span>Insured bushels</span><b>${C.some(c=>c.insured)?bu(C.reduce((a,c)=>a+c.insured,0)):'—'}</b><em>across the entities’ policies</em></div></div>
+    ${C.length?`<div class="ccards">${C.map(card).join('')}</div>`:'<div class="panel calc" style="margin-top:16px"><p class="muted" style="margin:0">No crops for this year yet.</p></div>'}
+    <p class="muted" style="font-size:.78rem;margin:14px 0 0">Each entity keeps its own contracts, insurance and reports; open one to make changes. Combined numbers add the entities together. Profit and break-even combine only when every entity has costs, futures and basis.</p>`}
 function renderClients(){
   const{allIds,brokers,hasUnassigned,bf,statesUsed,sf,crop,cropName,ids}=dashFilter();
   const D=ids.map(id=>dashFarm(id,crop));
@@ -1309,7 +1357,9 @@ function renderClients(){
   <div class="sechead" style="margin-top:18px"><h2>Clients</h2><div class="sp"></div>
     <div class="chips" style="margin:0">${DASH_SORTS.map(([k,l])=>`<button class="chip sm" data-dsort="${k}" aria-pressed="${sortK===k}">${l}</button>`).join('')}</div></div>
   <section class="panel slist">${ids.length?`<div class="dhead"><span>Farm</span><span>Marketed</span><span style="text-align:right">Profit/ac</span><span style="text-align:right">Insured sold</span><span>Next due</span><span style="text-align:right">Flags</span></div>
-    <ul class="dlist">${list.map(row).join('')}</ul>`
+    <ul class="dlist">${(()=>{const seen=new Set();return list.map(d=>{const g=d.f.group,mem=g?list.filter(x=>key(x.f.group)===key(g)):[];
+      if(mem.length<2)return row(d);if(seen.has(key(g)))return'';seen.add(key(g));
+      return groupRow(g,mem)+`<li class="dgroupkids"><ul class="dlist">${mem.map(row).join('')}</ul></li>`}).join('')})()}</ul>`
     :allIds.length?`<div class="empty"><b>No farms match these filters</b>Assign farms to brokers with Edit details on each farm, or add a client farm.</div>`
     :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</section>`}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-dbf],[data-dsf],[data-dcrop],[data-dsort],[data-act="attnall"]');if(!t||t.closest('dialog'))return;
@@ -1334,6 +1384,7 @@ function renderFarm(f){
     <h1>${esc(f.name)}${sec!=='home'?` <span class="muted" style="font-weight:600">· ${esc(sd.label)}</span>`:''} ${f.sample?'<span class="pill neutral" style="vertical-align:middle">Sample data</span>':''}</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.owner?`<span class="muted" style="font-size:.85rem">Broker: <b style="color:var(--ink)">${esc(f.broker||'Unassigned')}</b></span>`:''}
+    ${S.owner&&f.group&&groupIds(f.group).length>1?`<button class="small" data-act="opengroup" title="See every entity in this customer group added together">${esc(f.group)} combined</button>`:''}
     <button class="small" data-section="report">Client report</button><button class="small" data-act="rename">${S.owner?'Edit details':'Farm details'}</button>${S.owner&&S.current!==S.uid?`<button class="small danger" data-act="removefarm">${S.confirmRemove?'Confirm remove':'Remove'}</button>`:''}</div>
   ${nav}${body}`}
 const TAB_FN={overview:f=>tabOverview(f),production:f=>tabProduction(f),storage:f=>tabStorage(f),sales:f=>tabSales(f),optimizer:f=>tabOptimizer(f),insurance:f=>tabInsurance(f),quotes:f=>tabQuotes(f)};
@@ -3149,7 +3200,7 @@ async function attachPhoto(sid,file){
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-section],[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
+  const t=e.target.closest('[data-section],[data-dl],[data-dladd],[data-sdl],[data-sdladd],[data-cost],[data-tab],[data-add],[data-edit],[data-open],[data-group],[data-act],[data-sale],[data-sort],[data-by]');if(!t||t.closest('dialog'))return;
   if(t.dataset.cost){e.stopPropagation();openCost(t.dataset.cost);return}
   if(t.dataset.dladd){openForm('deadline');return}
   if(t.dataset.dl){openForm('deadline',t.dataset.dl);return}
@@ -3161,9 +3212,12 @@ document.addEventListener('click',e=>{
   if(t.dataset.by){S.by=t.dataset.by;render();return}
   if(t.dataset.add){openForm(t.dataset.add);return}
   if(t.dataset.edit){e.stopPropagation();openForm(t.dataset.edit,t.dataset.id);return}
+  if(t.dataset.group){S.groupView=t.dataset.group;render();window.scrollTo(0,0);return}
   if(t.dataset.open){S.current=t.dataset.open;S.tab='overview';S.section='home';S.confirmRemove=false;render();return}
   const a=t.dataset.act;
   if(a==='back'){S.current=null;render()}
+  if(a==='groupback'){S.groupView=null;render()}
+  if(a==='opengroup'){const f=S.farms[S.current];if(f&&f.group){S.groupView=f.group;S.current=null;render();window.scrollTo(0,0)}}
   if(a==='home'){S.section='home';render();window.scrollTo(0,0)}
   if(a==='clearbroker')setBrokerF('');
   if(a==='dlall'){S.dlAll=!S.dlAll;render()}
@@ -3191,9 +3245,9 @@ document.addEventListener('click',e=>{
     const fallback=()=>{dlgCtx=null;detail=null;$('#dlgform').innerHTML=`<h2>Marketing summary</h2><p class="muted" style="font-size:.85rem">Select the text and copy it into an email or notes.</p><textarea id="sumtxt" rows="12" readonly>${esc(txt)}</textarea><div class="dlgfoot"><div class="sp"></div><button type="button" class="primary" data-act="close-plain">Done</button></div>`;
       $('#dlg').showModal();const ta=$('#sumtxt');ta.focus();ta.select();$('[data-act="close-plain"]').onclick=()=>$('#dlg').close()};
     try{navigator.clipboard.writeText(txt).then(()=>toast('Summary copied: paste it into an email or notes'),fallback)}catch(err){fallback()}}
-  if(a==='addclient')nameDialog('Add a client farm','',(name,broker,loc)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker,...loc});S.current=id;S.tab='overview';S.section='home';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
+  if(a==='addclient')nameDialog('Add a client farm','',(name,broker,loc)=>{const id='client-'+uid();S.farms[id]=normalize({name,broker,...loc,group:loc.group||undefined});S.current=id;S.tab='overview';S.section='home';persist(id)},S.brokerF&&S.brokerF!=='__none'?(brokerList().find(b=>key(b)===S.brokerF)||''):'');
   if(a==='rename'){const f=S.farms[S.current];
-    nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;persist(S.current)},S.admin?(f.broker||''):undefined,{state:f.state,county:f.county})}
+    nameDialog('Farm details',f.name,(name,broker,loc)=>{f.name=name;if(broker!==undefined)f.broker=broker;f.state=loc.state;f.county=loc.county;if(loc.group)f.group=loc.group;else delete f.group;persist(S.current)},S.admin?(f.broker||''):undefined,{state:f.state,county:f.county,group:f.group})}
   if(a==='removefarm'){if(!S.confirmRemove){S.confirmRemove=true;render();return}
     const id=S.current;delete S.farms[id];S.current=null;S.confirmRemove=false;render();
     if(S.mode==='live')S.db.doc(farmPath(id)).delete().then(()=>toast('Farm removed')).catch(()=>toast("Couldn't remove that farm. Try again.",true))}
@@ -3220,14 +3274,17 @@ function nameDialog(title,val,done,broker,loc={}){
     <label>State<select id="nd_state">${stateOpts(loc.state||'','Choose state')}</select></label>
     <label>County<input id="nd_county" value="${esc(loc.county||'')}" placeholder="e.g. Wright"><span class="hint">Used to show the right program deadlines.</span></label>
     ${withBroker?`<label class="full">Assigned broker<input id="nd_broker" list="brokerlist" value="${esc(broker)}" placeholder="Leave blank if unassigned"><span class="hint">Pick an existing broker or type a new name.</span></label>
-    <datalist id="brokerlist">${brokerList().map(b=>`<option value="${esc(b)}">`).join('')}</datalist>`:''}</div>
+    <datalist id="brokerlist">${brokerList().map(b=>`<option value="${esc(b)}">`).join('')}</datalist>`:''}
+    <label class="full">Customer group<input id="nd_group" list="grouplist" value="${esc(loc.group||'')}" placeholder="e.g. Gibson"><span class="hint">Same customer with several entities? Give each farm the same group name to see them combined.</span></label>
+    <datalist id="grouplist">${groupList().map(g=>`<option value="${esc(g)}">`).join('')}</datalist></div>
   <div class="dlgfoot"><div class="sp"></div><button type="button" id="nd_cancel">Cancel</button><button class="primary" type="submit" id="nd_ok">Save</button></div>`;
   const dlg=$('#dlg');dlg.showModal();$('#nd_cancel').onclick=()=>dlg.close();
   $('#nd_ok').onclick=ev=>{ev.preventDefault();const v=$('#nd_name').value.trim();if(!v)return;
     let b=withBroker?$('#nd_broker').value.trim():undefined;
     if(b){const match=brokerList().find(x=>key(x)===key(b));if(match)b=match}
     const county=$('#nd_county').value.trim().replace(/\s+county$/i,'');
-    dlg.close();done(v,b,{state:$('#nd_state').value,county})}}
+    let g=$('#nd_group').value.trim();if(g){const m=groupList().find(x=>key(x)===key(g));if(m)g=m}
+    dlg.close();done(v,b,{state:$('#nd_state').value,county,group:g})}}
 $('#dlg').addEventListener('close',()=>{
   // a scanned contract closed without saving: drop its photo instead of leaving it stored
   if(S.pendingPhoto){if(S.assets)S.assets.delete(S.pendingPhoto).catch(()=>{});S.pendingPhoto=null}
