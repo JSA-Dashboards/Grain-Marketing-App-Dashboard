@@ -374,6 +374,8 @@ table.heat td.n{font-family:var(--f-data)}
 .sright{text-align:right;display:grid;gap:2px;white-space:nowrap}
 .sright b{font-weight:650;font-variant-numeric:tabular-nums}
 .sright span{font-size:.84rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.sdel{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;font-size:.8rem;color:var(--muted);font-weight:600;cursor:pointer;margin-top:4px;padding:2px 0}
+.sdel input{width:18px;height:18px;margin:0;accent-color:var(--accent);cursor:pointer}
 .ssum table td,.ssum table th{padding:9px 12px}
 details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 /* optimizer, calculator style */
@@ -1437,6 +1439,14 @@ function delivMonths(s){
   let[y,m]=a.slice(0,7).split('-').map(Number);const[ey,em]=b.slice(0,7).split('-').map(Number);const out=[];
   for(let g=0;(y<ey||(y===ey&&m<=em))&&g<36;g++){out.push(y+'-'+String(m).padStart(2,'0'));if(++m>12){m=1;y++}}
   return out.length?out:[a.slice(0,7)]}
+// the Delivered checkbox on a contract row: ticks the contract delivered (or reopens it) without opening it.
+// Caught on the way down so the row's own click (which opens the contract) never sees it.
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.sdel'))e.stopPropagation()},true);
+document.addEventListener('keydown',e=>{if(e.target.matches&&e.target.matches('[data-deliver]')&&e.key==='Enter')e.stopPropagation()},true);
+document.addEventListener('change',e=>{const id=e.target.dataset&&e.target.dataset.deliver;if(!id)return;
+  const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===id);if(!s)return;
+  s.status=e.target.checked?'Delivered':'Open';persist(S.current);
+  toast(e.target.checked?`${s.crop} contract marked delivered`:`${s.crop} contract reopened`)});
 const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',unpriced:'Needs pricing',hedges:'Hedges only'};
 function filteredSales(f){
   const F=S.flt,q=key(F.q);
@@ -1481,7 +1491,8 @@ function tabSales(f){
     return`<li class="srow" data-sale="${s.id}" tabindex="0"><span class="sdot" style="background:${ck?`var(--c-${ck})`:'var(--muted)'}"></span>
       <div class="smain"><div class="stitle"><b>${esc(s.crop)} · ${esc(typeName(s))}</b>${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</div><span class="ssub">${sub}</span>
         <span class="spills">${saleStatus(s)}${isDel&&left>0&&s.trackLoads?`<span class="muted" style="font-size:.76rem">${bu(left)} bu left</span>`:''}</span></div>
-      <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(num(s.price))}`:'price open'}</span></div></li>`};
+      <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(num(s.price))}`:'price open'}</span>
+        ${isDel&&!s.trackLoads?`<label class="sdel" title="Mark this contract delivered without opening it"><input type="checkbox" data-deliver="${s.id}" ${s.status==='Delivered'?'checked':''}> Delivered</label>`:''}</div></li>`};
   return`<section><div class="sechead"><div><h2>${S.year} sales & contracts</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${all.length} contract${all.length===1?'':'s'}${filtered?` · ${list.length} shown`:''}</div></div><div class="sp"></div>
     ${S.mode==='live'?'<button class="small" data-act="scan">Scan a contract</button>':''}<button class="primary" data-add="sale">+ Add contract</button></div>
   ${all.length?`<div class="cckpi skpi">
