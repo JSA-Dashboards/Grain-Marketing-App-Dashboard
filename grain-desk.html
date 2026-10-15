@@ -2039,12 +2039,28 @@ function emcAt(crop,tempF,rh){const g=EMC[crop];if(!g||tempF==null||rh==null)ret
 const FAN_TARGET={corn:15.0,soybeans:13.0,wheat:13.5};
 // the forecast hour we're in now (the hourly list starts when the morning update ran)
 function wxNow(w){const h=(w&&w.hourly)||[],now=Date.now();let cur=h[0]||null;for(const x of h){if(new Date(x.t).getTime()<=now)cur=x;else break}return cur}
+// what the fans panel is judging: a target the user sets, or a bin's crop and moisture reading
+function fanOpts(f){
+  const fan=f.fans||{},bins=f.bins.filter(b=>EMC[key(b.crop)]),binCrop=(bins.find(b=>n0(b.bu)>0)||bins[0]||{}).crop,mode=fan.mode==='bin'?'bin':'target';
+  const tgt=c=>num((fan.target||{})[c])??FAN_TARGET[c];
+  if(mode==='bin'&&bins.length){const bin=bins.find(b=>b.id===fan.bin)||bins.find(b=>num(b.moisture)!=null)||bins[0],crop=key(bin.crop),m=num(bin.moisture);
+    return{mode,bins,bin,crop,target:m??tgt(crop),fromBin:m!=null,binCrop:binCrop&&key(binCrop)}}
+  const crop=fan.crop||(binCrop?key(binCrop):'corn');return{mode,bins,bin:null,crop,target:tgt(crop),fromBin:false,binCrop:binCrop&&key(binCrop)}}
+// fan status this hour for a crop at a moisture: 'on' | 'cool' | 'off', or null without a forecast
+function fanStatusNow(f,crop,target){const k=wxKey(f),w=k&&S.wx?S.wx[k]:null,c=wxNow({hourly:((w&&w.hourly)||[]).filter(x=>x.rh!=null)});
+  if(!c||new Date(c.t).getTime()+2*36e5<Date.now())return null;const e=emcAt(crop,c.temp,c.rh);return e==null?null:e<=target?'on':e<=target+1?'cool':'off'}
 function fanPanel(f){
   const k=wxKey(f);if(k)ensureWx(k);const w=k&&S.wx?S.wx[k]:null;
-  const binCrop=(f.bins.find(b=>n0(b.bu)>0&&EMC[key(b.crop)])||{}).crop,fan=f.fans||{},crop=fan.crop||(binCrop?key(binCrop):'corn'),target=num((fan.target||{})[crop])??FAN_TARGET[crop];
+  const fan=f.fans||{},o=fanOpts(f),{crop,target,bin,mode}=o,tgtCrop=fan.crop||o.binCrop||'corn';
   const head=`<section><div class="sechead"><div><h2>Grain bin fans</h2><div class="muted" style="font-size:.82rem;margin-top:2px">When the outside air will dry or hold your grain, from the hourly temperature and humidity forecast${w&&w.place?` for ${esc(w.place)}`:''}</div></div></div><div class="panel calc fans">`;
-  const ctl=`<div class="fanctl"><div class="chips" style="margin:0">${[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([c,l])=>`<button class="chip" data-fancrop="${c}" aria-pressed="${c===crop}">${l}</button>`).join('')}</div>
-    <div class="fantgt"><span>Target moisture</span><button class="small" data-fanstep="-0.5" aria-label="Lower target">−</button><b>${target.toFixed(1)}%</b><button class="small" data-fanstep="0.5" aria-label="Raise target">+</button></div></div>`;
+  const modeChips=`<div class="chips" style="margin:0 0 12px">${[['target','My target'],['bin','Bin moisture']].map(([m,l])=>`<button class="chip sm" data-fanmode="${m}" aria-pressed="${m===mode}">${l}</button>`).join('')}</div>`;
+  const stepper=`<div class="fantgt"><span>Target moisture</span><button class="small" data-fanstep="-0.5" aria-label="Lower target">−</button><b>${target.toFixed(1)}%</b><button class="small" data-fanstep="0.5" aria-label="Raise target">+</button></div>`;
+  const ctl=modeChips+(mode==='bin'
+    ?(o.bins.length?`<div class="fanctl"><div class="chips" style="margin:0">${o.bins.map(b=>`<button class="chip sm" data-fanbin="${b.id}" aria-pressed="${b.id===(bin&&bin.id)}">${esc(b.name)} · ${esc(b.crop)}${num(b.moisture)!=null?` · ${n0(b.moisture).toFixed(1)}%`:''}</button>`).join('')}</div>
+        ${o.fromBin?`<div class="fantgt"><span>Bin moisture</span><b>${target.toFixed(1)}%</b><small class="muted">${bin.checked?`checked ${fmtDate(bin.checked)}`:'from the bin card'}</small></div>`:stepper}</div>
+        ${o.fromBin?'':`<p class="muted" style="font-size:.8rem;margin:8px 0 0">${esc(bin.name)} has no moisture reading yet, so this uses your ${esc(crop)} target. Enter the moisture on the bin card below.</p>`}`
+      :`<p class="muted" style="margin:0">Add a bin with corn, soybeans or wheat in it below to use its moisture.</p><div class="fanctl" style="margin-top:10px"><span></span>${stepper}</div>`)
+    :`<div class="fanctl"><div class="chips" style="margin:0">${[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([c,l])=>`<button class="chip" data-fancrop="${c}" aria-pressed="${c===tgtCrop}">${l}</button>`).join('')}</div>${stepper}</div>`);
   if(!k)return head+ctl+`<p class="muted" style="margin:14px 0 0">Set this farm’s location on the Weather tab to get fan timing.</p></div></section>`;
   const hrs=((w&&w.hourly)||[]).filter(x=>x.rh!=null);
   if(!w||!hrs.length)return head+ctl+`<p class="muted" style="margin:14px 0 0">${w?'Humidity arrives with the next morning weather update.':'Loading the forecast…'}</p></div></section>`;
@@ -2067,9 +2083,10 @@ function fanPanel(f){
     ${wins.length?`<ul class="fanwins">${wins.slice(0,6).map(wtxt).join('')}</ul>`:`<p class="muted" style="margin:0 0 6px">No good hours for ${target.toFixed(1)}% ${crop==='soybeans'?'beans':crop} in the next 36 hours.</p>`}
     ${strip}<div class="fanleg"><span><i class="on"></i>Dries or holds (EMC at or below target)</span><span><i class="cool"></i>Within 1 point: cooling only</span><span><i class="off"></i>Fans off</span></div>
     <p class="muted" style="font-size:.76rem;margin:12px 0 0">EMC is the moisture grain settles to in this air, from the University of Arkansas extension tables (FSA-1074${crop==='wheat'?'; wheat uses the durum table':''}) and the National Weather Service hourly forecast. Fall cooling: run fans to bring grain to within 10–15°F of the average outdoor temperature, toward 30–40°F for winter. Estimates; check with your moisture meter and grain temperature cables.</p></div></section>`}
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fancrop],[data-fanstep]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
-  const fan=f.fans=f.fans||{},binCrop=(f.bins.find(b=>n0(b.bu)>0&&EMC[key(b.crop)])||{}).crop,crop=fan.crop||(binCrop?key(binCrop):'corn');
-  if(t.dataset.fancrop)fan.crop=t.dataset.fancrop;
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fancrop],[data-fanstep],[data-fanmode],[data-fanbin]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  const fan=f.fans=f.fans||{},crop=fanOpts(f).crop;
+  if(t.dataset.fanmode)fan.mode=t.dataset.fanmode;else if(t.dataset.fanbin)fan.bin=t.dataset.fanbin;
+  else if(t.dataset.fancrop)fan.crop=t.dataset.fancrop;
   else{fan.target=fan.target||{};const v=(num(fan.target[crop])??FAN_TARGET[crop])+(+t.dataset.fanstep);fan.target[crop]=Math.max(9,Math.min(22,Math.round(v*10)/10))}
   persist(S.current)});
 function tabStorage(f){
@@ -2078,7 +2095,8 @@ function tabStorage(f){
   ${f.bins.length?`<div class="bingrid2">${f.bins.map(b=>{const fill=n0(b.capacity)?n0(b.bu)/n0(b.capacity):0,ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(b.crop)];
     const fld=(k,label,step='any')=>`<label class="pf"><span>${label}</span><input class="binp" id="bi_${b.id}_${k}" data-bin="${b.id}" data-k="${k}" type="number" step="${step}" inputmode="decimal" value="${b[k]??''}"></label>`;
     return`<div class="panel bincard2" style="--crop:${ck?`var(--c-${ck})`:'var(--line)'}">
-      <div class="bc2head"><div><b>${esc(b.name)}</b><div class="muted" style="font-size:.78rem">${esc(b.location||'')}${b.checked?`${b.location?' · ':''}checked ${fmtDate(b.checked)}`:''}</div></div>
+      <div class="bc2head"><div><b>${esc(b.name)}</b>${(()=>{const c=key(b.crop),m=num(b.moisture),st=EMC[c]&&m!=null&&n0(b.bu)>0?fanStatusNow(f,c,m):null;
+          return st?` <span class="pill ${st==='on'?'good':st==='cool'?'warn':'bad'}" style="margin-left:6px;vertical-align:1px" title="From the air’s equilibrium moisture vs this bin’s ${m.toFixed(1)}%">${st==='on'?'Fans on now':st==='cool'?'Fans: cooling only':'Fans off now'}</span>`:''})()}<div class="muted" style="font-size:.78rem">${esc(b.location||'')}${b.checked?`${b.location?' · ':''}checked ${fmtDate(b.checked)}`:''}</div></div>
         <button class="link" data-edit="bin" data-id="${b.id}" style="font-size:.8rem">Edit</button></div>
       <div class="chips" style="margin:10px 0 12px">${cropChoices.map(c=>`<button class="chip sm" data-bincrop="${b.id}" data-v="${esc(c)}" aria-pressed="${key(b.crop)===key(c)}">${c||'Empty'}</button>`).join('')}</div>
       <div class="pgrid3">${fld('bu','Bushels')}${fld('capacity','Capacity')}${fld('moisture','Moisture %','0.1')}</div>
