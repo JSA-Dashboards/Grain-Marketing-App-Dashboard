@@ -2429,7 +2429,8 @@ function arcOpts(f){
 function insMap(f){
   const o=arcOpts(f),S2=S.arcData||(S.arcData={}),d=S2[o.st],st=ARC_STATES.find(s=>s[0]===o.st);
   if(d===undefined){S2[o.st]=null;(S.db?S.db.doc('market/arcplc_'+o.st).get():Promise.reject()).then(x=>{S2[o.st]=x.exists?x.data():'none';if(S.insTop==='map')render()}).catch(()=>{S2[o.st]='err';if(S.insTop==='map')render()})}
-  if(!S.arcGeo){loadGeo().then(p=>{S.arcGeo=p;if(S.insTop==='map')render()}).catch(()=>{S.arcGeo='err';if(S.insTop==='map')render()})}
+  // outlines ship inside each state's document; the map library is only a fallback for an older document
+  if(d&&typeof d==='object'&&!d.geo&&!S.arcGeo){loadGeo().then(p=>{S.arcGeo=p;if(S.insTop==='map')render()}).catch(()=>{S.arcGeo='err';if(S.insTop==='map')render()})}
   const chip=(k,v,l,dis)=>`<button class="chip sm" data-arc="${k}" data-v="${v}" aria-pressed="${String(S.arcMap[k])===String(v)}"${dis?' disabled':''}>${l}</button>`;
   const ctl=`<div class="arcctl">
     <div class="chips">${ARC_STATES.map(([fp,ab,nm])=>chip('st',fp,nm+(ab===f.state?' · this farm':''))).join('')}</div>
@@ -2438,16 +2439,17 @@ function insMap(f){
     ${o.mode==='est'?`<div class="pgrid2 arcsl"><label class="pf"><span>2026 season price · <b id="arc_p_o">${usd(o.price)}</b></span><input class="arcsl" data-s="price" type="range" min="${o.crop==='corn'?3:8}" max="${o.crop==='corn'?6:15}" step="0.05" value="${o.price}"></label>
       <label class="pf"><span>County yield · <b id="arc_y_o">${o.yld}% of benchmark</b></span><input class="arcsl" data-s="yld" type="range" min="60" max="120" step="1" value="${o.yld}"></label></div>`:''}</div>`;
   const msg=t=>`${ctl}<div class="panel calc"><p class="muted" style="margin:0">${t}</p></div>`;
-  if(d===null||d===undefined||!S.arcGeo)return msg('Loading the county map…');
+  if(d===null||d===undefined)return msg('Loading the county map…');
   if(d==='none')return msg(`County ARC/PLC numbers for ${st[2]} aren’t loaded yet.`);
-  if(d==='err'||S.arcGeo==='err')return msg('Couldn’t load the county map. Check your connection and open this view again.');
+  if(d==='err'||(!d.geo&&S.arcGeo==='err'))return msg('Couldn’t load the county map. Check your connection and open this view again.');
+  if(!d.geo&&!S.arcGeo)return msg('Loading the county map…');
   return`${ctl}<div id="arcbody">${arcBody(f,d,o)}</div>`}
 function arcBody(f,d,o){
   const st=ARC_STATES.find(s=>s[0]===o.st),codes=Object.keys(d.c),vals={};codes.forEach(k=>vals[k]=arcVals(d,k,o));
   const val=k=>vals[k]?o.prog==='arc'?vals[k].arc:vals[k].plc:null;
   const farmCode=f.state===st[1]&&f.county?codes.find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))):null;
   const sel=S.arcMap.sel&&S.arcMap.sel.startsWith(o.st)?S.arcMap.sel.slice(2):farmCode;
-  const geo=S.arcGeo,ids=codes.filter(k=>geo[o.st+k]);let bb=[1e9,1e9,-1e9,-1e9];
+  const geo=d.geo?Object.fromEntries(Object.entries(d.geo).map(([k,v])=>[o.st+k,v])):S.arcGeo,ids=codes.filter(k=>geo[o.st+k]);let bb=[1e9,1e9,-1e9,-1e9];
   ids.forEach(k=>{geo[o.st+k].replace(/[ML]([\d.]+),([\d.]+)/g,(m,x,y)=>{x=+x;y=+y;if(x<bb[0])bb[0]=x;if(y<bb[1])bb[1]=y;if(x>bb[2])bb[2]=x;if(y>bb[3])bb[3]=y;return''})});
   const pad=4,vb=`${bb[0]-pad} ${bb[1]-pad} ${bb[2]-bb[0]+2*pad} ${bb[3]-bb[1]+2*pad}`;
   const svg=`<svg viewBox="${vb}" class="arcsvg" role="img" aria-label="${st[2]} county ${o.prog==='arc'?'ARC-CO':'PLC'} payments per base acre">
