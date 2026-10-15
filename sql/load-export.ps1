@@ -10,6 +10,8 @@ if (-not (Test-Path $Zip)) { throw "Can't find $Zip" }
 $work = Join-Path $env:TEMP ("grain-export-" + [guid]::NewGuid().ToString('N'))
 Expand-Archive -Path $Zip -DestinationPath $work
 $tables = @{ 'farms.csv'='FARMS'; 'crop_plans.csv'='CROP_PLANS'; 'contracts.csv'='CONTRACTS'; 'loads.csv'='LOADS'; 'pricing_events.csv'='PRICING_EVENTS'; 'bins.csv'='BINS' }
+# rolls.csv is in exports from 2026-10-14 on; older zips load without it
+if (Test-Path (Join-Path $work 'rolls.csv')) { $tables['rolls.csv'] = 'ROLLS' }
 $missing = $tables.Keys | Where-Object { -not (Test-Path (Join-Path $work $_)) }
 if ($missing) { Remove-Item $work -Recurse -Force; throw "Not a Grain Marketing Desk export (missing $($missing -join ', '))" }
 
@@ -28,6 +30,7 @@ SELECT 'CROP_PLANS', COUNT(*) FROM CROP_PLANS_CURRENT UNION ALL
 SELECT 'CONTRACTS', COUNT(*) FROM CONTRACTS_CURRENT UNION ALL
 SELECT 'LOADS', COUNT(*) FROM LOADS_CURRENT UNION ALL
 SELECT 'PRICING_EVENTS', COUNT(*) FROM PRICING_EVENTS_CURRENT UNION ALL
+SELECT 'ROLLS', COUNT(*) FROM ROLLS_CURRENT UNION ALL
 SELECT 'BINS', COUNT(*) FROM BINS_CURRENT;
 "@
 $file = Join-Path $work 'load.sql'

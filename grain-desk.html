@@ -1611,7 +1611,14 @@ const SF_TABLES=[
     ['PP_OUTCOME','VARCHAR',r=>isPP(r.s)?(r.s.ppOutcome||'Pending'):null],
     ['MM_MIN','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.minPrice):null],['MM_MAX','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.maxPrice):null],
     ['MM_FEE','NUMBER(10,4)',r=>isMM(r.s)?nz(r.s.mmFee):null],['MM_EXPIRATION','DATE',r=>isMM(r.s)?r.s.mmExpiration||null:null],
-    ['OTHER_NAME','VARCHAR',r=>isOther(r.s)?r.s.specialtyName||null:null],['OTHER_KEY_DATE','DATE',r=>isOther(r.s)?r.s.otherDate||null:null],['OTHER_TERMS','VARCHAR',r=>isOther(r.s)?r.s.terms||null:null]]},
+    ['OTHER_NAME','VARCHAR',r=>isOther(r.s)?r.s.specialtyName||null:null],['OTHER_KEY_DATE','DATE',r=>isOther(r.s)?r.s.otherDate||null:null],['OTHER_TERMS','VARCHAR',r=>isOther(r.s)?r.s.terms||null:null],
+    // rolls (HTA and futures hedges); one row per roll is in ROLLS
+    ['ROLL_COUNT','NUMBER(4,0)',r=>ROLLABLE.includes(r.s.type)?(r.s.rolls||[]).length:null],['ROLL_SPREAD','NUMBER(10,4)',r=>ROLLABLE.includes(r.s.type)?+rollSpread(r.s).toFixed(4):null],
+    ['ROLL_FEES_PER_BU','NUMBER(10,4)',r=>ROLLABLE.includes(r.s.type)?+rollFees(r.s).toFixed(4):null],['FUTURES_AFTER_ROLLS','NUMBER(10,4)',r=>{const v=ROLLABLE.includes(r.s.type)?rolledFutures(r.s):null;return v==null?null:+v.toFixed(4)}]]},
+  {name:'ROLLS',file:'rolls.csv',rows:(id,f)=>f.sales.filter(s=>ROLLABLE.includes(s.type)).flatMap(s=>(s.rolls||[]).map(o=>({id,s,o}))),cols:[
+    ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['ROLL_ID','VARCHAR',r=>r.o.id],['ROLL_DATE','DATE',r=>r.o.date||null],
+    ['FROM_MONTH','VARCHAR',r=>r.o.from||null],['TO_MONTH','VARCHAR',r=>r.o.to||null],['SPREAD','NUMBER(10,4)',r=>nz(r.o.spread)],['FEE_PER_BU','NUMBER(10,4)',r=>nz(r.o.fee)],
+    ['FEE_TOTAL_USD','NUMBER(14,2)',r=>num(r.o.fee)==null?null:+(n0(r.o.fee)*qty(r.s)).toFixed(2)],['NOTE','VARCHAR',r=>r.o.note||null]]},
   {name:'LOADS',file:'loads.csv',rows:(id,f)=>f.sales.flatMap(s=>(s.loads||[]).map(l=>({id,s,l}))),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['LOAD_ID','VARCHAR',r=>r.l.id],['DELIVERY_DATE','DATE',r=>r.l.date||null],
     ['SCALE_TICKET','VARCHAR',r=>r.l.ticket||null],['NET_BU','NUMBER(14,2)',r=>nz(r.l.netBu)],['MOISTURE_PCT','NUMBER(5,2)',r=>nz(r.l.moisture)],
@@ -1645,6 +1652,9 @@ CREATE FILE FORMAT IF NOT EXISTS GRAIN_DESK_CSV
 CREATE STAGE IF NOT EXISTS GRAIN_DESK_STAGE FILE_FORMAT = GRAIN_DESK_CSV;
 
 ${t.map(x=>`CREATE TABLE IF NOT EXISTS ${x.name} (\n  EXPORTED_AT TIMESTAMP_TZ,\n${x.cols.map(c=>`  ${c[0]} ${c[1]}`).join(',\n')}\n);`).join('\n\n')}
+
+-- Columns added in later versions of the app (does nothing once they exist)
+${t.map(x=>x.cols.map(c=>`ALTER TABLE ${x.name} ADD COLUMN IF NOT EXISTS ${c[0]} ${c[1]};`).join('\n')).join('\n')}
 
 ${t.map(x=>`CREATE OR REPLACE VIEW ${x.name}_CURRENT AS\n  SELECT * FROM ${x.name} WHERE EXPORTED_AT = (SELECT MAX(EXPORTED_AT) FROM ${x.name});`).join('\n')}
 

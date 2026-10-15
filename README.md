@@ -22,6 +22,6 @@ Farm records are not stored in this repository. Each farm is one document at
 ## Snowflake
 
 In the consultant view, **Export for Snowflake** downloads a zip with one CSV per
-table (FARMS, CROP_PLANS, CONTRACTS, LOADS, PRICING_EVENTS, BINS), a
+table (FARMS, CROP_PLANS, CONTRACTS, LOADS, PRICING_EVENTS, ROLLS, BINS), a
 `snowflake_setup.sql` script and a README. Each row carries `EXPORTED_AT`, so
 repeated exports build a history; the `*_CURRENT` views show the latest one.
