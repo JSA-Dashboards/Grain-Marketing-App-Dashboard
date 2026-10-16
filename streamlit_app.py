@@ -24,8 +24,12 @@ from desk import admin, auth, component  # noqa: E402  (after the environment is
 
 
 def desk_page():
-    # the page needs the whole window: no Streamlit padding around it
-    st.html('<style>.stMainBlockContainer{padding:0!important;max-width:100%!important}header[data-testid="stHeader"]{display:none}</style>')
+    # the page needs the whole window: no Streamlit padding around it. Brokers also lose Streamlit's top bar;
+    # admins keep it, because it holds the Desk | People menu (it overlays the top, so leave room for it)
+    admin = (st.session_state.get('gd_user') or {}).get('role') == 'admin'
+    css = ('.stMainBlockContainer{padding:3.75rem 0 0 0!important;max-width:100%!important}' if admin else
+           '.stMainBlockContainer{padding:0!important;max-width:100%!important}header[data-testid="stHeader"]{display:none}')
+    st.html(f'<style>{css}</style>')
     cookie = st.session_state.pop('gd_cookie', None)
     component.render(cookie)
 
@@ -42,7 +46,7 @@ def login_page():
 if auth.from_cookie():
     if st.session_state['gd_user']['role'] == 'admin':
         nav = st.navigation([st.Page(desk_page, title='Desk', icon=':material/grass:', default=True),
-                             st.Page(admin.page, title='People', icon=':material/group:')], position='top')
+                             st.Page(admin.page, title='People', icon=':material/group:', url_path='people')], position='top')
     else:
         nav = st.navigation([st.Page(desk_page, title='Desk', default=True)], position='hidden')
     nav.run()
