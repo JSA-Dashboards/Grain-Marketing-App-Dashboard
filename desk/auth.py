@@ -16,7 +16,7 @@ import streamlit as st
 
 from app import config, store
 
-from . import branding, mailer
+from . import branding, component, mailer
 
 COOKIE = 'gd_session'
 _sent = {}      # email -> time of the last code, in this server process (one code a minute per address)
@@ -36,6 +36,34 @@ def from_cookie():
     if u:
         st.session_state.update(gd_user=u, gd_token=tok, gd_checked=time.time())
         return True
+    if tok:
+        st.session_state['gd_resume_bad'] = True    # a cookie for a session that has ended: wipe it
+    return False
+
+
+def try_resume():
+    """Sign in from the session saved in the browser's localStorage (the cookie can fail to reach the server on
+    Streamlit Cloud). Shows a brief loading state until the browser answers. Returns True once signed in."""
+    ss = st.session_state
+    # always mounted on the sign-in screen: it also wipes a dead token (signed out, expired or revoked)
+    r = component.resume(clear=ss.get('gd_resume_bad', False))
+    if ss.get('gd_resume_done'):
+        return False
+    if r is None:                       # the browser has not answered yet
+        st.caption('Loading...')
+        if st.button('Continue to sign in', type='tertiary'):
+            ss['gd_resume_done'] = True
+            st.rerun()
+        st.stop()
+    tok = r.get('tok') or ''
+    ss['gd_resume_done'] = True
+    u = store.session_user(tok) if tok else None
+    if u:
+        ss.update(gd_user=u, gd_token=tok, gd_checked=time.time())
+        return True
+    if tok:
+        ss['gd_resume_bad'] = True      # an old or revoked token: draw the component again so the browser drops it now
+        st.rerun()
     return False
 
 

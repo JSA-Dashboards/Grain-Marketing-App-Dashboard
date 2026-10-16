@@ -3,8 +3,10 @@
 Same functions as store.py (SQLite), so the page bridge, access rules and nightly jobs are shared.
 Differences that matter:
   * deletes are soft (DELETED flag) so a poll can tell the page what disappeared;
-  * the change counter is MAX(SEQ); a poll re-reads a small overlap window, so a write that commits
-    late (lower SEQ than one already seen) is still picked up;
+  * the change counter is MAX(SEQ), and SEQ is the write's time in microseconds. (A Snowflake SEQUENCE is NOT
+    used: it hands out numbers in blocks, so a later write can get a LOWER number than an earlier one, and a
+    "highest number" poll then misses it.) A poll re-reads the 60 s before its mark, so a write that commits
+    late is still picked up;
   * contract photos are stored in the ASSETS table (BINARY, 7 MB max) instead of on disk;
   * sign-in uses a 6-digit emailed code (LOGIN_CODES), 5 tries, then the code is dead.
 Set STORE_BACKEND=snowflake; run sql/grain_desk_setup.sql once first.
@@ -26,7 +28,8 @@ _lock = threading.RLock()          # one statement at a time on the shared conne
 _write_lock = threading.Lock()
 _seq_cache = [0.0, 0]              # [fetched_at, value]
 SEQ_TTL = 4.0
-OVERLAP = 50
+OVERLAP = 60_000_000          # change counters are microsecond timestamps: a poll re-reads the last 60 s before its mark
+_last_seq = [0]
 
 
 class VersionConflict(Exception):
@@ -103,6 +106,13 @@ def current_seq():
     return _seq_cache[1]
 
 
+def _next_seq():
+    """Strictly increasing within this process; across processes (the app, the droplet jobs) it follows the clock."""
+    n = max(int(time.time() * 1_000_000), _last_seq[0] + 1)
+    _last_seq[0] = n
+    return n
+
+
 def _bump():
     _seq_cache[0] = 0.0
 
@@ -145,7 +155,7 @@ def put_doc(path, data, broker_uid=None, if_version=None):
     if len(body) > config.MAX_DOC_BYTES:
         raise ValueError('document too large')
     with _write_lock:
-        seq = int(sql('SELECT GD_SEQ.NEXTVAL AS N')[0]['n'])
+        seq = _next_seq()
         old = sql('SELECT VERSION, DELETED FROM DOCS WHERE PATH=%s', (path,))
         cur_v = 0 if (not old or old[0]['deleted']) else int(old[0]['version'])
         if if_version is not None and cur_v != if_version:
@@ -162,7 +172,7 @@ def put_doc(path, data, broker_uid=None, if_version=None):
 
 def delete_doc(path):
     with _write_lock:
-        seq = int(sql('SELECT GD_SEQ.NEXTVAL AS N')[0]['n'])
+        seq = _next_seq()
         sql('UPDATE DOCS SET DELETED=TRUE, SEQ=%s, UPDATED_AT=CURRENT_TIMESTAMP() WHERE PATH=%s AND NOT DELETED', (seq, path))
         _bump()
 

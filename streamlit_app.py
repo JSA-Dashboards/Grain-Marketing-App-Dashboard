@@ -35,6 +35,8 @@ def desk_page():
 
 
 def login_page():
+    if auth.try_resume():
+        st.rerun()
     _, mid, _ = st.columns([1, 3, 1])
     with mid:
         cookie = auth.login_screen()
@@ -51,4 +53,4 @@ if auth.from_cookie():
         nav = st.navigation([st.Page(desk_page, title='Desk', default=True)], position='hidden')
     nav.run()
 else:
-    login_page()
+    st.navigation([st.Page(login_page, title='Sign in', default=True)], position='hidden').run()

@@ -71,6 +71,7 @@ function start(el, setTrigger) {
   });
   window.__gdSignedOut = () => {
     document.cookie = 'gd_session=; Max-Age=0; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+    try { localStorage.removeItem('gd_session'); } catch (e) {}
     location.reload();
   };
   st.pump = pump;
@@ -84,6 +85,8 @@ export default function (component) {
   st.setTrigger = setTriggerValue;
   if (data && data.cookie) {
     document.cookie = 'gd_session=' + data.cookie.value + '; Max-Age=' + data.cookie.days * 86400 + '; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+    // a second copy in localStorage: on Streamlit Cloud the cookie does not always reach the server after a refresh
+    try { localStorage.setItem('gd_session', data.cookie.value); } catch (e) {}
   }
   const rs = data && data.responses;
   if (rs && st.inflight) {
@@ -107,6 +110,31 @@ _CSS = """
 """
 
 _DESK = st.components.v2.component('grain_desk', html='', css=_CSS, js=_JS % json.dumps(_page_with_shim()))
+
+
+_RESUME_JS = """
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component;
+  if (data && data.clear) {   // a dead or signed-out token: drop both copies
+    try { localStorage.removeItem('gd_session'); } catch (e) {}
+    document.cookie = 'gd_session=; Max-Age=0; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+  }
+  if (parentElement.__sent) return;   // answer once per mount
+  parentElement.__sent = true;
+  let tok = '';
+  try { tok = localStorage.getItem('gd_session') || ''; } catch (e) {}
+  setTriggerValue('resume', { tok });
+}
+"""
+
+_RESUME = st.components.v2.component('grain_desk_resume', html='', js=_RESUME_JS)
+
+
+def resume(clear=False):
+    """The session token saved in this browser's localStorage: {'tok': '...'} (tok is '' if none), or None until
+    the browser has answered. Used when the cookie did not reach the server (it happens on Streamlit Cloud)."""
+    r = _RESUME(key='gd_resume', data={'clear': bool(clear)}, on_resume_change=lambda: None, height='content')
+    return r.resume if r is not None else None
 
 
 def _on_req():
@@ -136,6 +164,7 @@ def _on_req():
                 if tok:
                     store.end_session(tok)
                 st.session_state.pop('gd_user', None)
+                st.session_state['gd_resume_bad'] = True      # the sign-in screen then wipes this browser's saved token
                 out[r['id']] = {'id': r['id'], 'ok': True, 'result': {}}
                 signed_out = True
             else:
