@@ -337,6 +337,7 @@ table.heat td.n{font-family:var(--f-data)}
 .ccleg span{color:var(--muted)} .ccleg b{font-variant-numeric:tabular-nums;text-align:right}
 .ccleg em{font-style:normal;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccwarn{margin:0;font-size:.8rem;color:var(--warn)}
+.ccacts{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ccmore{border-top:1px solid var(--line);padding-top:8px}
 .ccmore summary{cursor:pointer;font-size:.84rem;font-weight:600;color:var(--accent);list-style:none}
 .ccmore summary::before{content:'▸ '}.ccmore[open] summary::before{content:'▾ '}
@@ -1482,6 +1483,8 @@ function cropCard(f,r){
         <div><i class="hedged"></i><span>Hedged</span><b>${share(m.hedged)}</b><em>${bu(m.hedged)} bu${m.hedgeVal?` · ${kfmt(m.hedgeVal)}`:''}</em></div>
         <div><i class="unpriced"></i><span>Unpriced</span><b>${share(m.unpriced)}</b><em>${bu(m.unpriced)} bu${m.unpricedVal!=null?` · ${kfmt(m.unpricedVal)}`:''}</em></div></div></div>
     ${m.itmBu?`<p class="ccwarn">${bu(m.itmBu)} bu of Premium Plus would double up at today's futures.</p>`:''}
+    ${(()=>{const n=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop)).length;
+      return`<div class="ccacts"><button class="small primary" data-addsale="${esc(r.crop)}">+ Add contract</button>${n?`<button class="link" data-salescrop="${esc(key(r.crop))}">See ${n} contract${n>1?'s':''}</button>`:'<span class="muted" style="font-size:.8rem">No contracts yet</span>'}</div>`})()}
     <details class="ccmore"><summary>Show all numbers</summary>
       <dl class="cclist">${row('Acres',n1(pl.acres))}${row('APH',n1(pl.aph))}${row('Est. yield',n1(r.yld||null))}${row('Production goal',bu(m.prod))}
         ${row('Cost / acre',usd(costOf(pl)))}${row('Total farm cost',usd(m.cost,0))}${row('Est. basis',m.basis==null?'—':fmtBasis(m.basis))}${row('Initial B/E',usd(r.be))}
@@ -1682,6 +1685,12 @@ function tabSales(f){
     ${by.map(r=>`<tr><td><b>${esc(r.label)}</b> <span class="muted" style="font-size:.76rem">${r.n}</span></td><td class="n">${bu(r.contracted)}</td><td class="n">${r.contracted?pct(r.priced/r.contracted):'—'}</td>
       <td class="n">${r.priced&&r.crops.size===1?usd(r.value/r.priced):r.priced?'<span class="muted">mixed</span>':'—'}</td><td class="n">${r.value?kfmt(r.value):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}</tbody></table></div></section>`:''}
   <details class="explain"><summary>How these numbers work</summary><p>Flat price = futures + basis. HTA and basis contracts count as contracted right away but get a flat price only once both parts are set. Futures hedges protect price but aren't sales, so they're left out of contracted and priced totals. Premium Plus counts as sold at contract futures + premium, plus any doubled-up bushels at the strike. Min/Max counts as sold now and gets a flat price once its final futures (held between the min and max, less the fee) and basis are set.</p></details></section>`}
+// Crop Overview: add a contract for this crop (crop, year and its futures month filled in), or jump to its contracts
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-addsale],[data-salescrop]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  if(t.dataset.salescrop){S.flt={...S.flt,crop:t.dataset.salescrop,status:''};S.tab='sales';S.section=sectionOfTab('sales');render();window.scrollTo(0,0);return}
+  const crop=t.dataset.addsale,pl=f.crops.find(c=>+c.year===+S.year&&key(c.crop)===key(crop)),fi=pl?futFor(pl):{},v={...FORMS.sale.blank(),crop,year:S.year};
+  const r=ROOT[key(crop)],nc=r&&NEWCROP[r]?`${MNAME[MCODE.indexOf(NEWCROP[r])]} ${String(S.year).slice(2)}`:'';
+  v.futuresMonth=fi.symbol?symLabel(fi.symbol):nc;openForm('sale',null,{vals:v})});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fchip]');if(!t||t.closest('dialog'))return;S.flt[t.dataset.fchip]=t.dataset.v;render()});
 document.addEventListener('change',e=>{if(e.target.id==='flt_sort'){const o=SORTS[e.target.value];if(o){S.sort={k:o.k,dir:o.dir};S.moreOpen=true;render()}}});
 document.addEventListener('toggle',e=>{if(e.target.classList&&e.target.classList.contains('smore'))S.moreOpen=e.target.open},true);
