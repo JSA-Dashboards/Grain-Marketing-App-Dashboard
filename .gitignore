@@ -35,3 +35,5 @@ dev_run.py
 # data export for the hosted import (customer data; never commit)
 export-for-kolten/
 export-for-kolten.zip
+sarah-contracts-for-kolten/
+sarah-contracts-for-kolten.zip
