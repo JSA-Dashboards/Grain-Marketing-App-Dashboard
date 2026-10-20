@@ -401,6 +401,8 @@ table.heat td.n{font-family:var(--f-data)}
 .sright span{font-size:.84rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .sdel{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;font-size:.8rem;color:var(--muted);font-weight:600;cursor:pointer;margin-top:4px;padding:2px 0}
 .sdel input{width:18px;height:18px;margin:0;accent-color:var(--accent);cursor:pointer}
+.schecks{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap}
+.pill.defer{background:color-mix(in srgb,var(--grain) 16%,var(--surface));color:var(--warn);border-color:color-mix(in srgb,var(--grain) 40%,var(--surface))}
 .ssum table td,.ssum table th{padding:9px 12px}
 details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 /* optimizer, calculator style */
@@ -980,6 +982,8 @@ const FORMS={
     {k:'deliveryEnd',label:'Delivery closes',type:'date',show:v=>DELIVERABLE.includes(v.type)},
     {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
     {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
+    {k:'deferred',label:'Deferred payment',type:'check',hint:'Payment is held until a later date, usually into the next tax year',show:v=>CONTRACT_TYPES.includes(v.type)},
+    {k:'payDate',label:'Payment date',type:'date',hint:'When the deferred check is paid, e.g. early January',show:v=>CONTRACT_TYPES.includes(v.type)&&v.deferred},
     {k:'notes',label:'Notes',type:'text',full:1},
   ],blank:()=>({type:'Forward contract',crop:'Corn',date:TODAY,year:S.year,status:'Open',trackLoads:false,ratePeriod:'Daily',accStart:TODAY,source:'Bin'})},
   accupd:{title:'Accumulated bushels',fields:[
@@ -1134,6 +1138,7 @@ function drawSale(){
     ${isDel?fact('Delivery window',`${fmtDate(s.deliveryStart)} – ${fmtDate(s.deliveryEnd)}`):''}
     ${hasSource(s)?fact('Delivering from',fromHarvest(s)?'Harvest (field to town)':'Bin (stored grain)'):''}
     ${s.location?fact('Location',esc(s.location)):''}
+    ${s.deferred&&CONTRACT_TYPES.includes(s.type)?fact('Payment',`<b>Deferred</b>${s.payDate?` · pays ${fmtDate(s.payDate)}`:' · add a payment date'}`):''}
   </dl>
   ${s.notes?`<p class="muted" style="font-size:.85rem;margin:10px 0 0">${esc(s.notes)}</p>`:''}
   ${s.photoId?`<div class="cphoto"><a href="/_blob/${esc(s.photoId)}" target="_blank" rel="noopener"><img src="/_blob/${esc(s.photoId)}" alt="Photo of the ${esc(s.crop)} contract"></a>
@@ -1588,19 +1593,24 @@ function delivMonths(s){
 // the Delivered checkbox on a contract row: ticks the contract delivered (or reopens it) without opening it.
 // Caught on the way down so the row's own click (which opens the contract) never sees it.
 document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.sdel'))e.stopPropagation()},true);
-document.addEventListener('keydown',e=>{if(e.target.matches&&e.target.matches('[data-deliver]')&&e.key==='Enter')e.stopPropagation()},true);
+document.addEventListener('keydown',e=>{if(e.target.matches&&e.target.matches('[data-deliver],[data-defer]')&&e.key==='Enter')e.stopPropagation()},true);
+// the Deferred checkbox: marks the contract's payment as deferred; the payment date is set in the contract itself
+document.addEventListener('change',e=>{const id=e.target.dataset&&e.target.dataset.defer;if(!id)return;
+  const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===id);if(!s)return;
+  s.deferred=e.target.checked;persist(S.current);
+  toast(e.target.checked?`${s.crop} contract marked deferred${s.payDate?'':'. Open it to add the payment date.'}`:`${s.crop} contract no longer deferred`)});
 document.addEventListener('change',e=>{const id=e.target.dataset&&e.target.dataset.deliver;if(!id)return;
   const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===id);if(!s)return;
   s.status=e.target.checked?'Delivered':'Open';persist(S.current);
   toast(e.target.checked?`${s.crop} contract marked delivered`:`${s.crop} contract reopened`)});
-const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',unpriced:'Needs pricing',hedges:'Hedges only'};
+const STATUS_F={'':'All statuses',open:'Left to deliver',delivered:'Delivered',deferred:'Deferred',unpriced:'Needs pricing',hedges:'Hedges only'};
 function filteredSales(f){
   const F=S.flt,q=key(F.q);
   const list=f.sales.filter(s=>+s.year===+S.year).filter(s=>(!F.crop||key(s.crop)===F.crop)
     &&(!F.source||(hasSource(s)&&(F.source==='harvest')===fromHarvest(s)))
     &&(!F.month||(F.month==='none'?!delivMonths(s).length:delivMonths(s).includes(F.month)))&&(!F.type||s.type===F.type)&&(!F.buyer||key(s.buyer)===F.buyer)
     &&(!F.status||(F.status==='open'&&(remaining(s)>0||accActive(s)))||(F.status==='delivered'&&CONTRACT_TYPES.includes(s.type)&&remaining(s)<=0&&!accActive(s))
-      ||(F.status==='unpriced'&&!!openLeg(s))||(F.status==='hedges'&&HEDGE_TYPES.includes(s.type)))
+      ||(F.status==='unpriced'&&!!openLeg(s))||(F.status==='hedges'&&HEDGE_TYPES.includes(s.type))||(F.status==='deferred'&&!!s.deferred&&CONTRACT_TYPES.includes(s.type)))
     &&(!q||[s.crop,s.type,s.buyer,s.contractNo,s.notes,s.location,s.futuresMonth].some(v=>key(v).includes(q))));
   const val={date:s=>s.date||'',crop:s=>key(s.crop),bu:s=>qty(s),flat:s=>flatPrice(s),delivery:s=>s.deliveryEnd||null,left:s=>DELIVERABLE.includes(s.type)?remaining(s):null,buyer:s=>key(s.buyer)}[S.sort.k];
   return list.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return-1;return(x<y?-1:x>y?1:0)*S.sort.dir})}
@@ -1618,7 +1628,8 @@ function saleStatus(s){
   if(HEDGE_TYPES.includes(s.type))return`<span class="pill neutral">Hedge</span>`;
   const leg=openLeg(s);const d=DELIVERABLE.includes(s.type)&&s.deliveryEnd?deliveries({sales:[s]})[0].st:null;
   const a=isAcc(s)?accState(s):isPP(s)?ppState(s):isMM(s)&&num(s.price)==null?mmState(s):null;
-  return(a?`<span class="pill ${a.c}">${esc(a.t)}</span> `:'')+(leg?`<span class="pill warn">Set ${leg}</span> `:'')+(d?`<span class="pill ${d.c}">${d.t}</span>`:s.type==='Cash sale'?'<span class="pill neutral">Delivered</span>':'')}
+  const df=s.deferred&&CONTRACT_TYPES.includes(s.type)?` <span class="pill defer">Deferred${s.payDate?` · pays ${fmtDate(s.payDate)}`:''}</span>`:'';
+  return(a?`<span class="pill ${a.c}">${esc(a.t)}</span> `:'')+(leg?`<span class="pill warn">Set ${leg}</span> `:'')+(d?`<span class="pill ${d.c}">${d.t}</span>`:s.type==='Cash sale'?'<span class="pill neutral">Delivered</span>':'')+df}
 // Sales & contracts: headline numbers, quick chips for crop and status, more filters on request, slim contract rows
 const SORTS={newest:{k:'date',dir:-1,l:'Newest first'},delivery:{k:'delivery',dir:1,l:'Delivery date'},bushels:{k:'bu',dir:-1,l:'Most bushels'},price:{k:'flat',dir:-1,l:'Highest price'},left:{k:'left',dir:-1,l:'Most left to deliver'}};
 function tabSales(f){
@@ -1638,7 +1649,7 @@ function tabSales(f){
       <div class="smain"><div class="stitle"><b>${esc(s.crop)} · ${esc(typeName(s))}</b>${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</div><span class="ssub">${sub}</span>
         <span class="spills">${saleStatus(s)}${isDel&&left>0&&s.trackLoads?`<span class="muted" style="font-size:.76rem">${bu(left)} bu left</span>`:''}</span></div>
       <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(rolledFutures(s))}`:'price open'}</span>
-        ${isDel&&!s.trackLoads?`<label class="sdel" title="Mark this contract delivered without opening it"><input type="checkbox" data-deliver="${s.id}" ${s.status==='Delivered'?'checked':''}> Delivered</label>`:''}</div></li>`};
+        ${isDel&&!s.trackLoads||CONTRACT_TYPES.includes(s.type)?`<span class="schecks">${isDel&&!s.trackLoads?`<label class="sdel" title="Mark this contract delivered without opening it"><input type="checkbox" data-deliver="${s.id}" ${s.status==='Delivered'?'checked':''}> Delivered</label>`:''}${CONTRACT_TYPES.includes(s.type)?`<label class="sdel" title="Payment deferred to a later date (set the date in the contract)"><input type="checkbox" data-defer="${s.id}" ${s.deferred?'checked':''}> Deferred</label>`:''}</span>`:''}</div></li>`};
   return`<section><div class="sechead"><div><h2>${S.year} sales & contracts</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${all.length} contract${all.length===1?'':'s'}${filtered?` · ${list.length} shown`:''}</div></div><div class="sp"></div>
     ${S.mode==='live'?'<button class="small" data-act="scan">Scan a contract</button>':''}<button class="primary" data-add="sale">+ Add contract</button></div>
   ${all.length?`<div class="cckpi skpi">
@@ -1646,11 +1657,14 @@ function tabSales(f){
       <div><span>Priced</span><b>${tot.c?pct(tot.p/tot.c):'—'}</b></div>
       <div><span>Priced value</span><b>${kfmt(tot.v)}</b></div>
       <div><span>Left to deliver</span><b>${bu(tot.l)} bu</b></div></div>
+    ${(()=>{const dl=list.filter(x=>x.deferred&&CONTRACT_TYPES.includes(x.type));if(!dl.length)return'';const v=dl.reduce((a,x)=>{const fp=flatPrice(x);return a+(fp!=null?qty(x)*fp:0)},0),by={};
+      dl.forEach(x=>{const y=x.payDate?x.payDate.slice(0,4):'no date';const fp=flatPrice(x);by[y]=(by[y]||0)+(fp!=null?qty(x)*fp:0)});
+      return`<p class="snote"><span class="pill defer">${dl.length} deferred</span> ${v?`${usd(v,0)} priced value`:''}${Object.keys(by).length?` · ${Object.entries(by).sort().map(([y,a])=>`${y==='no date'?'no payment date':'paid in '+y}: ${usd(a,0)}`).join(' · ')}`:''} <button class="link" data-fchip="status" data-v="deferred">Show them</button></p>`})()}
     ${needs?`<p class="snote"><span class="pill warn">${needs} need${needs===1?'s':''} pricing</span> HTAs, basis contracts and others with an open price part. <button class="link" data-act="showunpriced">Show them</button></p>`:''}
     <div class="sfilters">
       <input id="flt_q" type="search" placeholder="Search buyer, contract #, notes" value="${esc(F.q)}" aria-label="Search">
       <div class="chips">${fchip('crop','','All crops')}${crops.map(([k,c])=>fchip('crop',k,c)).join('')}</div>
-      <div class="chips">${[['','All'],['open','Left to deliver'],['unpriced','Needs pricing'],['delivered','Delivered'],['hedges','Hedges']].map(([v,l])=>fchip('status',v,l)).join('')}</div>
+      <div class="chips">${[['','All'],['open','Left to deliver'],['unpriced','Needs pricing'],['delivered','Delivered'],...(all.some(x=>x.deferred)?[['deferred','Deferred']]:[]),['hedges','Hedges']].map(([v,l])=>fchip('status',v,l)).join('')}</div>
       <details class="smore" ${more||S.moreOpen?'open':''}><summary>More filters & sort${more?' · on':''}</summary>
         <div class="smoregrid">
           <label>Type<select id="flt_type">${opts(SALE_TYPES.map(t=>[t,tl(t)]),F.type,'All types')}</select></label>
@@ -1730,7 +1744,8 @@ const SF_TABLES=[
     ['OTHER_NAME','VARCHAR',r=>isOther(r.s)?r.s.specialtyName||null:null],['OTHER_KEY_DATE','DATE',r=>isOther(r.s)?r.s.otherDate||null:null],['OTHER_TERMS','VARCHAR',r=>isOther(r.s)?r.s.terms||null:null],
     // rolls (HTA and futures hedges); one row per roll is in ROLLS
     ['ROLL_COUNT','NUMBER(4,0)',r=>ROLLABLE.includes(r.s.type)?(r.s.rolls||[]).length:null],['ROLL_SPREAD','NUMBER(10,4)',r=>ROLLABLE.includes(r.s.type)?+rollSpread(r.s).toFixed(4):null],
-    ['ROLL_FEES_PER_BU','NUMBER(10,4)',r=>ROLLABLE.includes(r.s.type)?+rollFees(r.s).toFixed(4):null],['FUTURES_AFTER_ROLLS','NUMBER(10,4)',r=>{const v=ROLLABLE.includes(r.s.type)?rolledFutures(r.s):null;return v==null?null:+v.toFixed(4)}]]},
+    ['ROLL_FEES_PER_BU','NUMBER(10,4)',r=>ROLLABLE.includes(r.s.type)?+rollFees(r.s).toFixed(4):null],['FUTURES_AFTER_ROLLS','NUMBER(10,4)',r=>{const v=ROLLABLE.includes(r.s.type)?rolledFutures(r.s):null;return v==null?null:+v.toFixed(4)}],
+    ['DEFERRED','BOOLEAN',r=>CONTRACT_TYPES.includes(r.s.type)?!!r.s.deferred:null],['PAY_DATE','DATE',r=>r.s.deferred&&r.s.payDate||null]]},
   {name:'ROLLS',file:'rolls.csv',rows:(id,f)=>f.sales.filter(s=>ROLLABLE.includes(s.type)).flatMap(s=>(s.rolls||[]).map(o=>({id,s,o}))),cols:[
     ['FARM_ID','VARCHAR',r=>r.id],['CONTRACT_ID','VARCHAR',r=>r.s.id],['ROLL_ID','VARCHAR',r=>r.o.id],['ROLL_DATE','DATE',r=>r.o.date||null],
     ['FROM_MONTH','VARCHAR',r=>r.o.from||null],['TO_MONTH','VARCHAR',r=>r.o.to||null],['SPREAD','NUMBER(10,4)',r=>nz(r.o.spread)],['FEE_PER_BU','NUMBER(10,4)',r=>nz(r.o.fee)],
