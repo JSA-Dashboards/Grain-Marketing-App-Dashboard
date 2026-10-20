@@ -338,6 +338,7 @@ table.heat td.n{font-family:var(--f-data)}
 .ccleg em{font-style:normal;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccwarn{margin:0;font-size:.8rem;color:var(--warn)}
 .ccacts{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cchead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cchead .small{padding:4px 10px;font-size:.78rem}
 .ccmore{border-top:1px solid var(--line);padding-top:8px}
 .ccmore summary{cursor:pointer;font-size:.84rem;font-weight:600;color:var(--accent);list-style:none}
 .ccmore summary::before{content:'▸ '}.ccmore[open] summary::before{content:'▾ '}
@@ -1464,7 +1465,7 @@ function cropCard(f,r){
   const dynDir=r.be!=null&&r.dynBe!=null&&r.restBu>0&&r.dynBe>0?(r.dynBe<r.be-0.005?'<span class="pos">▼</span>':r.dynBe>r.be+0.005?'<span class="neg">▲</span>':''):'';
   const row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`;
   return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
-    <header><h2><span class="cdot"></span>${esc(r.crop)} <span class="muted">${S.year}</span></h2>
+    <header><div class="cchead"><h2><span class="cdot"></span>${esc(r.crop)} <span class="muted">${S.year}</span></h2><button class="small primary" data-addsale="${esc(r.crop)}">+ Add contract</button></div>
       <div class="ccfut">${m.fut!=null?`<span>${m.fi.symbol?symLabel(m.fi.symbol)+' futures':'Futures'}</span><b>${usd(m.fut,4)}</b>`:`<button class="link" data-edit="mkt" data-id="${pl.id}">Add futures</button>`}</div></header>
     <p class="ccsub">${r.plan?`${n1(pl.acres)} ac · ${bu(m.prod)} bu goal · break-even ${usd(r.be)}${m.basis!=null?` · basis ${fmtBasis(m.basis)}`:''}`:'No crop plan yet. <button class="link" data-add="crop">Add one</button>'}</p>
     <div class="cckpi">
@@ -1484,7 +1485,7 @@ function cropCard(f,r){
         <div><i class="unpriced"></i><span>Unpriced</span><b>${share(m.unpriced)}</b><em>${bu(m.unpriced)} bu${m.unpricedVal!=null?` · ${kfmt(m.unpricedVal)}`:''}</em></div></div></div>
     ${m.itmBu?`<p class="ccwarn">${bu(m.itmBu)} bu of Premium Plus would double up at today's futures.</p>`:''}
     ${(()=>{const n=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop)).length;
-      return`<div class="ccacts"><button class="small primary" data-addsale="${esc(r.crop)}">+ Add contract</button>${n?`<button class="link" data-salescrop="${esc(key(r.crop))}">See ${n} contract${n>1?'s':''}</button>`:'<span class="muted" style="font-size:.8rem">No contracts yet</span>'}</div>`})()}
+      return`<div class="ccacts">${n?`<button class="link" data-salescrop="${esc(key(r.crop))}">See ${n} contract${n>1?'s':''}</button>`:'<span class="muted" style="font-size:.8rem">No contracts yet</span>'}</div>`})()}
     <details class="ccmore"><summary>Show all numbers</summary>
       <dl class="cclist">${row('Acres',n1(pl.acres))}${row('APH',n1(pl.aph))}${row('Est. yield',n1(r.yld||null))}${row('Production goal',bu(m.prod))}
         ${row('Cost / acre',usd(costOf(pl)))}${row('Total farm cost',usd(m.cost,0))}${row('Est. basis',m.basis==null?'—':fmtBasis(m.basis))}${row('Initial B/E',usd(r.be))}
