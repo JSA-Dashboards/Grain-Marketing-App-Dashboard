@@ -26,7 +26,8 @@ from desk import admin, auth, component  # noqa: E402  (after the environment is
 def desk_page():
     # the page needs the whole window: no Streamlit padding around it. Brokers also lose Streamlit's top bar;
     # admins keep it, because it holds the Desk | People menu (it overlays the top, so leave room for it)
-    admin = (st.session_state.get('gd_user') or {}).get('role') == 'admin'
+    u = st.session_state.get('gd_user')
+    admin = bool(u) and u['role'] == 'admin'      # u is a dict on Snowflake, a sqlite3.Row locally: index, don't .get
     css = ('.stMainBlockContainer{padding:3.75rem 0 0 0!important;max-width:100%!important}' if admin else
            '.stMainBlockContainer{padding:0!important;max-width:100%!important}header[data-testid="stHeader"]{display:none}')
     st.html(f'<style>{css}</style>')

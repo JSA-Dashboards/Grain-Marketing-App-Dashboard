@@ -9,6 +9,7 @@ grain-desk.html runs unchanged inside an iframe. desk/shim.js (injected into the
 
 The signed-in person comes from session state set at sign-in, never from the page.
 """
+import hashlib
 import json
 import pathlib
 import time
@@ -109,7 +110,26 @@ _CSS = """
 .desk { display:block; width:100%; height:100vh; height:100dvh; border:0; background:#D6E5CF; }
 """
 
-_DESK = st.components.v2.component('grain_desk', html='', css=_CSS, js=_JS % json.dumps(_page_with_shim()))
+# The page is read from disk when a session starts, not once at import: Streamlit Cloud keeps imported modules
+# until a reboot, so a pushed grain-desk.html / shim.js / jsa_theme.css would otherwise not show until someone
+# rebooted the app. Each distinct version is registered under its own name and kept, so a session that is already
+# open stays on the version it started with (no page reload under someone mid-entry); new sessions get the latest.
+_WATCHED = [ROOT / 'grain-desk.html', ROOT / 'desk' / 'shim.js', ROOT / 'desk' / 'jsa_theme.css']
+_by_stat = {}       # (mtime, size) of the watched files -> version signature
+_versions = {}      # version signature -> mount callable
+
+
+def _latest():
+    """Signature of the newest page version, registering it first if this process hasn't seen it."""
+    stat = tuple((f.stat().st_mtime_ns, f.stat().st_size) for f in _WATCHED)
+    sig = _by_stat.get(stat)
+    if sig is None:
+        js = _JS % json.dumps(_page_with_shim())
+        sig = hashlib.md5(js.encode('utf-8')).hexdigest()[:10]
+        if sig not in _versions:
+            _versions[sig] = st.components.v2.component('grain_desk_' + sig, html='', css=_CSS, js=js)
+        _by_stat[stat] = sig
+    return sig
 
 
 _RESUME_JS = """
@@ -181,5 +201,8 @@ def _on_req():
 def render(cookie=None):
     """Mount the page. `cookie` = {'value': token, 'days': n} on the render right after sign-in."""
     resp = st.session_state.get('gd_resp', {})
-    _DESK(key=KEY, data={'responses': resp.get('responses', {}), 'signedOut': resp.get('signedOut', False), 'cookie': cookie},
+    sig = st.session_state.get('gd_page_sig')
+    if sig not in _versions:                    # a new session (or one from before a restart): start on the newest page
+        sig = st.session_state['gd_page_sig'] = _latest()
+    _versions[sig](key=KEY, data={'responses': resp.get('responses', {}), 'signedOut': resp.get('signedOut', False), 'cookie': cookie},
           on_req_change=_on_req, height='content', width='stretch')
