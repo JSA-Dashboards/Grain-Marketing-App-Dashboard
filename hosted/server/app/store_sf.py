@@ -56,7 +56,18 @@ def _connect():
         account=config.SNOWFLAKE_ACCOUNT, user=config.SNOWFLAKE_USER, private_key=_private_key(),
         role=config.SNOWFLAKE_ROLE or None, warehouse=config.SNOWFLAKE_WAREHOUSE or None,
         database=config.SNOWFLAKE_DATABASE, schema=config.SNOWFLAKE_SCHEMA,
-        login_timeout=60, network_timeout=60)
+        login_timeout=60, network_timeout=60,
+        # keep the shared session alive overnight; without this Snowflake expires it and the next query asks to re-authenticate
+        client_session_keep_alive=True)
+
+
+def _stale(e):
+    """True when the connection itself needs replacing (expired / re-authenticate / dropped), not when the SQL was wrong.
+    Newer connectors raise ReauthenticationRequest, which is not a DatabaseError subclass, so match on name and message."""
+    names = ' '.join(c.__name__.lower() for c in type(e).__mro__)
+    msg = str(e).lower()
+    return ('reauthentication' in names or 'reauthenticat' in msg or 'authenticate again' in msg or 'token' in msg and 'expired' in msg
+            or 'expired' in msg or 'session' in msg or 'connection' in msg or 'closed' in msg)
 
 
 def sql(q, params=None):
@@ -74,9 +85,8 @@ def sql(q, params=None):
                 finally:
                     cur.close()
                 return [{k.lower(): v for k, v in r.items()} for r in rows]
-            except (snowflake.connector.errors.OperationalError, snowflake.connector.errors.DatabaseError) as e:
-                msg = str(e).lower()
-                if attempt == 0 and ('expired' in msg or 'session' in msg or 'connection' in msg or 'closed' in msg):
+            except Exception as e:   # noqa: BLE001 - only a stale connection is retried; anything else is re-raised below
+                if attempt == 0 and _stale(e):
                     try:
                         _conn.close()
                     except Exception:
