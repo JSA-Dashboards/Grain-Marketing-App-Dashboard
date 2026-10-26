@@ -334,6 +334,17 @@ table.heat td.n{font-family:var(--f-data)}
 .ccleg>div{display:grid;grid-template-columns:10px 64px 42px minmax(0,1fr);gap:8px;align-items:baseline;font-size:.85rem}
 .ccleg i{width:10px;height:10px;border-radius:2px;align-self:center}
 .ccleg i.sold{background:var(--accent)} .ccleg i.hedged{background:var(--grain)} .ccleg i.unpriced{background:var(--soft);border:1px solid var(--line)}
+/* concise crop card */
+.cchero{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.ccsold{display:flex;align-items:baseline;gap:6px}.ccsold b{font-size:2.1rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}.ccsold span{color:var(--muted);font-weight:600}
+.ccprof{display:grid;text-align:right;gap:1px}.ccprof b{font-size:1.15rem;font-weight:750;font-variant-numeric:tabular-nums}.ccprof span{font-size:.76rem;color:var(--muted)}
+.ccprof.pos b{color:var(--good)}.ccprof.neg b{color:var(--bad)}
+.ccbar{display:flex;gap:2px;height:12px;border-radius:6px;background:var(--soft);overflow:hidden}.ccbar i{display:block;height:100%}
+.ccbar i.sold{background:var(--accent)}.ccbar i.hedged{background:var(--grain)}
+.ccbarlbl{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.78rem;color:var(--muted);margin-top:-6px}.ccbarlbl .sp{flex:1}
+.ccbarlbl i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}.ccbarlbl i.sold{background:var(--accent)}.ccbarlbl i.hedged{background:var(--grain)}.ccbarlbl i.unpriced{background:var(--soft);border:1px solid var(--line)}
+.ccline{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.86rem;padding-top:8px;border-top:1px solid var(--line)}
+.ccfoot{display:flex;align-items:center;gap:14px}.ccfoot .small{padding:4px 12px}
 .ccleg span{color:var(--muted)} .ccleg b{font-variant-numeric:tabular-nums;text-align:right}
 .ccleg em{font-style:normal;color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccwarn{margin:0;font-size:.8rem;color:var(--warn)}
@@ -460,7 +471,7 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .pcbar span{position:absolute;top:0;bottom:0;border-radius:4px}.pcbar .up{background:var(--accent)}.pcbar .dn{background:var(--grain)}
 .pchist .neg{color:var(--bad)}
 /* consultant dashboard */
-.dkpi{grid-template-columns:repeat(5,minmax(0,1fr));margin:6px 0 10px}
+.dkpi{grid-template-columns:repeat(3,minmax(0,1fr));margin:6px 0 10px}
 @media (max-width:900px){.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:560px){.dkpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .dkpi em{font-style:normal;font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1347,7 +1358,7 @@ function renderClients(){
       <div class="dnum dins ${ins==null?'':ins>1?'neg':ins>.8?'warn':''}"><b>${ins==null?'—':pct(ins)}</b><span>of insured sold</span></div>
       <div class="ddue">${d.next?`<b>${fmtDate(d.next.d)}${daysUntil(d.next.d)<=14?` <span class="pill warn">${daysUntil(d.next.d)}d</span>`:''}</b><span>${esc(d.next.title)}</span>`:'<span>Nothing due</span>'}</div>
       <div class="dflag">${d.bad?`<span class="pill bad">${d.bad} critical</span>`:''}${d.warn?`<span class="pill warn">${d.warn} watch</span>`:''}${!d.bad&&!d.warn?'<span class="pill good">Clear</span>':''}</div></li>`};
-  const shown=S.attnAll?items:items.slice(0,8);
+  const shown=S.attnAll?items:items.slice(0,5);
   return`<div class="farmhead"><div><div class="label">${S.admin?'Consultant view':'Broker view'}</div><h1>Client dashboard</h1></div><div class="sp"></div>
     <label class="label" style="display:flex;gap:8px;align-items:center">Crop year <select id="yearSel" style="width:auto">${yrs.map(y=>`<option ${y==S.year?'selected':''}>${y}</option>`).join('')}</select></label>
     ${S.downloads&&ids.length?`<button data-act="sumpdf"${S.sumBusy?' disabled':''} title="One summary of the farms shown below, for emailing to a broker">${S.sumBusy?'Making PDF…':'Summary PDF'}</button>${S.admin?'<button data-act="sfexport">Export for Snowflake</button>':''}`:''}<button class="primary" data-act="addclient">Add a client farm</button></div>
@@ -1356,28 +1367,25 @@ function renderClients(){
     <div class="chips">${[['','All crops'],['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([k,l])=>`<button class="chip sm" data-dcrop="${k}" aria-pressed="${crop===k}">${l}</button>`).join('')}
       ${statesUsed.length>1?`<span class="dsep"></span>${['',...statesUsed].map(s=>`<button class="chip sm" data-dsf="${esc(s)}" aria-pressed="${sf===s}">${s?esc(s):'All states'}</button>`).join('')}`:''}</div></div>`:''}
   <div class="cckpi dkpi">
-    <div><span>Farms</span><b>${ids.length}</b><em>${bf?esc(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):'all brokers'}${crop?' · '+cropName:''}</em></div>
-    <div><span>Sold</span><b>${exp?pct(sold/exp):'—'}</b><em>${exp?`${bu(sold)} of ${bu(exp)} bu expected${hed?` · ${pct((sold+hed)/exp)} with hedges`:''}`:'no expected bushels'}</em></div>
+    <div><span>Sold</span><b>${exp?pct(sold/exp):'—'}</b><em>${exp?`${bu(sold)} of ${bu(exp)} bu${hed?` · ${pct((sold+hed)/exp)} with hedges`:''}`:'no expected bushels'}</em></div>
     <div class="${profit==null?'':profit<0?'neg':'pos'}"><span>Est. profit</span><b>${kfmt(profit)}</b><em>${avgLine||(pAc&&profit!=null?usd(profit/pAc,0)+'/ac at today\'s market':'at today\'s market')}</em></div>
-    <div class="${flagged?'neg':''}"><span>Need attention</span><b>${flagged}</b><em>${flagged?`of ${ids.length} farms`:'all clear'}</em></div>
-    <div><span>Due in 14 days</span><b>${due14.length}</b><em>${due14.length?'farms with something due':'nothing close'}</em></div></div>
-  ${S.hosted?'':'<p class="muted" style="font-size:.78rem;margin:0 0 14px">For now only you see this view. Once the app is hosted with logins, each broker can see their own clients here.</p>'}
-  <div class="dgrid">
-    <section class="panel"><div class="phead"><b>Needs attention</b><span class="muted">${items.length?items.length+' item'+(items.length>1?'s':''):''}</span></div>
-      ${items.length?`<ul class="alist">${shown.map(i=>`<li data-open="${esc(i.id)}" tabindex="0"><span class="adot ${i.c}"></span><div><b>${esc(i.farm)}</b><span> · ${esc(i.t)}</span></div></li>`).join('')}</ul>
-        ${items.length>8?`<div style="padding:8px 16px 12px"><button class="link" data-act="attnall">${S.attnAll?'Show fewer':`Show all ${items.length}`}</button></div>`:''}`
-      :`<div class="empty"><b>Nothing needs attention</b>Over-contracting, losses at today's market, late deliveries and expiring contracts show up here.</div>`}</section>
-    <section class="panel"><div class="phead"><b>Program deadlines</b><span class="muted">next 30 days</span></div>
-      ${progList.length?`<ul class="alist">${progList.map(x=>`<li><span class="adot ${daysUntil(x.d)<=14?'warn':'muted'}"></span><div><b>${fmtDate(x.d)}</b><span> · ${esc(x.title)} · ${x.n} farm${x.n>1?'s':''}</span></div></li>`).join('')}</ul>`
-      :`<div class="empty" style="padding:22px 16px"><b>None in the next 30 days</b>Add program deadlines from any farm's Crop Overview.</div>`}</section></div>
-  <div class="sechead" style="margin-top:18px"><h2>Clients</h2><div class="sp"></div>
+    <div class="${flagged?'neg':''}"><span>Need attention</span><b>${flagged}</b><em>${flagged?`of ${ids.length} farms`:'all clear'}${due14.length?` · ${due14.length} due in 14 days`:''}</em></div></div>
+  <div class="sechead" style="margin-top:6px"><h2>Clients <span class="muted" style="font-weight:500;font-size:.95rem">${ids.length} farm${ids.length===1?'':'s'}${bf?' · '+esc(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):''}${crop?' · '+cropName:''}</span></h2><div class="sp"></div>
     <div class="chips" style="margin:0">${DASH_SORTS.map(([k,l])=>`<button class="chip sm" data-dsort="${k}" aria-pressed="${sortK===k}">${l}</button>`).join('')}</div></div>
   <section class="panel slist">${ids.length?`<div class="dhead"><span>Farm</span><span>Marketed</span><span style="text-align:right">Profit/ac</span><span style="text-align:right">Insured sold</span><span>Next due</span><span style="text-align:right">Flags</span></div>
     <ul class="dlist">${(()=>{const seen=new Set();return list.map(d=>{const g=d.f.group,mem=g?list.filter(x=>key(x.f.group)===key(g)):[];
       if(mem.length<2)return row(d);if(seen.has(key(g)))return'';seen.add(key(g));
       return groupRow(g,mem)+`<li class="dgroupkids"><ul class="dlist">${mem.map(row).join('')}</ul></li>`}).join('')})()}</ul>`
     :allIds.length?`<div class="empty"><b>No farms match these filters</b>Assign farms to brokers with Edit details on each farm, or add a client farm.</div>`
-    :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</section>`}
+    :`<div class="empty"><b>No client farms yet</b>Share this app with your clients as Editors, or add a client farm to enter records for them.</div>`}</section>
+  <div class="dgrid" style="margin-top:18px">
+    <section class="panel"><div class="phead"><b>Needs attention</b><span class="muted">${items.length?items.length+' item'+(items.length>1?'s':''):''}</span></div>
+      ${items.length?`<ul class="alist">${shown.map(i=>`<li data-open="${esc(i.id)}" tabindex="0"><span class="adot ${i.c}"></span><div><b>${esc(i.farm)}</b><span> · ${esc(i.t)}</span></div></li>`).join('')}</ul>
+        ${items.length>5?`<div style="padding:8px 16px 12px"><button class="link" data-act="attnall">${S.attnAll?'Show fewer':`Show all ${items.length}`}</button></div>`:''}`
+      :`<div class="empty"><b>Nothing needs attention</b>Over-contracting, losses at today's market, late deliveries and expiring contracts show up here.</div>`}</section>
+    <section class="panel"><div class="phead"><b>Program deadlines</b><span class="muted">next 30 days</span></div>
+      ${progList.length?`<ul class="alist">${progList.map(x=>`<li><span class="adot ${daysUntil(x.d)<=14?'warn':'muted'}"></span><div><b>${fmtDate(x.d)}</b><span> · ${esc(x.title)} · ${x.n} farm${x.n>1?'s':''}</span></div></li>`).join('')}</ul>`
+      :`<div class="empty" style="padding:22px 16px"><b>None in the next 30 days</b>Add program deadlines from any farm's Crop Overview.</div>`}</section></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-dbf],[data-dsf],[data-dcrop],[data-dsort],[data-act="attnall"]');if(!t||t.closest('dialog'))return;
   if(t.dataset.dbf!==undefined){setBrokerF(t.dataset.dbf);return}
   if(t.dataset.dsf!==undefined)S.stateF=t.dataset.dsf;
@@ -1469,39 +1477,33 @@ const kfmt=v=>{if(v==null)return'—';const a=Math.abs(v),s=v<0?'−$':'$';retur
 function cropCard(f,r){
   const m=cropMarket(f,r),pl=m.pl,ck={corn:'corn',soybeans:'soy',wheat:'wheat'}[key(r.crop)],n1=v=>v==null?'—':(+v).toLocaleString('en-US',{maximumFractionDigits:1});
   const tone=v=>v==null?'':v<0?'neg':'pos',sgn=v=>v==null?'—':(v>0?'+':'')+usd(v);
-  const total=Math.max(m.prod,m.sold+m.hedged)||0,share=v=>total?pct(v/total):'—';
-  const dynTxt=!r.plan||!n0(costOf(pl))?'—':r.restBu<=0?'All priced':r.dynBe<=0?'Covered':usd(r.dynBe);
-  const dynDir=r.be!=null&&r.dynBe!=null&&r.restBu>0&&r.dynBe>0?(r.dynBe<r.be-0.005?'<span class="pos">▼</span>':r.dynBe>r.be+0.005?'<span class="neg">▲</span>':''):'';
-  const row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`;
+  const total=Math.max(m.prod,m.sold+m.hedged)||0,share=v=>total?pct(v/total):'—',w=v=>total?Math.max(0,Math.min(100,v/total*100)).toFixed(1):0;
+  const dynTxt=!r.plan||!n0(costOf(pl))?null:r.restBu<=0?'all priced':r.dynBe<=0?'covered':usd(r.dynBe);
+  const dynDir=r.be!=null&&r.dynBe!=null&&r.restBu>0&&r.dynBe>0?(r.dynBe<r.be-0.005?' <span class="pos">▼</span>':r.dynBe>r.be+0.005?' <span class="neg">▲</span>':''):'';
+  const row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`,n=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop)).length;
+  const split=m.full&&m.cost!=null?(()=>{const parts=[['Sold contracts',m.soldVal,'sold'],['Unsold at today’s market',m.unsoldVal,'unpriced'],...(m.hedged?[['Hedges',m.hedgeVal||0,'hedged']]:[]),...(m.credit?[['Gov & insurance payments',m.credit,'sold']]:[]),['Costs',-m.cost,'cost']];
+    return`<div class="ccsplit"><div class="ccsplit-h">How total profit adds up</div>
+      ${parts.map(([l,v,c])=>`<div class="ccsplit-r"><i class="${c}"></i><span>${l}</span><b class="${v<0?'neg':''}">${v<0?'−':'+'}${kfmt(Math.abs(v))}</b></div>`).join('')}
+      <div class="ccsplit-r tot"><span>Total profit</span><b class="${m.profit<0?'neg':'pos'}">${(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
+      <p class="ccsplit-n">${m.unpriced?`Each 10¢ move in futures changes total profit by about <b>±${kfmt(m.unpriced*0.10)}</b> (${bu(m.unpriced)} unpriced bu).`:'Every bushel is sold or hedged; futures moves no longer change profit much.'}</p></div>`})():'';
   return`<article class="cc" style="--crop:${ck?`var(--c-${ck})`:'var(--accent)'}">
-    <header><div class="cchead"><h2><span class="cdot"></span>${esc(r.crop)} <span class="muted">${S.year}</span></h2><button class="small primary" data-addsale="${esc(r.crop)}">+ Add contract</button></div>
-      <div class="ccfut">${m.fut!=null?`<span>${m.fi.symbol?symLabel(m.fi.symbol)+' futures':'Futures'}</span><b>${usd(m.fut,4)}</b>`:`<button class="link" data-edit="mkt" data-id="${pl.id}">Add futures</button>`}</div></header>
-    <p class="ccsub">${r.plan?`${n1(pl.acres)} ac · ${bu(m.prod)} bu goal · break-even ${usd(r.be)}${m.basis!=null?` · basis ${fmtBasis(m.basis)}`:''}`:'No crop plan yet. <button class="link" data-add="crop">Add one</button>'}</p>
-    <div class="cckpi">
-      <div class="${tone(m.ppa)}"><span>Profit / acre</span><b>${sgn(m.ppa)}</b></div>
-      <div class="${tone(m.profit)}"><span>Total profit</span><b>${m.profit==null?'—':(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
-      <div><span>Dynamic B/E</span><b>${dynTxt} ${dynDir}</b></div></div>
-    ${m.full&&m.cost!=null?(()=>{const parts=[['Sold contracts',m.soldVal,'sold'],['Unsold at today’s market',m.unsoldVal,'unpriced'],...(m.hedged?[['Hedges',m.hedgeVal||0,'hedged']]:[]),...(m.credit?[['Gov & insurance payments',m.credit,'sold']]:[]),['Costs',-m.cost,'cost']];
-      // only unpriced bushels move with futures; hedged bushels are offset by the hedge
-      return`<div class="ccsplit"><div class="ccsplit-h">How total profit adds up</div>
-        ${parts.map(([l,v,c])=>`<div class="ccsplit-r"><i class="${c}"></i><span>${l}</span><b class="${v<0?'neg':''}">${v<0?'−':'+'}${kfmt(Math.abs(v))}</b></div>`).join('')}
-        <div class="ccsplit-r tot"><span>Total profit</span><b class="${m.profit<0?'neg':'pos'}">${(m.profit>0?'+':'')+kfmt(m.profit)}</b></div>
-        <p class="ccsplit-n">${m.unpriced?`Each 10¢ move in futures changes total profit by about <b>±${kfmt(m.unpriced*0.10)}</b> (${bu(m.unpriced)} unpriced bu).`:'Every bushel is sold or hedged; futures moves no longer change profit much.'}</p></div>`})():''}
-    <div class="ccpos">${pieSVG([{v:m.sold,cls:'sold',label:'Sold'},{v:m.hedged,cls:'hedged',label:'Hedged'},{v:Math.max(0,total-m.sold-m.hedged),cls:'unpriced',label:'Unpriced'}],`${r.crop}: ${share(m.sold)} sold, ${share(m.hedged)} hedged`)}
-      <div class="ccleg">
-        <div><i class="sold"></i><span>Sold</span><b>${share(m.sold)}</b><em>${bu(m.sold)} bu · ${kfmt(m.soldVal)}</em></div>
-        <div><i class="hedged"></i><span>Hedged</span><b>${share(m.hedged)}</b><em>${bu(m.hedged)} bu${m.hedgeVal?` · ${kfmt(m.hedgeVal)}`:''}</em></div>
-        <div><i class="unpriced"></i><span>Unpriced</span><b>${share(m.unpriced)}</b><em>${bu(m.unpriced)} bu${m.unpricedVal!=null?` · ${kfmt(m.unpricedVal)}`:''}</em></div></div></div>
+    <header><h2><span class="cdot"></span>${esc(r.crop)} <span class="muted">${S.year}</span></h2>
+      <div class="ccfut">${m.fut!=null?`<span>${m.fi.symbol?symLabel(m.fi.symbol):'Futures'}</span><b>${usd(m.fut)}</b>`:r.plan?`<button class="link" data-edit="mkt" data-id="${pl.id}">Add futures</button>`:''}</div></header>
+    ${r.plan?`<div class="cchero"><div class="ccsold"><b>${share(m.sold)}</b><span>sold</span></div>
+        <div class="ccprof ${tone(m.ppa)}"><b>${m.ppa==null?'—':sgn(m.ppa)+'/ac'}</b><span>${m.profit==null?'profit needs futures & basis':`${(m.profit>0?'+':'')+kfmt(m.profit)} est. profit`}</span></div></div>
+      <div class="ccbar" role="img" aria-label="${esc(r.crop)}: ${share(m.sold)} sold, ${share(m.hedged)} hedged"><i class="sold" style="width:${w(m.sold)}%"></i><i class="hedged" style="width:${w(m.hedged)}%"></i></div>
+      <div class="ccbarlbl"><span><i class="sold"></i>${bu(m.sold)} sold</span>${m.hedged?`<span><i class="hedged"></i>${bu(m.hedged)} hedged</span>`:''}<span><i class="unpriced"></i>${bu(m.unpriced)} open</span><span class="sp"></span><span>of ${bu(m.prod)} bu</span></div>
+      <div class="ccline"><span>Break-even <b>${usd(r.be)}</b>${dynTxt&&dynTxt!==usd(r.be)?` → <b>${dynTxt}</b>${dynDir} now`:''}</span><span class="muted">${n1(pl.acres)} ac${m.basis!=null?` · basis ${fmtBasis(m.basis)}`:''}</span></div>`
+    :`<p class="ccsub">No crop plan yet. <button class="link" data-add="crop">Add one</button></p>`}
     ${m.itmBu?`<p class="ccwarn">${bu(m.itmBu)} bu of Premium Plus would double up at today's futures.</p>`:''}
-    ${(()=>{const n=f.sales.filter(s=>+s.year===+S.year&&key(s.crop)===key(r.crop)).length;
-      return`<div class="ccacts">${n?`<button class="link" data-salescrop="${esc(key(r.crop))}">See ${n} contract${n>1?'s':''}</button>`:'<span class="muted" style="font-size:.8rem">No contracts yet</span>'}</div>`})()}
-    <details class="ccmore"><summary>Show all numbers</summary>
+    <div class="ccfoot"><button class="small primary" data-addsale="${esc(r.crop)}">+ Contract</button>${n?`<button class="link" data-salescrop="${esc(key(r.crop))}">${n} contract${n>1?'s':''}</button>`:''}</div>
+    ${r.plan?`<details class="ccmore"><summary>Details</summary>${split}
       <dl class="cclist">${row('Acres',n1(pl.acres))}${row('APH',n1(pl.aph))}${row('Est. yield',n1(r.yld||null))}${row('Production goal',bu(m.prod))}
         ${row('Cost / acre',usd(costOf(pl)))}${row('Total farm cost',usd(m.cost,0))}${row('Est. basis',m.basis==null?'—':fmtBasis(m.basis))}${row('Initial B/E',usd(r.be))}
         ${row('Futures price',m.fut==null?'—':usd(m.fut,4))}${row('Value of sold',usd(m.soldVal,0))}${row('Unsold bushels',bu(m.unsold))}${row('Value of unsold',m.unsoldVal==null?'—':usd(m.unsoldVal,0))}
         ${row('Hedged bushels',bu(m.hedged))}${row('Value of hedges',m.hedgeVal==null?'—':usd(m.hedgeVal,0))}${row('Unpriced bushels',bu(m.unpriced))}${row('Value of unpriced',m.unpricedVal==null?'—':usd(m.unpricedVal,0))}</dl>
       <p class="muted" style="font-size:.74rem;margin:8px 0 0">${m.full?`Unsold bushels valued at ${m.fi.source==='market'?symLabel(m.fi.symbol)+' futures':'futures'}${m.basis!=null?' + est. basis':''} (${usd(m.mkt)})${m.fi.asOf?` as of ${fmtDate(m.fi.asOf)}`:''}.`:'Profit counts only priced sold bushels until a futures price and basis are set.'}${m.estBu?` Value of sold estimates ${bu(m.estBu)} bu still missing basis or futures.`:''}</p>
-      ${r.plan?`<button class="small" data-edit="mkt" data-id="${pl.id}" style="margin-top:8px">Futures & basis</button>`:''}</details></article>`}
+      <button class="small" data-edit="mkt" data-id="${pl.id}" style="margin-top:8px">Futures & basis</button></details>`:''}</article>`}
 // crop-by-crop summary with a farm total; profit counts only sold bushels that have a flat price
 function farmSummary(p){
   if(!p.length)return'';
