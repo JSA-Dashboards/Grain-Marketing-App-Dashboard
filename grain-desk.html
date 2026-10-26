@@ -1279,7 +1279,7 @@ function groupRow(g,mem){
   return`<li class="drow dgroup" data-group="${esc(g)}" tabindex="0">
     <div class="dname"><div class="stitle"><b>${esc(g)}</b><span class="pill neutral">Combined · ${mem.length}</span></div><span class="ssub">${mem.map(d=>esc(d.f.name)).join(' + ')}</span></div>
     <div class="dsold">${exp?`<div class="dbar" aria-hidden="true"><i class="s" style="width:${Math.min(100,s*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-s*100,h*100)).toFixed(1)}%"></i></div>
-      <span><b>${pct(s)}</b> sold${hed?` · ${pct(h)} hedged`:''} · ${bu(exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
+      <span><b>${pct(s)}</b> sold${hed?` · ${pct(h)} hedged`:''} · ${bu(sold)} of ${bu(exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
     <div class="dnum dprof ${ppa==null?'':ppa<0?'neg':'pos'}"><b>${ppa==null?'—':usd(ppa,0)}</b><span>profit/ac</span></div>
     <div class="dnum dins ${ins==null?'':ins>1?'neg':ins>.8?'warn':''}"><b>${ins==null?'—':pct(ins)}</b><span>of insured sold</span></div>
     <div class="ddue">${next?`<b>${fmtDate(next.d)}</b><span>${esc(next.title)}</span>`:'<span>Nothing due</span>'}</div>
@@ -1342,7 +1342,7 @@ function renderClients(){
       <div class="dname"><div class="stitle"><b>${esc(f.name)}</b>${f.sample?'<span class="pill neutral">Sample</span>':''}</div>
         <span class="ssub">${[locLabel(f),f.broker||'Unassigned',crop?'':crops].filter(Boolean).map(esc).join(' · ')||'No crops yet'}</span></div>
       <div class="dsold">${d.exp?`<div class="dbar" aria-hidden="true"><i class="s" style="width:${Math.min(100,s*100).toFixed(1)}%"></i><i class="h" style="width:${Math.max(0,Math.min(100-s*100,h*100)).toFixed(1)}%"></i></div>
-        <span><b>${pct(s)}</b> sold${d.hed?` · ${pct(h)} hedged`:''} · ${bu(d.exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
+        <span><b>${pct(s)}</b> sold${d.hed?` · ${pct(h)} hedged`:''} · ${bu(d.sold)} of ${bu(d.exp)} bu</span>`:'<span>No expected bushels yet</span>'}</div>
       <div class="dnum dprof ${d.ppa==null?'':d.ppa<0?'neg':'pos'}"><b>${d.ppa==null?'—':usd(d.ppa,0)}</b><span>profit/ac</span></div>
       <div class="dnum dins ${ins==null?'':ins>1?'neg':ins>.8?'warn':''}"><b>${ins==null?'—':pct(ins)}</b><span>of insured sold</span></div>
       <div class="ddue">${d.next?`<b>${fmtDate(d.next.d)}${daysUntil(d.next.d)<=14?` <span class="pill warn">${daysUntil(d.next.d)}d</span>`:''}</b><span>${esc(d.next.title)}</span>`:'<span>Nothing due</span>'}</div>
@@ -1357,7 +1357,7 @@ function renderClients(){
       ${statesUsed.length>1?`<span class="dsep"></span>${['',...statesUsed].map(s=>`<button class="chip sm" data-dsf="${esc(s)}" aria-pressed="${sf===s}">${s?esc(s):'All states'}</button>`).join('')}`:''}</div></div>`:''}
   <div class="cckpi dkpi">
     <div><span>Farms</span><b>${ids.length}</b><em>${bf?esc(bf==='__none'?'Unassigned':brokers.find(b=>key(b)===bf)||''):'all brokers'}${crop?' · '+cropName:''}</em></div>
-    <div><span>Sold</span><b>${exp?pct(sold/exp):'—'}</b><em>${exp?`${pct((sold+hed)/exp)} with hedges · ${bu(exp)} bu`:'no expected bushels'}</em></div>
+    <div><span>Sold</span><b>${exp?pct(sold/exp):'—'}</b><em>${exp?`${bu(sold)} of ${bu(exp)} bu expected${hed?` · ${pct((sold+hed)/exp)} with hedges`:''}`:'no expected bushels'}</em></div>
     <div class="${profit==null?'':profit<0?'neg':'pos'}"><span>Est. profit</span><b>${kfmt(profit)}</b><em>${avgLine||(pAc&&profit!=null?usd(profit/pAc,0)+'/ac at today\'s market':'at today\'s market')}</em></div>
     <div class="${flagged?'neg':''}"><span>Need attention</span><b>${flagged}</b><em>${flagged?`of ${ids.length} farms`:'all clear'}</em></div>
     <div><span>Due in 14 days</span><b>${due14.length}</b><em>${due14.length?'farms with something due':'nothing close'}</em></div></div>
