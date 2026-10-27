@@ -390,6 +390,10 @@ table.heat td.n{font-family:var(--f-data)}
 .zipform .pf{flex:0 1 200px}
 /* sales & contracts: slim rows */
 .skpi{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}
+.soilchart{width:100%;height:auto;display:block}.soilchart .soilline{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round}
+.soilchart .soilband{fill:color-mix(in srgb,var(--accent) 22%,var(--surface));stroke:none}.soilchart .soil50{stroke:var(--grain);stroke-width:1.5;stroke-dasharray:5 4}
+.soilchart .soilax{font-size:10px;fill:var(--muted)}
+.soilmoist{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;font-size:.86rem;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.soilmoist span{color:var(--muted)}
 .skpi em{font-style:normal;font-size:.74rem;color:var(--muted);line-height:1.3}
 @media (max-width:560px){.skpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .snote{margin:0 0 12px;font-size:.84rem;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -3137,6 +3141,32 @@ function wxDays(w){const ps=w.periods||[],out=[];
     out.push({name:d?d.name:p.name,date:(d||p).start,short:(d||p).short,detail:(d||p).detail,hi:d?d.temp:null,lo:n?n.temp:null,pop,wind:d?d.windMax:n&&n.windMax,dir:(d||n||{}).dir,
       field:pop<=20,spray:pop<=20&&(d?(d.windMax||0):wind)<=10});if(!p.day)i++}
   return out.slice(0,7)}
+// Soil from Iowa State's Soil Moisture Network (nearest field station, saved with the morning weather update): 4-inch soil
+// temperature with a 10-day trend and the fall nitrogen check, plus soil moisture at 12, 24 and 50 inches
+function soilPanel(w){
+  const s=w&&w.soil;
+  if(!s)return`<div class="panel calc soil" style="margin-top:14px"><div class="clab">Soil</div><p class="muted" style="margin:0;font-size:.85rem">${w&&'soil' in w?'No Iowa State soil station within 75 miles of this location yet. Soil readings cover Iowa for now.':'Soil readings arrive with the next morning weather update.'}</p></div>`;
+  const n=s.now||{},d=(s.days||[]).filter(x=>x.t4!=null),last3=d.slice(-3),t4=n.t4??(d.length?d[d.length-1].t4:null);
+  const falling=last3.length>=2&&last3[last3.length-1].t4<last3[0].t4,avg3=last3.length?last3.reduce((a,x)=>a+x.t4,0)/last3.length:null;
+  // fall anhydrous: wait until 4-inch soil is below 50°F and trending colder
+  const nOk=t4!=null&&t4<50&&(avg3==null||avg3<50),nWarm=t4!=null&&t4>=50;
+  const nTxt=t4==null?['','No reading']:nOk?['pos',falling?'Below 50°F and falling':'Below 50°F']:nWarm?['neg',`${(t4-50).toFixed(0)}°F above 50°F${falling?', cooling':''}`]:['warn','Near 50°F'];
+  const ago=d.length>=8?d[d.length-8]:d[0],v12=n.v12??(d.length?d[d.length-1].v12:null),dv=v12!=null&&ago&&ago.v12!=null?v12-ago.v12:null;
+  const W=480,H=120,L=34,R=8,T=10,B=20,lo=Math.min(40,...d.map(x=>x.t4n??x.t4)),hi=Math.max(60,...d.map(x=>x.t4x??x.t4)),x=i=>L+(W-L-R)*(d.length<2?0:i/(d.length-1)),y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo||1));
+  const chart=d.length?`<svg viewBox="0 0 ${W} ${H}" class="soilchart" role="img" aria-label="4-inch soil temperature, last ${d.length} days">
+      <line x1="${L}" x2="${W-R}" y1="${y(50)}" y2="${y(50)}" class="soil50"/><text x="${L-4}" y="${y(50)+3}" text-anchor="end" class="soilax">50°</text>
+      <path d="${d.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.t4x??p.t4).toFixed(1)}`).join('')}${d.slice().reverse().map((p,j)=>`L${x(d.length-1-j).toFixed(1)},${y(p.t4n??p.t4).toFixed(1)}`).join('')}Z" class="soilband"/>
+      <polyline points="${d.map((p,i)=>`${x(i).toFixed(1)},${y(p.t4).toFixed(1)}`).join(' ')}" class="soilline"/>
+      ${d.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.t4)}" r="9" fill="transparent"><title>${new Date(p.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}: avg ${p.t4}°F (low ${p.t4n??'—'}°, high ${p.t4x??'—'}°)</title></circle>`).join('')}
+      <text x="${L}" y="${H-5}" class="soilax">${new Date(d[0].d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</text><text x="${W-R}" y="${H-5}" text-anchor="end" class="soilax">${new Date(d[d.length-1].d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</text></svg>`:'';
+  const mv=v=>v==null?'—':v.toFixed(0)+'%';
+  return`<div class="panel calc soil" style="margin-top:14px"><div class="clab">Soil · ${esc(s.name)} station, ${s.miles} mi away</div>
+    <div class="cckpi wxkpi"><div><span>4-inch soil temp</span><b>${t4==null?'—':t4.toFixed(0)+'°F'}</b><em>${avg3!=null?`3-day avg ${avg3.toFixed(0)}°F${falling?' · falling':' · rising'}`:'&nbsp;'}</em></div>
+      <div class="${nTxt[0]}"><span>Fall anhydrous</span><b>${t4==null?'—':nOk?'OK to apply':'Wait'}</b><em>${nTxt[1]}</em></div>
+      <div><span>Soil moisture, 12 in</span><b>${mv(v12)}</b><em>${dv!=null?`${dv>=0?'+':''}${dv.toFixed(1)} pts in a week`:'by volume'}</em></div></div>
+    ${chart?`<div class="clab" style="margin-top:12px">4-inch soil temperature, last ${d.length} days</div>${chart}<div class="legend" style="padding:2px 0 0"><span><i style="background:var(--accent)"></i>Daily average</span><span><i style="background:color-mix(in srgb,var(--accent) 22%,var(--surface))"></i>Low to high</span><span><i style="background:var(--grain)"></i>50°F</span></div>`:''}
+    <div class="soilmoist"><span>Moisture by depth${s.mName&&s.mStation!==s.station?` (${esc(s.mName)}, ${s.mMiles} mi)`:''}:</span><b>12 in ${mv(n.v12)}</b><b>24 in ${mv(n.v24)}</b><b>50 in ${mv(n.v50)}</b></div>
+    <p class="muted" style="font-size:.74rem;margin:8px 0 0">Measured at the nearest Iowa State University Soil Moisture Network station (Iowa Environmental Mesonet), not in your field; soils and fields vary. Fall anhydrous: Iowa State suggests waiting until 4-inch soil is below 50°F and trending colder. Moisture is % of soil volume; sensors that read impossibly low or high are left out.</p></div>`}
 function tabWeather(f){
   const k=wxKey(f);ensureWx(k);const w=k?S.wx[k]:null;
   const zipBox=`<form class="zipform" id="zipform" style="margin-top:12px"><label class="pf"><span>Your ZIP code</span><input id="zipIn" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="e.g. 50421" value="${esc(f.bidHome&&f.bidHome.zip||'')}"></label><button class="primary" type="submit">Save</button></form>`;
@@ -3163,6 +3193,7 @@ function tabWeather(f){
         <span class="wxtags">${d.spray?'<span class="tag sprayt">Spray</span>':d.field?'<span class="tag fieldt">Field</span>':''}</span>
         <span class="wxpop">${d.pop?d.pop+'%':''}</span><span class="wxhl"><b>${d.hi??'—'}°</b> <span>${d.lo??'—'}°</span></span></summary>
         <p>${esc(d.detail||'')}</p></details>`).join('')}</div>
+    ${soilPanel(w)}
     <p class="muted" style="font-size:.74rem;margin:8px 0 0">Field day = 20% or less chance of rain. Spray day = also wind 10 mph or less in the daytime. Tap a day for the full forecast. Forecast from weather.gov, refreshed each morning.</p></section>`}
 
 /* ---------- contract scanning ---------- */
