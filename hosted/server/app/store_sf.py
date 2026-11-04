@@ -13,6 +13,7 @@ Set STORE_BACKEND=snowflake; run sql/grain_desk_setup.sql once first.
 """
 import hashlib
 import json
+import logging
 import secrets
 import threading
 import time
@@ -23,6 +24,7 @@ from cryptography.hazmat.primitives import serialization
 
 from . import config
 
+log = logging.getLogger('grain')
 _conn = None
 _lock = threading.RLock()          # one statement at a time on the shared connection
 _write_lock = threading.Lock()
@@ -220,7 +222,11 @@ def _user(r):
 
 
 def user_by_email(email):
-    r = sql('SELECT * FROM USERS WHERE LOWER(EMAIL)=LOWER(%s)', (email.strip(),))
+    # Snowflake doesn't enforce unique emails: always pick the same row (active, then oldest), or a code saved
+    # for one account would be checked against another
+    r = sql('SELECT * FROM USERS WHERE LOWER(EMAIL)=LOWER(%s) ORDER BY ACTIVE DESC, CREATED_AT, ID', (email.strip(),))
+    if len(r) > 1:
+        log.warning('%d accounts share the email %s: %s', len(r), email.strip().lower(), ', '.join(x['id'] for x in r))
     return _user(r[0]) if r else None
 
 
@@ -258,8 +264,11 @@ def new_login_code(uid):
 def use_login_code(uid, code):
     """True once if the code matches one of this person's fresh codes; five wrong tries kill each code."""
     now, h = time.time(), _hash(uid + ':' + (code or '').strip())
-    live = [r for r in sql('SELECT * FROM LOGIN_CODES WHERE USER_ID=%s', (uid,)) if r['expires'] >= now and r['tries'] < 5]
+    rows = sql('SELECT * FROM LOGIN_CODES WHERE USER_ID=%s', (uid,))
+    live = [r for r in rows if r['expires'] >= now and r['tries'] < 5]
     if not any(r['hash'] == h for r in live):
+        log.warning('sign-in code rejected for %s: %d codes on file, %d fresh, %d expired, %d out of tries, %d digits entered',
+                    uid, len(rows), len(live), sum(r['expires'] < now for r in rows), sum(r['tries'] >= 5 for r in rows), len((code or '').strip()))
         if live:
             sql('UPDATE LOGIN_CODES SET TRIES=TRIES+1 WHERE USER_ID=%s', (uid,))
         return False
