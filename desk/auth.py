@@ -104,7 +104,8 @@ def login_screen():
     if pend.get('shown'):
         st.warning(f"Test mode, no email is configured. Your code is {pend['shown']}.")
     with st.form('code'):
-        code = st.text_input('Code', max_chars=6)
+        # no 6-character limit: a code pasted with a space or line break would lose its last digit; only the digits count
+        code = re.sub(r'\D', '', st.text_input('Code', max_chars=20))
         ok = st.form_submit_button('Sign in', type='primary')
     if st.button('Use a different email', type='tertiary'):
         ss.pop('gd_pending')
