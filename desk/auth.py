@@ -96,7 +96,11 @@ def login_screen():
         return None
 
     pend = ss['gd_pending']
-    st.info(f"We sent a 6-digit code to {pend['email']}. It expires in {config.LOGIN_CODE_MINUTES} minutes.")
+    if pend.get('recent'):
+        st.info(f"A code was sent to {pend['email']} less than a minute ago. It can take a minute to arrive; "
+                "use the code from your newest email.")
+    else:
+        st.info(f"We sent a 6-digit code to {pend['email']}. It expires in {config.LOGIN_CODE_MINUTES} minutes.")
     if pend.get('shown'):
         st.warning(f"Test mode, no email is configured. Your code is {pend['shown']}.")
     with st.form('code'):
@@ -125,7 +129,10 @@ def _request_code(email):
     # the same message whether or not the address has an account, so the form can't be used to look people up
     ok_msg = None
     u = store.user_by_email(email)
-    if u and u['active'] and _sent.get(email, 0) < time.time() - 60:
+    if u and u['active'] and _sent.get(email, 0) >= time.time() - 60:
+        # a code went out less than a minute ago (often the page reloaded while they checked email): keep that code working
+        ss['gd_pending'] = {'uid': u['id'], 'email': u['email'], 'shown': None, 'recent': True}
+    elif u and u['active']:
         _sent[email] = time.time()
         code = store.new_login_code(u['id'])
         try:

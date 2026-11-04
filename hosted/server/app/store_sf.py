@@ -8,7 +8,7 @@ Differences that matter:
     "highest number" poll then misses it.) A poll re-reads the 60 s before its mark, so a write that commits
     late is still picked up;
   * contract photos are stored in the ASSETS table (BINARY, 7 MB max) instead of on disk;
-  * sign-in uses a 6-digit emailed code (LOGIN_CODES), 5 tries, then the code is dead.
+  * sign-in uses a 6-digit emailed code (LOGIN_CODES; the newest 3 work), 5 tries, then a code is dead.
 Set STORE_BACKEND=snowflake; run sql/grain_desk_setup.sql once first.
 """
 import hashlib
@@ -240,22 +240,28 @@ def broker_by_name(name):
     return _user(r[0]) if r else None
 
 
+LIVE_CODES = 3     # codes a person can have at once, so an email that arrives late or a second request doesn't void the first
+
+
 def new_login_code(uid):
-    """A fresh 6-digit code (any earlier one for this person is voided)."""
+    """A fresh 6-digit code. This person's two newest unexpired codes keep working alongside it."""
     code = f'{secrets.randbelow(10**6):06d}'
-    sql('DELETE FROM LOGIN_CODES WHERE USER_ID=%s OR EXPIRES<%s', (uid, time.time()))
+    sql('DELETE FROM LOGIN_CODES WHERE EXPIRES<%s', (time.time(),))
+    rows = sql('SELECT HASH FROM LOGIN_CODES WHERE USER_ID=%s ORDER BY EXPIRES DESC', (uid,))
+    for r in rows[LIVE_CODES - 1:]:
+        sql('DELETE FROM LOGIN_CODES WHERE HASH=%s', (r['hash'],))
     sql('INSERT INTO LOGIN_CODES(HASH,USER_ID,EXPIRES,TRIES) VALUES(%s,%s,%s,0)',
         (_hash(uid + ':' + code), uid, time.time() + config.LOGIN_CODE_MINUTES * 60))
     return code
 
 
 def use_login_code(uid, code):
-    """True once if the code is right and fresh; five wrong tries kill it."""
-    rows = sql('SELECT * FROM LOGIN_CODES WHERE USER_ID=%s', (uid,))
-    if not rows or rows[0]['expires'] < time.time() or rows[0]['tries'] >= 5:
-        return False
-    if rows[0]['hash'] != _hash(uid + ':' + (code or '').strip()):
-        sql('UPDATE LOGIN_CODES SET TRIES=TRIES+1 WHERE USER_ID=%s', (uid,))
+    """True once if the code matches one of this person's fresh codes; five wrong tries kill each code."""
+    now, h = time.time(), _hash(uid + ':' + (code or '').strip())
+    live = [r for r in sql('SELECT * FROM LOGIN_CODES WHERE USER_ID=%s', (uid,)) if r['expires'] >= now and r['tries'] < 5]
+    if not any(r['hash'] == h for r in live):
+        if live:
+            sql('UPDATE LOGIN_CODES SET TRIES=TRIES+1 WHERE USER_ID=%s', (uid,))
         return False
     sql('DELETE FROM LOGIN_CODES WHERE USER_ID=%s', (uid,))
     return True

@@ -518,7 +518,7 @@ details.explain summary{cursor:pointer;font-weight:600;color:var(--muted)}
 .rkpi em{font-style:normal;font-size:.68rem;color:#5A675E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .paper h4{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:#5A675E;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid #D6DED6}
 .rtab{font-size:.8rem} .rtab th{font-size:.62rem;padding:4px 6px;color:#5A675E;border-color:#D6DED6} .rtab td{padding:6px;border-color:#D6DED6}
-.rtab td.neg{color:#AE3D2B} .rtab td.pos{color:#2C7A4C} .rtab small{font-size:.72rem;color:#5A675E} .rtab .dbar{margin-bottom:3px;background:#EEF3EC}
+.rtab td.neg{color:#AE3D2B} .rtab td.pos{color:#2C7A4C} .rtab td.warn{color:#A86A12} .rtab tr.tot td{font-weight:700;background:#EEF3EC}.rtab small{font-size:.72rem;color:#5A675E} .rtab .dbar{margin-bottom:3px;background:#EEF3EC}
 .rcols{display:grid;grid-template-columns:1fr 1fr;gap:20px} .rcols ul{margin:0;padding-left:16px;display:grid;gap:4px;font-size:.78rem}
 .rcols li.bad::marker{color:#AE3D2B} .rcols li.warn::marker{color:#B5862B}
 .rnote{white-space:pre-wrap;margin:0;font-size:.86rem}
@@ -2833,15 +2833,118 @@ function reportData(f){
   return{f,crops,exp:D.exp,sold:D.sold,hed:D.hed,acres,profit,ppa:pAc?profit/pAc:null,guar,soon,attn,rolls,
     asOf:S.market&&S.market.asOf||null,made:TODAY}}
 const RPT_MAX=6;
+// report types: the full one-page marketing report, or every sales contract for the crop year
+const RPT_TYPES=[['full','Marketing report'],['sales','Sales & contracts']];
+try{S.rptType=localStorage.getItem('gd.rptType')||''}catch(_){}
+const rptType=()=>RPT_TYPES.some(t=>t[0]===S.rptType)?S.rptType:'full';
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-rpttype]');if(!t||t.closest('dialog'))return;
+  S.rptType=t.dataset.rpttype;try{localStorage.setItem('gd.rptType',S.rptType)}catch(_){}render()});
+// the part above the paper, shared by every report type: title, PDF button, type chips, advisor's note
+function rptHead(f,sub){
+  return`<section><div class="sechead"><div><h2>Client report</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${sub}</div></div><div class="sp"></div>
+    ${S.downloads?`<button class="primary" data-act="rptpdf"${S.rptBusy?' disabled':''}>${S.rptBusy?'Making PDF…':'Download PDF'}</button>`:'<span class="muted" style="font-size:.82rem">PDF download isn\'t available in this view</span>'}</div>
+  <div class="chips" style="margin-bottom:12px">${RPT_TYPES.map(([k,l])=>`<button class="chip sm" data-rpttype="${k}" aria-pressed="${rptType()===k}">${l}</button>`).join('')}</div>
+  <label class="pf rptnote"><span>Advisor's note (goes on the report)</span><textarea id="rptNote" rows="3" maxlength="700" placeholder="e.g. Corn is 48% sold. Plan: add 10% on a rally to $5.30 December futures and review puts before harvest.">${esc(f.reportNote||'')}</textarea></label>`}
+/* ---------- sales & contracts report: every contract this crop year, totals by crop ---------- */
+// figured once so the screen and the PDF always match
+function salesReportData(f){
+  const ord=c=>{const i=SALE_CROPS.findIndex(x=>key(x)===key(c));return i<0?99:i};
+  const list=f.sales.filter(s=>+s.year===+S.year).sort((a,b)=>ord(a.crop)-ord(b.crop)||key(a.crop).localeCompare(key(b.crop))||(a.date||'').localeCompare(b.date||''));
+  const pos=position(f,S.year),exp=pos.reduce((a,r)=>a+r.expected,0),sold=pos.reduce((a,r)=>a+r.sold,0);
+  const crops=summarize(list,'crop').map(r=>({...r,expected:(pos.find(x=>key(x.crop)===key(r.label))||{}).expected||0})).sort((a,b)=>ord(a.label)-ord(b.label));
+  const t=crops.reduce((a,r)=>({exp:a.exp+r.expected,c:a.c+r.contracted,p:a.p+r.priced,v:a.v+r.value,h:a.h+r.hedged,l:a.l+r.left}),{exp:0,c:0,p:0,v:0,h:0,l:0});
+  const rows=list.map(s=>{const fp=flatPrice(s),hedge=HEDGE_TYPES.includes(s.type),leg=openLeg(s),isDel=DELIVERABLE.includes(s.type),left=remaining(s);
+    let st='Open',c='';
+    if(hedge)st='Hedge';
+    else if(isAcc(s)&&accActive(s)){const a=accState(s);st=a.t;c=a.c==='warn'?'warn':''}
+    else if(s.type==='Cash sale'||isDel&&left<=0)st='Delivered';
+    else if(isDel&&s.deliveryEnd){const d=daysUntil(s.deliveryEnd);st=d<0?'Overdue':d<=14?`Due in ${d}d`:'Open';c=d<0?'bad':d<=14?'warn':''}
+    if(isDel&&left>0&&delivered(s)>0)st+=` · ${bu(left)} bu left`;
+    if(leg){st+=` · ${leg} open`;c=c||'warn'}
+    if(s.deferred&&CONTRACT_TYPES.includes(s.type))st+=' · deferred';
+    const price=fp!=null?usd(fp):hedge?(rolledFutures(s)!=null?usd(rolledFutures(s))+' fut':'—')
+      :num(s.price)!=null?usd(s.type==='HTA'?rolledFutures(s):num(s.price))+' fut':num(s.basis)!=null?fmtBasis(s.basis)+' basis':'—';
+    return{s,date:s.date,crop:s.crop,type:typeName(s)+(s.futuresMonth&&s.type!=='Cash sale'?` · ${s.futuresMonth}`:''),buyer:s.buyer||'—',no:s.contractNo||'',bu:qty(s),price,
+      value:fp!=null?fp*qty(s):null,by:isDel?s.deliveryEnd||null:null,st,c}});
+  return{f,list,rows,crops,t,exp,sold,n:list.length,open:list.filter(s=>remaining(s)>0).length,asOf:S.market&&S.market.asOf||null,made:TODAY}}
+const salesKpis=R=>[['Sold',R.exp?pct(R.sold/R.exp):'—',R.exp?`${bu(R.sold)} of ${bu(R.exp)} bu expected`:'no expected bushels yet'],
+  ['Contracted',bu(R.t.c)+' bu',`${R.n} contract${R.n===1?'':'s'}${R.t.c?` · ${pct(R.t.p/R.t.c)} priced`:''}`],
+  ['Priced value',kfmt(R.t.v),R.t.p?`${bu(R.t.p)} bu priced`:'nothing priced yet'],
+  ['Left to deliver',bu(R.t.l)+' bu',R.open?`${R.open} contract${R.open===1?'':'s'} open`:'all delivered']];
+const SALES_RPT_NOTE='Flat price = futures + basis. Contracts with an open futures or basis part count as contracted but not priced. Futures hedges protect price but are not sales.';
+function tabReportSales(f){
+  const R=salesReportData(f),T=R.t;
+  return rptHead(f,'Every contract for the crop year, for meetings or email. Add a note, then download the PDF.')+`<div class="paper">
+    <div class="rhead"><div><h3>${esc(f.name)}</h3><div class="muted">${[locLabel(f),f.broker?'Broker: '+f.broker:''].filter(Boolean).map(esc).join(' · ')}</div></div>
+      <div class="rr"><b>${S.year} sales & contracts</b><div class="muted">${fmtDate(R.made)}</div></div></div>
+    <div class="rkpi">${salesKpis(R).map(([l,v,s])=>`<div><span>${l}</span><b>${v}</b><em>${s}</em></div>`).join('')}</div>
+    ${R.n?`<h4>By crop</h4><table class="rtab"><thead><tr><th>Crop</th><th class="n">Expected bu</th><th class="n">Contracted</th><th class="n">Of expected</th><th class="n">Priced bu</th><th class="n">Avg price</th><th class="n">Value</th><th class="n">Hedged</th><th class="n">Left to deliver</th></tr></thead><tbody>
+      ${R.crops.map(r=>`<tr><td><b>${esc(r.label)}</b></td><td class="n">${r.expected?bu(r.expected):'—'}</td><td class="n">${bu(r.contracted)}</td><td class="n">${r.expected?pct(r.contracted/r.expected):'—'}</td><td class="n">${bu(r.priced)}</td>
+        <td class="n">${r.priced?usd(r.value/r.priced):'—'}</td><td class="n">${r.value?usd(r.value,0):'—'}</td><td class="n">${r.hedged?bu(r.hedged):'—'}</td><td class="n">${r.left?bu(r.left):'—'}</td></tr>`).join('')}
+      ${R.crops.length>1?`<tr class="tot"><td>Total</td><td class="n">${T.exp?bu(T.exp):'—'}</td><td class="n">${bu(T.c)}</td><td class="n">${T.exp?pct(T.c/T.exp):'—'}</td><td class="n">${bu(T.p)}</td><td class="n"></td><td class="n">${T.v?usd(T.v,0):'—'}</td><td class="n">${T.h?bu(T.h):'—'}</td><td class="n">${T.l?bu(T.l):'—'}</td></tr>`:''}</tbody></table>
+    <h4>Contracts · ${R.n}</h4><table class="rtab"><thead><tr><th>Date</th><th>Crop</th><th>Type</th><th>Buyer</th><th class="n">Bushels</th><th class="n">Price</th><th class="n">Value</th><th>Deliver by</th><th>Status</th></tr></thead><tbody>
+      ${R.rows.map(x=>`<tr><td style="white-space:nowrap">${fmtDate(x.date)}</td><td><b>${esc(x.crop)}</b></td><td>${esc(x.type)}</td><td>${esc(x.buyer)}${x.no?` <small>#${esc(x.no)}</small>`:''}</td><td class="n">${bu(x.bu)}</td>
+        <td class="n">${esc(x.price)}</td><td class="n">${x.value!=null?usd(x.value,0):'—'}</td><td style="white-space:nowrap">${x.by?fmtDate(x.by):'—'}</td><td class="${x.c==='bad'?'neg':x.c}">${esc(x.st)}</td></tr>`).join('')}</tbody></table>`
+      :`<p class="muted" style="margin-top:16px">No ${S.year} sales or contracts recorded yet.</p>`}
+    ${f.reportNote?`<h4>Advisor's note</h4><p class="rnote">${esc(f.reportNote)}</p>`:''}
+    <p class="rfoot">${SALES_RPT_NOTE}</p>
+    <p class="rdisc">${esc(DISCLAIMER)}</p>
+  </div></section>`}
+// PDF: letter size; the contract list runs onto more pages when needed, its header repeated on each
+async function salesPdf(f){
+  const note=$('#rptNote');if(note&&note.value.trim()!==(f.reportNote||'')){f.reportNote=note.value.trim();persist(S.current)}
+  const JsPDF=await loadJsPDF(),R=salesReportData(f),doc=new JsPDF({unit:'pt',format:'letter'});
+  const T=s=>String(s??'').replace(/−/g,'-').replace(/[   ]/g,' ').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...').replace(/ → /g,' to ');
+  const INK=[23,32,26],MUTED=[90,103,94],ACC=[29,106,77],BAD=[174,61,43],WARN=[168,106,18],LINE=[214,222,214],SOFT=[238,243,236];
+  const W=612,H=792,M=40,CW=W-2*M,BOTTOM=H-50;let y=48,page=1;
+  const txt=(s,x,yy,o={})=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(o.s||9);doc.setTextColor(...(o.c||INK));doc.text(T(s),x,yy,{align:o.a||'left',maxWidth:o.w})};
+  const rule=yy=>{doc.setDrawColor(...LINE);doc.setLineWidth(.6);doc.line(M,yy,W-M,yy)};
+  const footer=()=>{rule(H-34);txt(`${R.f.name} · ${S.year} sales & contracts · page ${page}`,M,H-22,{s:7,c:MUTED});txt('Grain Marketing Desk',W-M,H-22,{s:7,c:MUTED,a:'right'})};
+  const newPage=()=>{footer();doc.addPage();page++;y=48};
+  const need=h=>{if(y+h>BOTTOM)newPage()};
+  const h4=s=>{need(60);y+=20;txt(s.toUpperCase(),M,y,{b:1,s:8,c:MUTED});y+=6;rule(y);y+=12};
+  // one line per cell: text too long for its column is shortened with "..."
+  const fit=(v,w,b,s)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(s);let t=T(v);if(doc.getTextWidth(t)<=w)return t;
+    while(t.length>1&&doc.getTextWidth(t+'...')>w)t=t.slice(0,-1);return t.trimEnd()+'...'};
+  // cols [label, width, align]; cells are strings or {t, b(bold), c(color)}
+  const table=(cols,rows,s=8)=>{const head=()=>{let x=M;cols.forEach(([l,w,a])=>{txt(l,a==='right'?x+w-4:x+4,y,{b:1,s:7,c:MUTED,a:a||'left'});x+=w});y+=5;rule(y);y+=12};head();
+    rows.forEach(r=>{if(y+8>BOTTOM){newPage();head()}let x=M;
+      r.forEach((v,i)=>{const[ ,w,a]=cols[i],o=typeof v==='object'&&v?v:{t:v};txt(fit(o.t,w-8,o.b,s),a==='right'?x+w-4:x+4,y,{s,b:o.b,c:o.c,a:a||'left'});x+=w});y+=6;rule(y);y+=12})};
+  const sd=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—';
+  // header
+  txt(R.f.name,M,y,{b:1,s:18});txt(`${S.year} sales & contracts`,W-M,y-4,{b:1,s:10,a:'right'});
+  txt(fmtDate(R.made),W-M,y+9,{s:8,c:MUTED,a:'right'});
+  y+=15;txt([locLabel(R.f),R.f.broker?'Broker: '+R.f.broker:''].filter(Boolean).join(' · '),M,y,{s:9,c:MUTED});
+  y+=10;doc.setDrawColor(...ACC);doc.setLineWidth(1.5);doc.line(M,y,W-M,y);y+=12;
+  // headline numbers
+  const kw=(CW-3*8)/4;salesKpis(R).forEach(([l,v,s],i)=>{const x=M+i*(kw+8);doc.setFillColor(...SOFT);doc.roundedRect(x,y,kw,48,4,4,'F');
+    txt(l.toUpperCase(),x+9,y+13,{b:1,s:6.8,c:MUTED});txt(v,x+9,y+31,{b:1,s:15});txt(s,x+9,y+42,{s:7,c:MUTED,w:kw-14})});
+  y+=48;
+  if(R.n){const Tt=R.t;
+    h4('By crop');
+    table([['Crop',60],['Expected bu',64,'right'],['Contracted',64,'right'],['Of expected',52,'right'],['Priced bu',56,'right'],['Avg price',54,'right'],['Value',64,'right'],['Hedged',56,'right'],['Left to deliver',62,'right']],
+      [...R.crops.map(r=>[{t:r.label,b:1},r.expected?bu(r.expected):'—',bu(r.contracted),r.expected?pct(r.contracted/r.expected):'—',bu(r.priced),r.priced?usd(r.value/r.priced):'—',r.value?usd(r.value,0):'—',r.hedged?bu(r.hedged):'—',r.left?bu(r.left):'—']),
+       ...(R.crops.length>1?[[{t:'Total',b:1},{t:Tt.exp?bu(Tt.exp):'—',b:1},{t:bu(Tt.c),b:1},{t:Tt.exp?pct(Tt.c/Tt.exp):'—',b:1},{t:bu(Tt.p),b:1},'',{t:Tt.v?usd(Tt.v,0):'—',b:1},{t:Tt.h?bu(Tt.h):'—',b:1},{t:Tt.l?bu(Tt.l):'—',b:1}]]:[])]);
+    h4(`Contracts · ${R.n}`);
+    table([['Date',46],['Crop',46],['Type',68],['Buyer',92],['Bushels',50,'right'],['Price',58,'right'],['Value',58,'right'],['Deliver by',46],['Status',68]],
+      R.rows.map(x=>[sd(x.date),{t:x.crop,b:1},x.type,x.buyer+(x.no?` #${x.no}`:''),bu(x.bu),x.price,x.value!=null?usd(x.value,0):'—',sd(x.by),{t:x.st,c:x.c==='bad'?BAD:x.c==='warn'?WARN:INK}]))}
+  else{y+=20;txt(`No ${S.year} sales or contracts recorded yet.`,M,y,{c:MUTED});y+=12}
+  if(R.f.reportNote){h4("Advisor's note");doc.setFont('helvetica','normal');doc.setFontSize(9.5);const lines=doc.splitTextToSize(T(R.f.reportNote),CW).slice(0,10);
+    need(12*lines.length);doc.setTextColor(...INK);doc.text(lines,M,y);y+=12*lines.length}
+  // the flat-price note and JSA's disclaimer once, after the last section
+  doc.setFont('helvetica','normal');doc.setFontSize(6.3);const dl=doc.splitTextToSize(T(DISCLAIMER),CW);
+  y+=14;need(dl.length*7.3+28);rule(y);y+=10;txt(SALES_RPT_NOTE,M,y,{s:7,c:MUTED,w:CW});y+=10;
+  doc.setFont('helvetica','normal');doc.setFontSize(6.3);doc.setTextColor(...MUTED);doc.text(dl,M,y,{lineHeightFactor:1.16});
+  footer();
+  return doc.output('blob')}
 function tabReport(f){
+  if(rptType()==='sales')return tabReportSales(f);
   const R=reportData(f),c=R.crops;
   const kpis=[['Expected bushels',R.exp?bu(R.exp):'—',`${c.length} crop${c.length===1?'':'s'}${R.acres?` · ${bu(R.acres)} acres`:''}`],
     ['Sold',R.exp?pct(R.sold/R.exp):'—',R.exp?`${pct((R.sold+R.hed)/R.exp)} with hedges`:''],
     ['Est. profit',kfmt(R.profit),R.ppa!=null?`${usd(R.ppa,0)}/ac at today's market`:'needs futures and basis'],
     ['Revenue guarantee',R.guar?kfmt(R.guar):'—','crop insurance']];
-  return`<section><div class="sechead"><div><h2>Client report</h2><div class="muted" style="font-size:.82rem;margin-top:2px">One page for meetings or email. Add a note, then download the PDF.</div></div><div class="sp"></div>
-    ${S.downloads?`<button class="primary" data-act="rptpdf"${S.rptBusy?' disabled':''}>${S.rptBusy?'Making PDF…':'Download PDF'}</button>`:'<span class="muted" style="font-size:.82rem">PDF download isn\'t available in this view</span>'}</div>
-  <label class="pf rptnote"><span>Advisor's note (goes on the report)</span><textarea id="rptNote" rows="3" maxlength="700" placeholder="e.g. Corn is 48% sold. Plan: add 10% on a rally to $5.30 December futures and review puts before harvest.">${esc(f.reportNote||'')}</textarea></label>
+  return rptHead(f,'One page for meetings or email. Add a note, then download the PDF.')+`
   <div class="paper">
     <div class="rhead"><div><h3>${esc(f.name)}</h3><div class="muted">${[locLabel(f),f.broker?'Broker: '+f.broker:''].filter(Boolean).map(esc).join(' · ')}</div></div>
       <div class="rr"><b>${S.year} crop marketing report</b><div class="muted">${fmtDate(R.made)}${R.asOf?` · prices as of ${fmtDate(R.asOf)}`:''}</div></div></div>
@@ -2938,8 +3041,8 @@ async function reportPdf(f){
   doc.setFont('helvetica','normal');doc.setFontSize(6.3);doc.setTextColor(...MUTED);doc.text(dl,M,top+20,{lineHeightFactor:1.16});
   return doc.output('blob')}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="rptpdf"]');if(!t)return;const f=S.farms[S.current];if(!f||!S.downloads||S.rptBusy)return;
-  S.rptBusy=true;render();
-  reportPdf(f).then(blob=>S.downloads.save({filename:`${f.name.replace(/[^\w\- ]+/g,'').trim()||'Farm'} ${S.year} report ${TODAY}.pdf`,data:blob}))
+  S.rptBusy=true;render();const sales=rptType()==='sales';
+  (sales?salesPdf:reportPdf)(f).then(blob=>S.downloads.save({filename:`${f.name.replace(/[^\w\- ]+/g,'').trim()||'Farm'} ${S.year} ${sales?'sales and contracts':'report'} ${TODAY}.pdf`,data:blob}))
     .then(()=>toast('Report saved'))
     .catch(err=>{if(err&&err.code==='declined')return;toast(err&&err.message==='load'?"Couldn't load the PDF maker. Check your connection and try again.":"Couldn't make the PDF here.",true)})
     .finally(()=>{S.rptBusy=false;render()})});

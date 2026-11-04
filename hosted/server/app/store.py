@@ -223,10 +223,12 @@ _code_tries = {}
 
 
 def new_login_code(uid):
-    """6-digit sign-in code (the Streamlit version; reuses login_tokens). Any earlier one for this person is voided."""
+    """6-digit sign-in code (the Streamlit version; reuses login_tokens). This person's two newest unexpired codes keep working."""
     code = f'{secrets.randbelow(10**6):06d}'
     with tx() as c:
-        c.execute('DELETE FROM login_tokens WHERE user_id=? OR expires<?', (uid, time.time()))
+        c.execute('DELETE FROM login_tokens WHERE expires<?', (time.time(),))
+        c.execute('DELETE FROM login_tokens WHERE user_id=? AND hash NOT IN '
+                  '(SELECT hash FROM login_tokens WHERE user_id=? ORDER BY expires DESC LIMIT 2)', (uid, uid))
         c.execute('INSERT INTO login_tokens(hash,user_id,expires) VALUES(?,?,?)',
                   (_hash(uid + ':' + code), uid, time.time() + config.LOGIN_CODE_MINUTES * 60))
     _code_tries[uid] = 0
