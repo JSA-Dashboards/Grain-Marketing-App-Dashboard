@@ -738,6 +738,22 @@ const rollSpread=s=>(s.rolls||[]).reduce((a,r)=>a+n0(r.spread),0);
 const rollFees=s=>(s.rolls||[]).reduce((a,r)=>a+n0(r.fee),0);
 // the futures price after all rolls and their fees (null until a futures price is set)
 const rolledFutures=s=>num(s.price)==null?null:num(s.price)+rollSpread(s)-rollFees(s);
+// the next contract month a rollable contract can move to ("Dec 26" -> "Mar 27" for corn), with a suggested
+// spread from today's futures (new month minus current month) when both prices are in the daily sync
+const CROP_MONTHS={corn:'HKNUZ',soybeans:'FHKNQUX',wheat:'HKNUZ'};
+function nextRoll(s){
+  const codes=CROP_MONTHS[key(s.crop)],m=/^([a-z]{3})[a-z]*\.?\s+'?(\d{2})$/i.exec(String(s.futuresMonth||'').trim());
+  if(!ROLLABLE.includes(s.type)||!codes||!m)return null;
+  const mi=MNAME.findIndex(x=>x.toLowerCase()===m[1].toLowerCase());if(mi<0)return null;
+  const later=[...codes].map(c=>MCODE.indexOf(c)).find(i=>i>mi),ni=later??MCODE.indexOf(codes[0]),yy=+m[2]+(later==null?1:0);
+  const sym=(i,y)=>ROOT[key(s.crop)]+MCODE[i]+String(y).padStart(2,'0'),p=(S.market&&S.market.prices)||{};
+  const a=p[sym(mi,+m[2])],b=p[sym(ni,yy)];
+  return{from:`${MNAME[mi]} ${m[2]}`,to:`${MNAME[ni]} ${String(yy).padStart(2,'0')}`,spread:a!=null&&b!=null?Math.round((b-a)*10000)/10000:null}}
+// a contract that can still be rolled: HTAs not yet delivered, and futures hedges
+const canRoll=s=>!!nextRoll(s)&&(HEDGE_TYPES.includes(s.type)||remaining(s)>0);
+// the roll form, filled in for the next month; used from the contract list and the contract itself
+function rollVals(s){const nx=nextRoll(s);return{date:TODAY,from:s.futuresMonth||'',...(nx?{to:nx.to,spread:nx.spread??''}:{})}}
+function rollNote(s){const nx=nextRoll(s);return nx&&nx.spread!=null?`<p class="muted" style="font-size:.82rem;margin:6px 0 0">Spread filled in from today's futures (${nx.to} minus ${nx.from}). Change it to the spread you actually got, and add any roll fee.</p>`:''}
 function flatPrice(s){const p=num(s.price),b=num(s.basis);
   if(s.type==='Cash sale'||s.type==='Forward contract')return p;
   if(s.type==='HTA')return(p!=null&&b!=null)?rolledFutures(s)+b:null;
@@ -1118,7 +1134,7 @@ $('#dlgform').addEventListener('click',e=>{
     onSave:live((s,rec)=>{s.loads=[...(s.loads||[]),rec];s.status=remaining(s)<=0?'Delivered':'Open'})});
   if(act==='load-del'){const id=a.dataset.id;if(detail.confirmLoad!==id){detail.confirmLoad=id;drawSale();return}
     s.loads=s.loads.filter(l=>l.id!==id);s.status=remaining(s)<=0?'Delivered':'Open';detail.confirmLoad=null;persist(S.current);drawSale()}
-  if(act==='roll-add')openForm('roll',null,{title:`Record a roll · ${s.crop} ${typeName(s)}`,vals:{date:TODAY,from:s.futuresMonth||''},back,
+  if(act==='roll-add')openForm('roll',null,{title:`Record a roll · ${s.crop} ${typeName(s)}`,vals:rollVals(s),note:rollNote(s),back,
     onSave:live((s,rec)=>{s.rolls=[...(s.rolls||[]),rec];if(rec.to)s.futuresMonth=rec.to})});
   if(act==='roll-del'){const id=a.dataset.id;if(detail.confirmRoll!==id){detail.confirmRoll=id;drawSale();return}
     const r=(s.rolls||[]).find(x=>x.id===id);s.rolls=(s.rolls||[]).filter(x=>x.id!==id);
@@ -1612,6 +1628,12 @@ function delivMonths(s){
 // the Delivered checkbox on a contract row: ticks the contract delivered (or reopens it) without opening it.
 // Caught on the way down so the row's own click (which opens the contract) never sees it.
 document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.sdel'))e.stopPropagation()},true);
+// Roll → next month on a contract row: opens the roll form filled in, without opening the contract itself
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-rollnext]');if(!t||t.closest('dialog'))return;e.stopPropagation();
+  const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===t.dataset.rollnext);if(!s||!canRoll(s))return;
+  openForm('roll',null,{title:`Roll to ${nextRoll(s).to} · ${s.crop} ${typeName(s)}`,vals:rollVals(s),note:rollNote(s),
+    onSave:rec=>{const cur=S.farms[S.current]&&S.farms[S.current].sales.find(x=>x.id===s.id);if(!cur){toast('That contract was removed.',true);return}
+      cur.rolls=[...(cur.rolls||[]),rec];if(rec.to)cur.futuresMonth=rec.to;persist(S.current)}})},true);
 document.addEventListener('keydown',e=>{if(e.target.matches&&e.target.matches('[data-deliver],[data-defer]')&&e.key==='Enter')e.stopPropagation()},true);
 // the Deferred checkbox: marks the contract's payment as deferred; the payment date is set in the contract itself
 document.addEventListener('change',e=>{const id=e.target.dataset&&e.target.dataset.defer;if(!id)return;
@@ -1668,6 +1690,7 @@ function tabSales(f){
       <div class="smain"><div class="stitle"><b>${esc(s.crop)} · ${esc(typeName(s))}</b>${hasSource(s)?` <span class="tag ${fromHarvest(s)?'harvest':'bin'}">${sourceLabel(s)}</span>`:''}</div><span class="ssub">${sub}</span>
         <span class="spills">${saleStatus(s)}${isDel&&left>0&&s.trackLoads?`<span class="muted" style="font-size:.76rem">${bu(left)} bu left</span>`:''}</span></div>
       <div class="sright"><b>${bu(qty(s))} bu</b><span>${fp!=null?usd(fp):HEDGE_TYPES.includes(s.type)?`hedge @ ${usd(rolledFutures(s))}`:'price open'}</span>
+        ${canRoll(s)?`<span class="schecks"><button class="small" data-rollnext="${s.id}" title="Move this contract to the next futures month">Roll → ${esc(nextRoll(s).to)}</button></span>`:''}
         ${isDel&&!s.trackLoads||CONTRACT_TYPES.includes(s.type)?`<span class="schecks">${isDel&&!s.trackLoads?`<label class="sdel" title="Mark this contract delivered without opening it"><input type="checkbox" data-deliver="${s.id}" ${s.status==='Delivered'?'checked':''}> Delivered</label>`:''}${CONTRACT_TYPES.includes(s.type)?`<label class="sdel" title="Payment deferred to a later date (set the date in the contract)"><input type="checkbox" data-defer="${s.id}" ${s.deferred?'checked':''}> Deferred</label>`:''}</span>`:''}</div></li>`};
   return`<section><div class="sechead"><div><h2>${S.year} sales & contracts</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${all.length} contract${all.length===1?'':'s'}${filtered?` · ${list.length} shown`:''}</div></div><div class="sp"></div>
     ${S.mode==='live'?'<button class="small" data-act="scan">Scan a contract</button>':''}<button class="primary" data-add="sale">+ Add contract</button></div>
