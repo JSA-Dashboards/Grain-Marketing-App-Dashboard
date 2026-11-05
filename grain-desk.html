@@ -2697,19 +2697,21 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.class
   if(t.dataset.s==='price'){S.arcMap.price[S.arcMap.crop]=+t.value;$('#arc_p_o').textContent=usd(+t.value)}else{S.arcMap.yld=+t.value;$('#arc_y_o').textContent=t.value+'% of benchmark'}
   const d=S.arcData&&S.arcData[S.arcMap.st],b=$('#arcbody');if(b&&d&&typeof d==='object')b.innerHTML=arcBody(f,d,arcOpts(f))});
 /* ---------- ARC or PLC? This farm's base acres and yields across season prices and county yields ---------- */
-// the farm's county from FSA's numbers behind the ARC / PLC map, when the farm is in a mapped state
+// the county being compared: one picked in the calculator, else the farm's own; numbers from FSA's documents behind the ARC / PLC map
 function countyFsa(f,crop){
-  const st=(ARC_STATES.find(s=>s[1]===f.state)||[])[0];if(!st||!f.county)return null;
-  const D=S.arcData||(S.arcData={});
-  if(D[st]===undefined){D[st]=null;(S.db?S.db.doc('market/arcplc_'+st).get():Promise.reject()).then(x=>{D[st]=x.exists?x.data():'none';if(S.insTop==='elect')render()}).catch(()=>{D[st]='err'})}
-  const d=D[st];if(!d||typeof d!=='object')return null;
-  const code=Object.keys(d.c).find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))),c=code&&d.c[code],v=c&&c[crop];if(!v)return null;
-  const b26=v.b26||{},bmY=b26.N??b26.A??b26.I??(v.N||v.A||v.I||[])[0]??null;
-  return{name:c.n,bmY,bmP:(d.price[crop]||{}).bmP26??null,plcY:(c.plcY||{})[crop]??null,src:v.b26?'FSA 2026 benchmark':'FSA 2025 benchmark'}}
+  const e=S.elect,fst=(ARC_STATES.find(s=>s[1]===f.state)||[])[0],st=e.st||fst||ARC_STATES[0][0],D=S.arcData||(S.arcData={});
+  if(D[st]===undefined){D[st]=null;(S.db?S.db.doc('market/arcplc_'+st).get():Promise.reject()).then(x=>{D[st]=x.exists?x.data():'none';if(S.insTop==='elect')render()}).catch(()=>{D[st]='err';if(S.insTop==='elect')render()})}
+  const d=D[st];if(!d||typeof d!=='object')return{st,d:null,status:d};
+  const farmCode=st===fst&&f.county?Object.keys(d.c).find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))):null;
+  const code=e.code&&d.c[e.code]?e.code:farmCode,c=code&&d.c[code],v=c&&c[crop];
+  if(!v)return{st,d,code,farm:!!code&&code===farmCode,name:c?c.n:null};
+  const prac=e.prac||'N',b26=v.b26||{},row=v[prac]||v.A||v.N||v.I||[];
+  return{st,d,code,farm:code===farmCode,name:c.n,prac:v[prac]?prac:v.A?'A':v.N?'N':'I',bmY:b26[prac]??b26.A??b26.N??b26.I??row[0]??null,act25:row[1]??null,
+    bmP:(d.price[crop]||{}).bmP26??null,plcY:(c.plcY||{})[crop]??null,src:b26[prac]!=null||b26.A!=null?'FSA 2026 benchmark':'FSA 2025 benchmark'}}
 // what goes into the comparison: numbers typed for this crop (kept on the crop plan, the same boxes as By crop → ARC / PLC),
 // otherwise the county's FSA numbers and the program prices
 function electOpts(f){
-  const e=S.elect||(S.elect={crop:'corn',yld:100,vals:{}}),k=e.crop,plan=f.crops.find(c=>+c.year===+S.year&&key(c.crop)===k),cty=countyFsa(f,k);
+  const e=S.elect||(S.elect={crop:'corn',yld:100,vals:{},st:'',code:'',prac:'N'}),k=e.crop,plan=f.crops.find(c=>+c.year===+S.year&&key(c.crop)===k),cty=countyFsa(f,k);
   const src=plan||e.vals[k]||(e.vals[k]={}),pick=(n,dflt)=>num(src[n])??dflt??null,fut=plan?futFor(plan).price:null;
   const d={plcYield:cty&&cty.plcY,arcBmYield:cty&&cty.bmY,arcBmPrice:(cty&&cty.bmP)??ARC_BMP[k]??FSA_ERP[k],refPrice:FSA_ERP[k],loanRate:FSA_LOAN[k],
     myaPrice:ARC26.price[k]??(fut!=null?fut+n0(plan.estBasis):null)};
@@ -2721,14 +2723,24 @@ function fsaAt(o,price,yPct){const pr=Math.max(price,n0(o.loan)),bm=o.bmY!=null?
 function insElect(f){
   const o=electOpts(f),k=o.k,nm={corn:'Corn',soybeans:'Soybeans',wheat:'Wheat'}[k];
   const fld=(n,label,hint)=>`<label class="pf"><span>${label}</span><input class="einp" id="el_${k}_${n}" data-k="${n}" type="number" step="any" inputmode="decimal" value="${o.src[n]??''}" placeholder="${o.d[n]!=null?(+o.d[n]).toFixed(2):''}">${hint?`<span class="hint">${hint}</span>`:''}</label>`;
-  const ctyTxt=o.cty?`${esc(o.cty.name)} County, ${o.cty.src}`:f.county&&ARC_STATES.some(s=>s[1]===f.state)?'loading the county’s numbers…':'from your FSA office (farm’s county isn’t on the map)';
+  const c=o.cty,ctyTxt=c.bmY!=null?`${esc(c.name)} County, ${c.src}`:c.d?'pick a county above, or type it from the FSA office':'loading the county’s numbers…';
+  const stName=(ARC_STATES.find(s=>s[0]===c.st)||[])[2]||'';
+  const picker=`<div class="clab">County</div>
+    <div class="chips" style="margin-bottom:8px">${ARC_STATES.map(([fp,ab,nm])=>`<button class="chip sm" data-elst="${fp}" aria-pressed="${fp===c.st}">${nm}${ab===f.state?' · this farm':''}</button>`).join('')}
+      <span class="arcsep"></span>${[['N','Non-irrigated'],['I','Irrigated']].map(([p,l])=>`<button class="chip sm" data-elprac="${p}" aria-pressed="${(S.elect.prac||'N')===p}">${l}</button>`).join('')}</div>
+    ${c.d?`<select id="el_cty" style="width:auto;max-width:100%"><option value="">Choose a ${esc(stName)} county</option>${Object.keys(c.d.c).sort((a,b)=>c.d.c[a].n.localeCompare(c.d.c[b].n)).map(cd=>`<option value="${cd}" ${cd===c.code?'selected':''}>${esc(c.d.c[cd].n)}${c.farm&&cd===c.code?' (this farm)':''}</option>`).join('')}</select>`
+      :`<p class="muted" style="margin:0">${c.status==='none'?`County numbers for ${esc(stName)} aren’t loaded yet.`:c.status==='err'?'Couldn’t load the county numbers. Check your connection and open this tab again.':'Loading the county numbers…'}</p>`}
+    ${c.bmY!=null?`<div class="mkt" style="margin:10px 0 16px"><div><span>${S.year} benchmark yield</span><b>${c.bmY.toFixed(1)} bu</b><span>${esc(c.src)}</span></div>
+      <div><span>2025 county yield</span><b>${c.act25!=null?c.act25.toFixed(1)+' bu':'—'}</b><span>${c.act25!=null?`${(c.act25/c.bmY*100).toFixed(0)}% of benchmark · <button class="link" data-act="eluseact" style="font-size:inherit">Use as this year’s</button>`:'not published'}</span></div>
+      <div><span>County average PLC yield</span><b>${c.plcY!=null?c.plcY.toFixed(1)+' bu':'—'}</b><span>farms’ own PLC yields vary</span></div></div>`
+      :c.name?`<p class="muted" style="margin:10px 0 16px">${esc(c.name)} County has no ${esc(nm.toLowerCase())} numbers for this practice.</p>`:'<div style="margin-bottom:16px"></div>'}`;
   return`<p class="muted" style="font-size:.85rem;margin:0 0 14px;max-width:85ch">Which program is likely to pay more on this farm’s base acres for the ${S.year} crop. The election is made for each crop on each farm${S.year===2026?' and is due December 11, 2026':''}. Blank boxes use the number shown in gray.</p>
   <div class="chips">${[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([c,l])=>`<button class="chip" data-elcrop="${c}" aria-pressed="${c===k}">${l}</button>`).join('')}</div>
-  <div class="panel calc">
+  <div class="panel calc">${picker}
     <div class="pgrid">${fld('baseAcres','Base acres','FSA base acres, not planted')}${fld('plcYield','PLC yield (bu/ac)',o.cty&&o.cty.plcY!=null&&o.src.plcYield==null?'county average; use the farm’s own':'from the farm’s FSA-156EZ')}
       ${fld('myaPrice','Season-average price you expect ($/bu)',ARC26.price[k]!=null?'USDA October forecast':'from futures + basis')}${fld('arcBmYield','County benchmark yield (bu/ac)',ctyTxt)}</div>
     <label class="pf" style="margin-top:14px"><span>County yield this year · <b id="el_yld_o" style="text-transform:none;letter-spacing:0;color:var(--ink)">${o.yld}% of benchmark</b></span>
-      <input class="eyld" type="range" min="60" max="130" step="5" value="${o.yld}"></label>
+      <input class="eyld" type="range" min="50" max="130" step="1" value="${o.yld}"></label>
     <details class="ccmore" style="margin-top:12px"><summary>Program prices</summary><div class="pgrid" style="margin-top:10px">${fld('refPrice','Effective reference price ($/bu)')}${fld('arcBmPrice','ARC benchmark price ($/bu)')}${fld('loanRate','Loan rate ($/bu)')}</div></details>
     ${o.plan?`<div class="clab" style="margin-top:18px">${nm} election on file</div><div class="chips" style="margin:0">${[['PLC','PLC'],['ARC-CO','ARC-CO'],['','Not elected']].map(([v,l])=>`<button class="chip sm" data-elelect="${v}" aria-pressed="${(o.plan.fsaElect||'')===v}">${l}</button>`).join('')}</div>`:''}
     <div id="electOut" style="margin-top:20px">${electOut(f)}</div></div>`}
@@ -2761,8 +2773,15 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!S.elect
   const el=$('#electOut');if(el)el.innerHTML=electOut(f)});
 // typed numbers save to the crop plan when you leave the box
 document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('einp')&&S.electDirty){S.electDirty=false;persist(S.current)}});
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-elcrop],[data-elelect]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+// picking a county: its benchmark yield replaces one typed earlier, so the comparison follows the county shown
+function electPickCounty(f,st,code){const o=electOpts(f);S.elect.st=st;S.elect.code=code;
+  if(o.src.arcBmYield!=null){delete o.src.arcBmYield;if(o.plan){persist(S.current);return}}render()}
+document.addEventListener('change',e=>{if(e.target.id!=='el_cty'||!S.elect)return;const f=S.farms[S.current];if(f)electPickCounty(f,S.elect.st||countyFsa(f,S.elect.crop).st,e.target.value)});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-elcrop],[data-elelect],[data-elst],[data-elprac],[data-act="eluseact"]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
   if(t.dataset.elcrop){S.elect.crop=t.dataset.elcrop;render();return}
+  if(t.dataset.elst){electPickCounty(f,t.dataset.elst,'');return}
+  if(t.dataset.elprac){S.elect.prac=t.dataset.elprac;render();return}
+  if(t.dataset.act==='eluseact'){const c=countyFsa(f,S.elect.crop);if(c.act25!=null&&c.bmY)S.elect.yld=Math.round(c.act25/c.bmY*100);render();return}
   const o=electOpts(f);if(!o.plan)return;if(t.dataset.elelect)o.plan.fsaElect=t.dataset.elelect;else delete o.plan.fsaElect;persist(S.current)});
 // Descriptions: plain-language reference, grouped; each group opens on its own
 const INS_LEARN=[
