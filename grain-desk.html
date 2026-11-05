@@ -2717,6 +2717,8 @@ function electOpts(f){
     myaPrice:ARC26.price[k]??(fut!=null?fut+n0(plan.estBasis):null)};
   return{k,plan,cty,src,d,ba:pick('baseAcres'),plcY:pick('plcYield',d.plcYield),bmY:pick('arcBmYield',d.arcBmYield),bmP:pick('arcBmPrice',d.arcBmPrice),
     ref:pick('refPrice',d.refPrice),loan:pick('loanRate',d.loanRate),price:pick('myaPrice',d.myaPrice),yld:e.yld}}
+// the county-yield slider's label: the percent and the bushels it means
+const electYldLabel=o=>`${o.yld}% of benchmark${o.bmY!=null?` · ${(o.bmY*o.yld/100).toFixed(1)} bu/ac`:''}`;
 // each program per base acre at a season price and a county yield (% of benchmark); both pay on 85% of base acres
 function fsaAt(o,price,yPct){const pr=Math.max(price,n0(o.loan)),bm=o.bmY!=null?o.bmY*o.bmP:null;
   return{plc:o.plcY!=null&&o.ref!=null?Math.max(0,o.ref-pr)*o.plcY*.85:null,arc:bm!=null?Math.min(.12*bm,Math.max(0,.9*bm-o.bmY*yPct/100*pr))*.85:null}}
@@ -2739,7 +2741,7 @@ function insElect(f){
   <div class="panel calc">${picker}
     <div class="pgrid">${fld('baseAcres','Base acres','FSA base acres, not planted')}${fld('plcYield','PLC yield (bu/ac)',o.cty&&o.cty.plcY!=null&&o.src.plcYield==null?'county average; use the farm’s own':'from the farm’s FSA-156EZ')}
       ${fld('myaPrice','Season-average price you expect ($/bu)',ARC26.price[k]!=null?'USDA October forecast':'from futures + basis')}${fld('arcBmYield','County benchmark yield (bu/ac)',ctyTxt)}</div>
-    <label class="pf" style="margin-top:14px"><span>County yield this year · <b id="el_yld_o" style="text-transform:none;letter-spacing:0;color:var(--ink)">${o.yld}% of benchmark</b></span>
+    <label class="pf" style="margin-top:14px"><span>County yield this year · <b id="el_yld_o" style="text-transform:none;letter-spacing:0;color:var(--ink)">${electYldLabel(o)}</b></span>
       <input class="eyld" type="range" min="50" max="130" step="1" value="${o.yld}"></label>
     <details class="ccmore" style="margin-top:12px"><summary>Program prices</summary><div class="pgrid" style="margin-top:10px">${fld('refPrice','Effective reference price ($/bu)')}${fld('arcBmPrice','ARC benchmark price ($/bu)')}${fld('loanRate','Loan rate ($/bu)')}</div></details>
     ${o.plan?`<div class="clab" style="margin-top:18px">${nm} election on file</div><div class="chips" style="margin:0">${[['PLC','PLC'],['ARC-CO','ARC-CO'],['','Not elected']].map(([v,l])=>`<button class="chip sm" data-elelect="${v}" aria-pressed="${(o.plan.fsaElect||'')===v}">${l}</button>`).join('')}</div>`:''}
@@ -2764,12 +2766,13 @@ function electOut(f){
       <div><span>Across the table below</span><b>${win.PLC+win.ARC+win.even+win.none?`PLC ${win.PLC} · ARC ${win.ARC}`:'—'}</b><em>${[win.even?`${win.even} even`:'',win.none?`${win.none} neither pays`:''].filter(Boolean).join(' · ')}${win.even||win.none?' · ':''}of ${prices.length*ylds.length} outcomes</em></div></div>
     <p class="muted" style="font-size:.82rem;margin:12px 0 0">${plcStart!=null?`PLC pays when the season-average price falls below <b>${usd(plcStart)}</b>.`:''} ${arcStart!=null?`At a county yield of ${o.yld}% of benchmark, ARC-CO starts paying below <b>${usd(arcStart)}</b> and reaches its cap (12% of benchmark revenue) below <b>${usd(.78*o.bmP/(o.yld/100))}</b>.`:''}</p>
     <div class="clab" style="margin-top:20px">Which pays more · season-average price ↓ / county yield →</div>
-    <div class="tablewrap"><table class="heat"><thead><tr><th>Price</th>${ylds.map(y=>`<th class="n">${y}%${y===100?'<div class="muted" style="font-weight:400">normal</div>':''}</th>`).join('')}</tr></thead><tbody>${grid}</tbody></table></div>
+    <div class="tablewrap"><table class="heat"><thead><tr><th>Price</th>${ylds.map(y=>`<th class="n">${y}%${o.bmY!=null?`<div class="muted" style="font-weight:400">${(o.bmY*y/100).toFixed(0)} bu${y===100?' · normal':''}</div>`:y===100?'<div class="muted" style="font-weight:400">normal</div>':''}</th>`).join('')}</tr></thead><tbody>${grid}</tbody></table></div>
     <p class="muted" style="font-size:.76rem;margin:10px 0 0;max-width:90ch">Per base acre, after the 85% payment acres; before sequestration and payment limits. PLC = (effective reference price − the higher of the season price and loan rate) × PLC yield. ARC-CO = 90% of benchmark revenue (benchmark yield × benchmark price) minus county yield × season price, capped at 12% of benchmark revenue. PLC protects against low prices only; ARC-CO also pays when the county’s yield is short. Each outcome in the table counts the same, so weigh them by how likely you think low prices or a short county crop are. Planning estimates, not program terms; the FSA office has the official numbers.</p>`}
 document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!S.elect)return;const f=S.farms[S.current];if(!f)return;
-  if(t.classList.contains('eyld')){S.elect.yld=+t.value;$('#el_yld_o').textContent=t.value+'% of benchmark'}
+  if(t.classList.contains('eyld'))S.elect.yld=+t.value;
   else if(t.classList.contains('einp')){const o=electOpts(f),v=num(t.value);if(v==null)delete o.src[t.dataset.k];else o.src[t.dataset.k]=v;if(o.plan)S.electDirty=true}
   else return;
+  const lb=$('#el_yld_o');if(lb)lb.textContent=electYldLabel(electOpts(f));
   const el=$('#electOut');if(el)el.innerHTML=electOut(f)});
 // typed numbers save to the crop plan when you leave the box
 document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('einp')&&S.electDirty){S.electDirty=false;persist(S.current)}});
