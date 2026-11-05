@@ -2736,7 +2736,7 @@ function countyFsa(f,crop){
   const code=e.code&&d.c[e.code]?e.code:farmCode,c=code&&d.c[code],v=c&&c[crop];
   if(!v)return{st,d,code,farm:!!code&&code===farmCode,name:c?c.n:null};
   const prac=e.prac||'N',b26=v.b26||{},row=v[prac]||v.A||v.N||v.I||[],yc=Y[st]&&typeof Y[st]==='object'&&Y[st].c[code]&&Y[st].c[code][crop];
-  return{st,d,code,farm:code===farmCode,name:c.n,yrs:yc?yc[prac]||yc.A||yc.N||yc.I||null:null,prac:v[prac]?prac:v.A?'A':v.N?'N':'I',bmY:b26[prac]??b26.A??b26.N??b26.I??row[0]??null,act25:row[1]??null,
+  return{st,d,code,farm:code===farmCode,name:c.n,yrs:yc?yc[prac]||yc.A||yc.N||yc.I||null:null,yrsEst:yc&&yc.est||'',prac:v[prac]?prac:v.A?'A':v.N?'N':'I',bmY:b26[prac]??b26.A??b26.N??b26.I??row[0]??null,act25:row[1]??null,
     bmP:(d.price[crop]||{}).bmP26??null,plcY:(c.plcY||{})[crop]??null,src:b26[prac]!=null||b26.A!=null?'FSA 2026 benchmark':'FSA 2025 benchmark'}}
 // what goes into the comparison: numbers typed for this crop (kept on the crop plan, the same boxes as By crop → ARC / PLC),
 // otherwise the county's FSA numbers and the program prices
@@ -2753,7 +2753,7 @@ function electOpts(f){
   const full=HIST_YEARS.every(y=>hist[y]!=null),anyTyped=HIST_YEARS.some(y=>num(typed[y])!=null);
   // all five years known: benchmark = their Olympic average, each year at least the plug
   const bmY=full?olympicAvg(HIST_YEARS.map(y=>Math.max(hist[y],plug??0))):pick('arcBmYield',d.arcBmYield);
-  const bmSrc=full?(anyTyped?'County yields above, some typed (5-year Olympic average)':`FSA 2020–2024 county yields · ${cty.name} County (5-year Olympic average)`):num(src.arcBmYield)!=null?'Typed benchmark yield':cty.bmY!=null?`${cty.src.replace('FSA','FSA program year').replace(' benchmark','')} · ${cty.name} County`:'';
+  const bmSrc=full?(anyTyped?'County yields above, some typed (5-year Olympic average)':cty.yrsEst?`Estimated 2020–2024 county yields · ${cty.name} County (5-year Olympic average)`:`FSA 2020–2024 county yields · ${cty.name} County (5-year Olympic average)`):num(src.arcBmYield)!=null?'Typed benchmark yield':cty.bmY!=null?`${cty.src.replace('FSA','FSA program year').replace(' benchmark','')} · ${cty.name} County`:'';
   const cy=num(e.cy[hkey])??(bmY!=null?bmY*e.yld/100:null);
   return{k,plan,cty,src,d,hkey,hist,typed,plug,full,bmSrc,cy,ba:pick('baseAcres'),plcY:pick('plcYield',d.plcYield),bmY,bmP:pick('arcBmPrice',d.arcBmPrice),
     ref:pick('refPrice',d.refPrice),loan:pick('loanRate',d.loanRate),price:pick('myaPrice',d.myaPrice)}}
@@ -2790,6 +2790,7 @@ function insElect(f){
     <div class="elmeta"><label>80% of FSA T-yield ${`<input class="eplug" id="el_plug" type="number" step="any" inputmode="decimal" value="${o.plug??''}">`}</label>
       <span><span class="muted">ARC yield source:</span> <b>${esc(o.bmSrc)||'pick a county or enter the five yields'}</b>${o.bmY!=null?` · benchmark ${o.bmY.toFixed(2)} bu`:''}</span>
       ${c.act25!=null?`<span class="muted">2025 county yield ${c.act25.toFixed(1)} bu · <button class="link" data-act="eluseact">Use for ${S.year}</button></span>`:''}</div>
+    ${o.cty.yrsEst?`<p class="ccwarn" style="margin:8px 0 0">Estimates: ${esc(o.cty.yrsEst)} Get the official yields from the county FSA office and type them in.</p>`:''}
     <p class="muted" style="font-size:.76rem;margin:6px 0 0">${o.cty.yrs?'2020–2024 yields fill in from FSA’s 2026 benchmark file (trend-adjusted, each at least 80% of the county T-yield). Type over any year to try a different number (outlined in gold); Reset puts FSA’s back.':'Pick a county to fill in FSA’s 2020–2024 county yields, or type them from the FSA office; any year below the plug counts at the plug.'}</p>
     <div class="elhead">PLC Scenario Data</div>
     <div class="elmeta" style="margin-top:0"><label>PLC payment yield ${inp('plcYield',o.d.plcYield!=null?(+o.d.plcYield).toFixed(1):'')}</label>
