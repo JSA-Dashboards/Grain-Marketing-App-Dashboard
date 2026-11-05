@@ -2713,10 +2713,47 @@ function countyFsa(f,crop){
 function electOpts(f){
   const e=S.elect||(S.elect={crop:'corn',yld:100,vals:{},st:'',code:'',prac:'N'}),k=e.crop,plan=f.crops.find(c=>+c.year===+S.year&&key(c.crop)===k),cty=countyFsa(f,k);
   const src=plan||e.vals[k]||(e.vals[k]={}),pick=(n,dflt)=>num(src[n])??dflt??null,fut=plan?futFor(plan).price:null;
-  const d={plcYield:cty&&cty.plcY,arcBmYield:cty&&cty.bmY,arcBmPrice:(cty&&cty.bmP)??ARC_BMP[k]??FSA_ERP[k],refPrice:FSA_ERP[k],loanRate:FSA_LOAN[k],
+  const d={plcYield:cty&&cty.plcY,arcBmYield:cty&&cty.bmY,arcBmPrice:(cty&&cty.bmP)??ARC_BMP[k]??(FSA_MYA[k]?olympicAvg(FSA_MYA[k].map(x=>Math.max(x[1],FSA_ERP[k]??0))):FSA_ERP[k]),refPrice:FSA_ERP[k],loanRate:FSA_LOAN[k],
     myaPrice:ARC26.price[k]??(fut!=null?fut+n0(plan.estBasis):null)};
   return{k,plan,cty,src,d,ba:pick('baseAcres'),plcY:pick('plcYield',d.plcYield),bmY:pick('arcBmYield',d.arcBmYield),bmP:pick('arcBmPrice',d.arcBmPrice),
     ref:pick('refPrice',d.refPrice),loan:pick('loanRate',d.loanRate),price:pick('myaPrice',d.myaPrice),yld:e.yld}}
+// national season-average (MYA) prices behind the 2025 and 2026 benchmark prices and effective reference prices
+const FSA_MYA={corn:[[2020,4.53],[2021,6.00],[2022,6.54],[2023,4.55],[2024,4.24]],soybeans:[[2020,10.80],[2021,13.30],[2022,14.20],[2023,12.40],[2024,10.00]],
+  wheat:[[2020,5.05],[2021,7.63],[2022,8.83],[2023,6.96],[2024,5.52]]};
+// Olympic average: drop the highest and lowest year, average the rest
+const olympicAvg=v=>{const s=v.slice().sort((a,b)=>a-b).slice(1,-1);return s.reduce((a,x)=>a+x,0)/s.length};
+// where each guarantee comes from, step by step, at the numbers in the calculator
+function electGuar(o){
+  const my=FSA_MYA[o.k];if(!my)return'';
+  const stat=FSA_REF[o.k],raw=olympicAvg(my.map(x=>x[1])),erpCalc=Math.min(1.15*stat,Math.max(stat,.88*raw)),erp=FSA_ERP[o.k]??erpCalc;
+  const used=my.map(([y,p])=>({y,p,f:Math.max(p,erp)})),fs=used.map(x=>x.f),hi=fs.indexOf(Math.max(...fs)),lo=fs.lastIndexOf(Math.min(...fs)),bmCalc=olympicAvg(fs);
+  const row=(l,v)=>`<div><dt>${l}</dt><dd>${v}</dd></div>`,typed=n=>num(o.src[n])!=null?' <span class="tag bin">typed</span>':'';
+  const bm=o.bmY!=null?o.bmY*o.bmP:null,cy=o.bmY!=null?o.bmY*o.yld/100:null,pr=Math.max(o.price,n0(o.loan)),rev=cy!=null?cy*pr:null;
+  return`<div class="clab" style="margin-top:22px">How the guarantees are figured</div>
+  <div class="pcgrid2">
+    <div class="panel calc" style="padding:14px 16px"><h3 style="margin-bottom:8px">ARC-CO</h3>
+      <div class="tablewrap"><table class="ilv"><thead><tr><th>Crop year</th><th class="n">Season-average price</th><th class="n">Counted (at least ${usd(erp)})</th></tr></thead><tbody>
+        ${used.map((x,i)=>`<tr><td>${x.y}</td><td class="n">${usd(x.p)}</td><td class="n">${i===hi||i===lo?`<s class="muted">${usd(x.f)}</s> <span class="muted" style="font-size:.72rem">${i===hi?'high':'low'}, dropped</span>`:`<b>${usd(x.f)}</b>`}</td></tr>`).join('')}
+        <tr class="cur"><td colspan="2"><b>5-year Olympic average</b></td><td class="n"><b>${usd(bmCalc)}</b></td></tr></tbody></table></div>
+      <dl class="cclist" style="grid-template-columns:minmax(0,1fr)">
+        ${row('Benchmark price used'+typed('arcBmPrice'),usd(o.bmP))}
+        ${row('County benchmark yield'+typed('arcBmYield'),o.bmY!=null?o.bmY.toFixed(1)+' bu':'—')}
+        ${row('Benchmark revenue',bm!=null?usd(bm)+'/ac':'—')}
+        ${row('<b>Guarantee (90% of benchmark)</b>',bm!=null?`<b>${usd(.9*bm)}/ac</b>`:'—')}
+        ${row(`County revenue at ${o.yld}% and ${usd(pr)}`,rev!=null?`${usd(rev)}/ac`:'—')}
+        ${row('Shortfall below the guarantee',bm!=null?usd(Math.max(0,.9*bm-rev))+'/ac':'—')}
+        ${row('Most it can pay (12% of benchmark)',bm!=null?`${usd(.12*bm)}/ac · ${usd(.12*bm*.85)} per base ac`:'—')}</dl></div>
+    <div class="panel calc" style="padding:14px 16px"><h3 style="margin-bottom:8px">PLC</h3>
+      <dl class="cclist" style="grid-template-columns:minmax(0,1fr)">
+        ${row('Statutory reference price (2025 law)',usd(stat))}
+        ${row('5-year Olympic average (season prices above)',usd(raw))}
+        ${row('88% of that average',usd(.88*raw))}
+        ${row(`Cap: 115% of statutory`,usd(1.15*stat))}
+        ${row('<b>Effective reference price</b>'+typed('refPrice'),`<b>${usd(o.ref)}</b>`)}
+        ${row('Season price used (at least the loan rate)',usd(pr))}
+        ${row('Payment rate',`${usd(Math.max(0,o.ref-pr))}/bu`)}
+        ${row('PLC yield × 85%',o.plcY!=null?`${(o.plcY*.85).toFixed(1)} bu per base ac`:'—')}</dl>
+      <p class="muted" style="font-size:.76rem;margin:8px 0 0">Effective reference price = the higher of the statutory price and 88% of the 5-year Olympic average, but no more than 115% of the statutory price. ARC-CO counts each year’s price at no less than the effective reference price before dropping the high and low.</p></div></div>`}
 // the county-yield slider's label: the percent and the bushels it means
 const electYldLabel=o=>`${o.yld}% of benchmark${o.bmY!=null?` · ${(o.bmY*o.yld/100).toFixed(1)} bu/ac`:''}`;
 // each program per base acre at a season price and a county yield (% of benchmark); both pay on 85% of base acres
@@ -2765,6 +2802,7 @@ function electOut(f){
       <div><span>At these numbers</span><b>${lean?lean[1]:'—'}</b><em>${lean&&lean[2]?`pays ${usd(lean[2])}/base ac more`:lean&&lean[1]==='Neither pays'?'at this price and county yield':lean?'within 50¢ per base acre':'needs both yields'}</em></div>
       <div><span>Across the table below</span><b>${win.PLC+win.ARC+win.even+win.none?`PLC ${win.PLC} · ARC ${win.ARC}`:'—'}</b><em>${[win.even?`${win.even} even`:'',win.none?`${win.none} neither pays`:''].filter(Boolean).join(' · ')}${win.even||win.none?' · ':''}of ${prices.length*ylds.length} outcomes</em></div></div>
     <p class="muted" style="font-size:.82rem;margin:12px 0 0">${plcStart!=null?`PLC pays when the season-average price falls below <b>${usd(plcStart)}</b>.`:''} ${arcStart!=null?`At a county yield of ${o.yld}% of benchmark, ARC-CO starts paying below <b>${usd(arcStart)}</b> and reaches its cap (12% of benchmark revenue) below <b>${usd(.78*o.bmP/(o.yld/100))}</b>.`:''}</p>
+    ${electGuar(o)}
     <div class="clab" style="margin-top:20px">Which pays more · season-average price ↓ / county yield →</div>
     <div class="tablewrap"><table class="heat"><thead><tr><th>Price</th>${ylds.map(y=>`<th class="n">${y}%${o.bmY!=null?`<div class="muted" style="font-weight:400">${(o.bmY*y/100).toFixed(0)} bu${y===100?' · normal':''}</div>`:y===100?'<div class="muted" style="font-weight:400">normal</div>':''}</th>`).join('')}</tr></thead><tbody>${grid}</tbody></table></div>
     <p class="muted" style="font-size:.76rem;margin:10px 0 0;max-width:90ch">Per base acre, after the 85% payment acres; before sequestration and payment limits. PLC = (effective reference price − the higher of the season price and loan rate) × PLC yield. ARC-CO = 90% of benchmark revenue (benchmark yield × benchmark price) minus county yield × season price, capped at 12% of benchmark revenue. PLC protects against low prices only; ARC-CO also pays when the county’s yield is short. Each outcome in the table counts the same, so weigh them by how likely you think low prices or a short county crop are. Planning estimates, not program terms; the FSA office has the official numbers.</p>`}
