@@ -2442,13 +2442,13 @@ function fsaCalc(c){
   return{ba,ref,loan,mya,est,pr,plcRate,plc,bm,act,arcRate,arc}}
 
 // top of the insurance tab: farm overview, one crop in detail, the state ARC/PLC map, RMA price checks, plain-language descriptions
-const INS_TOP=[['overview','Overview'],['crop','By crop'],['map','ARC / PLC map'],['prices','Price checks'],['learn','Descriptions']];
+const INS_TOP=[['overview','Overview'],['crop','By crop'],['elect','ARC or PLC?'],['map','ARC / PLC map'],['prices','Price checks'],['learn','Descriptions']];
 function tabInsurance(f){
   const top=S.insTop||'overview',list=f.crops.filter(c=>+c.year===+S.year);
   const nav=`<div class="chips instop" role="tablist">${INS_TOP.map(([k,l])=>`<button class="chip" role="tab" data-instop="${k}" aria-pressed="${k===top}">${l}</button>`).join('')}</div>`;
   const noCrops=`<div class="panel"><div class="empty"><b>No ${S.year} crops yet</b>Add crops on the Production tab first, then set up insurance for each one here.<div style="margin-top:12px"><button data-tab="production">Go to Production</button></div></div></div>`;
   if(top!=='crop'){
-    const body=top==='map'?insMap(f):top==='prices'?insPrices(f):top==='learn'?insLearn():list.length?insOverview(f,list):noCrops;
+    const body=top==='map'?insMap(f):top==='elect'?insElect(f):top==='prices'?insPrices(f):top==='learn'?insLearn():list.length?insOverview(f,list):noCrops;
     return`<section><div class="sechead"><div><h2>${S.year} crop insurance</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${esc(f.name)}</div></div></div>${nav}${body}</section>`}
   if(!list.length)return`<section><div class="sechead"><h2>${S.year} crop insurance</h2></div>${nav}${noCrops}</section>`;
   const sel=list.find(c=>c.id===S.insCrop)||list[0],has=sel.insType&&sel.insType!=='None',view=S.insView||'policy',cov=n0(sel.coverage);
@@ -2696,6 +2696,74 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('arcsl')||!S.arcMap)return;const f=S.farms[S.current];
   if(t.dataset.s==='price'){S.arcMap.price[S.arcMap.crop]=+t.value;$('#arc_p_o').textContent=usd(+t.value)}else{S.arcMap.yld=+t.value;$('#arc_y_o').textContent=t.value+'% of benchmark'}
   const d=S.arcData&&S.arcData[S.arcMap.st],b=$('#arcbody');if(b&&d&&typeof d==='object')b.innerHTML=arcBody(f,d,arcOpts(f))});
+/* ---------- ARC or PLC? This farm's base acres and yields across season prices and county yields ---------- */
+// the farm's county from FSA's numbers behind the ARC / PLC map, when the farm is in a mapped state
+function countyFsa(f,crop){
+  const st=(ARC_STATES.find(s=>s[1]===f.state)||[])[0];if(!st||!f.county)return null;
+  const D=S.arcData||(S.arcData={});
+  if(D[st]===undefined){D[st]=null;(S.db?S.db.doc('market/arcplc_'+st).get():Promise.reject()).then(x=>{D[st]=x.exists?x.data():'none';if(S.insTop==='elect')render()}).catch(()=>{D[st]='err'})}
+  const d=D[st];if(!d||typeof d!=='object')return null;
+  const code=Object.keys(d.c).find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))),c=code&&d.c[code],v=c&&c[crop];if(!v)return null;
+  const b26=v.b26||{},bmY=b26.N??b26.A??b26.I??(v.N||v.A||v.I||[])[0]??null;
+  return{name:c.n,bmY,bmP:(d.price[crop]||{}).bmP26??null,plcY:(c.plcY||{})[crop]??null,src:v.b26?'FSA 2026 benchmark':'FSA 2025 benchmark'}}
+// what goes into the comparison: numbers typed for this crop (kept on the crop plan, the same boxes as By crop → ARC / PLC),
+// otherwise the county's FSA numbers and the program prices
+function electOpts(f){
+  const e=S.elect||(S.elect={crop:'corn',yld:100,vals:{}}),k=e.crop,plan=f.crops.find(c=>+c.year===+S.year&&key(c.crop)===k),cty=countyFsa(f,k);
+  const src=plan||e.vals[k]||(e.vals[k]={}),pick=(n,dflt)=>num(src[n])??dflt??null,fut=plan?futFor(plan).price:null;
+  const d={plcYield:cty&&cty.plcY,arcBmYield:cty&&cty.bmY,arcBmPrice:(cty&&cty.bmP)??ARC_BMP[k]??FSA_ERP[k],refPrice:FSA_ERP[k],loanRate:FSA_LOAN[k],
+    myaPrice:ARC26.price[k]??(fut!=null?fut+n0(plan.estBasis):null)};
+  return{k,plan,cty,src,d,ba:pick('baseAcres'),plcY:pick('plcYield',d.plcYield),bmY:pick('arcBmYield',d.arcBmYield),bmP:pick('arcBmPrice',d.arcBmPrice),
+    ref:pick('refPrice',d.refPrice),loan:pick('loanRate',d.loanRate),price:pick('myaPrice',d.myaPrice),yld:e.yld}}
+// each program per base acre at a season price and a county yield (% of benchmark); both pay on 85% of base acres
+function fsaAt(o,price,yPct){const pr=Math.max(price,n0(o.loan)),bm=o.bmY!=null?o.bmY*o.bmP:null;
+  return{plc:o.plcY!=null&&o.ref!=null?Math.max(0,o.ref-pr)*o.plcY*.85:null,arc:bm!=null?Math.min(.12*bm,Math.max(0,.9*bm-o.bmY*yPct/100*pr))*.85:null}}
+function insElect(f){
+  const o=electOpts(f),k=o.k,nm={corn:'Corn',soybeans:'Soybeans',wheat:'Wheat'}[k];
+  const fld=(n,label,hint)=>`<label class="pf"><span>${label}</span><input class="einp" id="el_${k}_${n}" data-k="${n}" type="number" step="any" inputmode="decimal" value="${o.src[n]??''}" placeholder="${o.d[n]!=null?(+o.d[n]).toFixed(2):''}">${hint?`<span class="hint">${hint}</span>`:''}</label>`;
+  const ctyTxt=o.cty?`${esc(o.cty.name)} County, ${o.cty.src}`:f.county&&ARC_STATES.some(s=>s[1]===f.state)?'loading the county’s numbers…':'from your FSA office (farm’s county isn’t on the map)';
+  return`<p class="muted" style="font-size:.85rem;margin:0 0 14px;max-width:85ch">Which program is likely to pay more on this farm’s base acres for the ${S.year} crop. The election is made for each crop on each farm${S.year===2026?' and is due December 11, 2026':''}. Blank boxes use the number shown in gray.</p>
+  <div class="chips">${[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']].map(([c,l])=>`<button class="chip" data-elcrop="${c}" aria-pressed="${c===k}">${l}</button>`).join('')}</div>
+  <div class="panel calc">
+    <div class="pgrid">${fld('baseAcres','Base acres','FSA base acres, not planted')}${fld('plcYield','PLC yield (bu/ac)',o.cty&&o.cty.plcY!=null&&o.src.plcYield==null?'county average; use the farm’s own':'from the farm’s FSA-156EZ')}
+      ${fld('myaPrice','Season-average price you expect ($/bu)',ARC26.price[k]!=null?'USDA October forecast':'from futures + basis')}${fld('arcBmYield','County benchmark yield (bu/ac)',ctyTxt)}</div>
+    <label class="pf" style="margin-top:14px"><span>County yield this year · <b id="el_yld_o" style="text-transform:none;letter-spacing:0;color:var(--ink)">${o.yld}% of benchmark</b></span>
+      <input class="eyld" type="range" min="60" max="130" step="5" value="${o.yld}"></label>
+    <details class="ccmore" style="margin-top:12px"><summary>Program prices</summary><div class="pgrid" style="margin-top:10px">${fld('refPrice','Effective reference price ($/bu)')}${fld('arcBmPrice','ARC benchmark price ($/bu)')}${fld('loanRate','Loan rate ($/bu)')}</div></details>
+    ${o.plan?`<div class="clab" style="margin-top:18px">${nm} election on file</div><div class="chips" style="margin:0">${[['PLC','PLC'],['ARC-CO','ARC-CO'],['','Not elected']].map(([v,l])=>`<button class="chip sm" data-elelect="${v}" aria-pressed="${(o.plan.fsaElect||'')===v}">${l}</button>`).join('')}</div>`:''}
+    <div id="electOut" style="margin-top:20px">${electOut(f)}</div></div>`}
+function electOut(f){
+  const o=electOpts(f);
+  if(o.price==null)return'<p class="muted" style="margin:0">Enter the season-average price you expect to compare the programs.</p>';
+  const at=fsaAt(o,o.price,o.yld),need=[o.plcY==null?'a PLC yield':'',o.bmY==null?'the county benchmark yield':''].filter(Boolean);
+  const pa=v=>v==null?'—':usd(v),tot=v=>v==null?'':o.ba?`${usd(v*o.ba,0)} on ${bu(o.ba)} base ac`:'add base acres for a total';
+  const lean=at.plc!=null&&at.arc!=null?(at.plc<0.5&&at.arc<0.5?['','Neither pays']:Math.abs(at.plc-at.arc)<0.5?['','About even']:at.plc>at.arc?['p-gain','PLC',at.plc-at.arc]:['p-gain','ARC-CO',at.arc-at.plc]):null;
+  const prices=[.7,.8,.9,1,1.1,1.2].map(m=>o.price*m),ylds=[70,80,90,100,110],win={PLC:0,ARC:0,even:0,none:0};
+  const cell=(p,y)=>{const a=fsaAt(o,p,y);if(a.plc==null||a.arc==null)return'<td class="n muted">—</td>';const d=a.arc-a.plc,none=a.plc<0.5&&a.arc<0.5,w=Math.abs(d)<0.5?'even':d>0?'ARC':'PLC';win[none?'none':w]++;
+    return`<td class="n" style="background:${w==='even'?'var(--surface)':`color-mix(in srgb,${w==='ARC'?'var(--accent)':'var(--grain)'} ${Math.min(30,8+Math.abs(d)/2).toFixed(0)}%,var(--surface))`}" title="PLC ${usd(a.plc)} · ARC-CO ${usd(a.arc)} per base acre">
+      <b>${none?'Neither':w==='even'?'Even':w==='ARC'?'ARC':'PLC'}</b>${w==='even'?'':` <span class="muted">+${usd(Math.abs(d))}</span>`}<div class="muted" style="font-size:.72rem">PLC ${usd(a.plc,0)} · ARC ${usd(a.arc,0)}</div></td>`};
+  const grid=prices.map(p=>`<tr><td><b>${usd(p)}</b>${Math.abs(p-o.price)<1e-9?' <span class="tag bin">expected</span>':''}</td>${ylds.map(y=>cell(p,y)).join('')}</tr>`).join('');
+  const plcStart=o.ref!=null?Math.max(o.ref,n0(o.loan)):null,arcStart=o.bmY!=null?.9*o.bmP/(o.yld/100):null;
+  return`${need.length?`<p class="ccwarn" style="margin:0 0 10px">Add ${need.join(' and ')} to compare both programs.</p>`:''}
+    <div class="cckpi okpi" style="margin-top:0">
+      <div class="${at.plc?'pos':''}"><span>PLC</span><b>${pa(at.plc)}<small>/base ac</small></b><em>${tot(at.plc)}</em></div>
+      <div class="${at.arc?'pos':''}"><span>ARC-CO</span><b>${pa(at.arc)}<small>/base ac</small></b><em>${tot(at.arc)}</em></div>
+      <div><span>At these numbers</span><b>${lean?lean[1]:'—'}</b><em>${lean&&lean[2]?`pays ${usd(lean[2])}/base ac more`:lean&&lean[1]==='Neither pays'?'at this price and county yield':lean?'within 50¢ per base acre':'needs both yields'}</em></div>
+      <div><span>Across the table below</span><b>${win.PLC+win.ARC+win.even+win.none?`PLC ${win.PLC} · ARC ${win.ARC}`:'—'}</b><em>${[win.even?`${win.even} even`:'',win.none?`${win.none} neither pays`:''].filter(Boolean).join(' · ')}${win.even||win.none?' · ':''}of ${prices.length*ylds.length} outcomes</em></div></div>
+    <p class="muted" style="font-size:.82rem;margin:12px 0 0">${plcStart!=null?`PLC pays when the season-average price falls below <b>${usd(plcStart)}</b>.`:''} ${arcStart!=null?`At a county yield of ${o.yld}% of benchmark, ARC-CO starts paying below <b>${usd(arcStart)}</b> and reaches its cap (12% of benchmark revenue) below <b>${usd(.78*o.bmP/(o.yld/100))}</b>.`:''}</p>
+    <div class="clab" style="margin-top:20px">Which pays more · season-average price ↓ / county yield →</div>
+    <div class="tablewrap"><table class="heat"><thead><tr><th>Price</th>${ylds.map(y=>`<th class="n">${y}%${y===100?'<div class="muted" style="font-weight:400">normal</div>':''}</th>`).join('')}</tr></thead><tbody>${grid}</tbody></table></div>
+    <p class="muted" style="font-size:.76rem;margin:10px 0 0;max-width:90ch">Per base acre, after the 85% payment acres; before sequestration and payment limits. PLC = (effective reference price − the higher of the season price and loan rate) × PLC yield. ARC-CO = 90% of benchmark revenue (benchmark yield × benchmark price) minus county yield × season price, capped at 12% of benchmark revenue. PLC protects against low prices only; ARC-CO also pays when the county’s yield is short. Each outcome in the table counts the same, so weigh them by how likely you think low prices or a short county crop are. Planning estimates, not program terms; the FSA office has the official numbers.</p>`}
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!S.elect)return;const f=S.farms[S.current];if(!f)return;
+  if(t.classList.contains('eyld')){S.elect.yld=+t.value;$('#el_yld_o').textContent=t.value+'% of benchmark'}
+  else if(t.classList.contains('einp')){const o=electOpts(f),v=num(t.value);if(v==null)delete o.src[t.dataset.k];else o.src[t.dataset.k]=v;if(o.plan)S.electDirty=true}
+  else return;
+  const el=$('#electOut');if(el)el.innerHTML=electOut(f)});
+// typed numbers save to the crop plan when you leave the box
+document.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('einp')&&S.electDirty){S.electDirty=false;persist(S.current)}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-elcrop],[data-elelect]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  if(t.dataset.elcrop){S.elect.crop=t.dataset.elcrop;render();return}
+  const o=electOpts(f);if(!o.plan)return;if(t.dataset.elelect)o.plan.fsaElect=t.dataset.elelect;else delete o.plan.fsaElect;persist(S.current)});
 // Descriptions: plain-language reference, grouped; each group opens on its own
 const INS_LEARN=[
   ['Policy types',[
