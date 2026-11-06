@@ -2727,10 +2727,12 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.class
 // the county being compared: one picked in the calculator, else the farm's own; numbers from FSA's documents behind the ARC / PLC map
 function countyFsa(f,crop){
   const e=S.elect,fst=(ARC_STATES.find(s=>s[1]===f.state)||[])[0],st=e.st||fst||ARC_STATES[0][0],D=S.arcData||(S.arcData={});
-  if(D[st]===undefined){D[st]=null;(S.db?S.db.doc('market/arcplc_'+st).get():Promise.reject()).then(x=>{D[st]=x.exists?x.data():'none';if(S.insTop==='elect')render()}).catch(()=>{D[st]='err';if(S.insTop==='elect')render()})}
+  // a failed download is remembered as 'err' until Try again; a drawing error afterwards is not mistaken for one
+  const load=(M,doc)=>{if(M[st]!==undefined)return;M[st]=null;(S.db?S.db.doc(doc+st).get():Promise.reject(new Error('no database')))
+    .then(x=>{M[st]=x.exists?x.data():'none'},e=>{console.warn('Could not load '+doc+st,e);M[st]='err'}).then(()=>{if(S.insTop==='elect')render()})};
+  load(D,'market/arcplc_');
   // the county yields behind the benchmark (2020–2024, from FSA's 2026 benchmark file) live in their own document per state
-  const Y=S.arcYld||(S.arcYld={});
-  if(Y[st]===undefined){Y[st]=null;(S.db?S.db.doc('market/arcyld_'+st).get():Promise.reject()).then(x=>{Y[st]=x.exists?x.data():'none';if(S.insTop==='elect')render()}).catch(()=>{Y[st]='err'})}
+  const Y=S.arcYld||(S.arcYld={});load(Y,'market/arcyld_');
   const d=D[st];if(!d||typeof d!=='object')return{st,d:null,status:d};
   const farmCode=st===fst&&f.county?Object.keys(d.c).find(k=>key(d.c[k].n)===key(String(f.county).replace(/\s+county$/i,''))):null;
   const code=e.code&&d.c[e.code]?e.code:farmCode,c=code&&d.c[code],v=c&&c[crop];
@@ -2775,7 +2777,8 @@ function insElect(f){
   <div class="panel calc">
     <div class="elsel">
       <label>State${sel('el_st',ARC_STATES.map(([fp,ab,n])=>[fp,n+(ab===f.state?' (this farm)':'')]),c.st)}</label>
-      <label>County${c.d?sel('el_cty',[['','Choose a county'],...counties],c.code||''):`<select disabled><option>${c.status==='none'?'Not loaded yet':c.status==='err'?'Couldn’t load':'Loading…'}</option></select>`}</label>
+      <label>County${c.d?sel('el_cty',[['','Choose a county'],...counties],c.code||''):`<select disabled><option>${c.status==='none'?'Not loaded yet':c.status==='err'?'Couldn’t load':'Loading…'}</option></select>`}
+        ${c.status==='err'?'<button type="button" class="link" data-act="elretry" style="font-size:.78rem;text-align:left">Try again</button>':''}</label>
       <label>Commodity${sel('el_crop',[['corn','Corn'],['soybeans','Soybeans'],['wheat','Wheat']],k)}</label>
       <label>FSA yield type${sel('el_prac',[['A','All'],['N','Non-irrigated'],['I','Irrigated']],e.prac||'N')}</label>
       <label>Crop year${sel('el_year',[[S.year,S.year]],S.year)}</label>
@@ -2848,7 +2851,8 @@ document.addEventListener('change',e=>{const id=e.target.id;if(!S.elect||!['el_s
   if(id==='el_st')electPickCounty(f,e.target.value,'');
   else if(id==='el_cty')electPickCounty(f,countyFsa(f,S.elect.crop).st,e.target.value);
   else{S.elect[id==='el_crop'?'crop':'prac']=e.target.value;render()}});
-document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-elelect],[data-act="eluseact"],[data-act="elreset"]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-elelect],[data-act="eluseact"],[data-act="elreset"],[data-act="elretry"]');if(!t||t.closest('dialog'))return;const f=S.farms[S.current];if(!f)return;
+  if(t.dataset.act==='elretry'){const st=countyFsa(f,S.elect.crop).st;[S.arcData,S.arcYld].forEach(M=>{if(M&&M[st]==='err')delete M[st]});render();return}
   const o=electOpts(f);
   if(t.dataset.act==='eluseact'){if(o.cty.act25!=null)S.elect.cy[o.hkey]=o.cty.act25;render();return}
   // Reset: this county's typed yields, plug and county yield, and the typed price, benchmark and program prices (base acres and PLC yield stay)
