@@ -729,7 +729,7 @@ const sourceLabel=s=>hasSource(s)?(fromHarvest(s)?'At harvest':'From bin'):'';
 const qty=s=>isAcc(s)?n0(s.accBu):n0(s.bu)+(ppDoubled(s)?ppDbl(s):0);
 const INS_TYPES=['RP','RP-HPE','YP','None'];
 const CROPS=['Corn','Soybeans','Wheat','Sorghum','Barley','Oats','Canola','Sunflowers'];
-const SALE_CROPS=['Corn','Soybeans','Wheat'];
+const SALE_CROPS=['Corn','Soybeans','Wheat','Seed corn','Seed beans'];
 const TODAY=(d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10))(new Date());
 const THIS_YEAR=new Date().getFullYear();
 // JSA's required disclaimer (same wording as the JSA dashboards). Shown under every page and on every PDF.
@@ -767,7 +767,7 @@ const rollFees=s=>(s.rolls||[]).reduce((a,r)=>a+n0(r.fee),0);
 const rolledFutures=s=>num(s.price)==null?null:num(s.price)+rollSpread(s)-rollFees(s);
 // the next contract month a rollable contract can move to ("Dec 26" -> "Mar 27" for corn), with a suggested
 // spread from today's futures (new month minus current month) when both prices are in the daily sync
-const CROP_MONTHS={corn:'HKNUZ',soybeans:'FHKNQUX',wheat:'HKNUZ'};
+const CROP_MONTHS={corn:'HKNUZ',soybeans:'FHKNQUX',wheat:'HKNUZ','seed corn':'HKNUZ','seed beans':'FHKNQUX'};
 function nextRoll(s){
   const codes=CROP_MONTHS[key(s.crop)],m=/^([a-z]{3})[a-z]*\.?\s+'?(\d{2})$/i.exec(String(s.futuresMonth||'').trim());
   if(!ROLLABLE.includes(s.type)||!codes||!m)return null;
@@ -834,7 +834,8 @@ const COST_TEMPLATE=[['Seed','acre','Seed & seed treatment'],['Fertilizer','acre
   ['Drying','bu',''],['Trucking & hauling','bu',''],['Storage','bu','']];
 // CME futures from the daily sync (market/futures): symbols like ZCZ26 = corn Dec 2026, prices in $/bu
 const MCODE='FGHJKMNQUVXZ',MNAME=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const ROOT={corn:'ZC',soybeans:'ZS',wheat:'ZW'},NEWCROP={ZC:'Z',ZS:'X',ZW:'N'};
+// seed corn and seed beans are priced off corn and soybean futures
+const ROOT={corn:'ZC',soybeans:'ZS',wheat:'ZW','seed corn':'ZC','seed beans':'ZS'},NEWCROP={ZC:'Z',ZS:'X',ZW:'N'};
 const symLabel=s=>{const m=MCODE.indexOf(s[2]);return m<0?s:`${MNAME[m]} ${s.slice(3)}`};
 const symOrder=s=>(2000+ +s.slice(3))*12+MCODE.indexOf(s[2]);
 function marketSyms(crop){const r=ROOT[key(crop)],p=(S.market&&S.market.prices)||{};
@@ -1488,7 +1489,47 @@ function homeScreen(f){
   return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
       <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
       <span class="htitle">${t}</span><span class="hdesc">${d}</span><span class="hstat">${stat}</span></button>`).join('')}</div>
-  ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}`}
+  ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}
+  ${notesPanel(f)}`}
+
+/* ---------- client notes: private notes about a client, kept in each writer's own section ---------- */
+// brokers/<writer>/notes/<farm id>: clients can't read the brokers section; in the Claude app the consultant also reads every broker's
+const noteDoc=(id,fid)=>`brokers/${id}/notes/${fid}`;
+function loadNotes(fid){
+  const N=S.notes||(S.notes={});if(!S.owner||N[fid])return;
+  if(!S.db){N[fid]={mine:[],others:[]};return}
+  N[fid]={loading:true,mine:[],others:[]};
+  const others=S.admin&&!S.hosted?Object.keys(S.brokerProfiles||{}).filter(id=>id!==S.uid):[];
+  Promise.all([S.uid,...others].map(id=>S.db.doc(noteDoc(id,fid)).get().then(d=>({id,data:d.exists?d.data():null}),()=>({id,data:null,err:true}))))
+    .then(rs=>{const me=rs[0];N[fid]={mine:(me.data&&me.data.items)||[],err:!!me.err,
+        others:rs.slice(1).filter(r=>r.data&&(r.data.items||[]).length).map(r=>({name:r.data.author||(S.brokerProfiles[r.id]||{}).name||'Broker',items:r.data.items}))};
+      if(S.current===fid&&!$('#dlg').open)render()})}
+function saveNotes(fid,items){
+  const N=S.notes||(S.notes={});N[fid]={...(N[fid]||{others:[]}),mine:items};render();
+  if(S.mode!=='live'){toast('Preview only — not saved');return}
+  S.db.doc(noteDoc(S.uid,fid)).set({farm:fid,farmName:(S.farms[fid]||{}).name||'',author:S.myName||'',items,updatedAt:new Date().toISOString()})
+    .then(()=>toast('Note saved')).catch(()=>toast("Couldn't save the note. Try again.",true))}
+function notesPanel(f){
+  if(!S.owner)return'';const fid=S.current;loadNotes(fid);const n=S.notes[fid];
+  const all=[...n.mine.map(x=>({...x,own:true,who:'You'})),...n.others.flatMap(o=>o.items.map(x=>({...x,who:o.name})))].sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  const when=t=>new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+  const who=S.admin?(S.hosted?'Private to you':'Private to you; you also see your brokers’ notes'):S.hosted?'Private to you':'Private to you and your consultant';
+  return`<section><div class="sechead"><div><h2>Client notes</h2><div class="muted" style="font-size:.82rem;margin-top:2px">${who}. ${esc(f.name)} never sees these.</div></div></div>
+  <div class="panel calc"><textarea id="noteNew" rows="3" maxlength="2000" style="font:1rem var(--f-body);margin:0" placeholder="e.g. Called 11/9: wants to sell 10k more Dec corn above $4.60. Check back after WASDE.">${esc((S.noteDraft||{})[fid]||'')}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="primary small" data-act="noteadd">Add note</button></div>
+    ${n.err?'<p class="ccwarn" style="margin:10px 0 0">Couldn’t load your notes. Reload the page to try again.</p>':''}
+    ${n.loading?'<p class="muted" style="margin:10px 0 0">Loading notes…</p>':all.length?`<ul class="alist" style="margin-top:12px;border-top:1px solid var(--line)">${all.map(x=>`<li style="grid-template-columns:minmax(0,1fr) auto">
+      <div><div class="muted" style="font-size:.76rem">${when(x.at)} · ${esc(x.who)}</div><div style="white-space:pre-wrap">${esc(x.text)}</div></div>
+      ${x.own?`<button class="link danger" data-notedel="${x.id}" style="font-size:.78rem">${S.noteDel===x.id?'Confirm delete':'Delete'}</button>`:'<span></span>'}</li>`).join('')}</ul>`
+      :'<p class="muted" style="margin:10px 0 0">No notes yet.</p>'}</div></section>`}
+// the draft survives redraws (live price updates redraw the page)
+document.addEventListener('input',e=>{if(e.target.id==='noteNew')(S.noteDraft||(S.noteDraft={}))[S.current]=e.target.value});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="noteadd"],[data-notedel]');if(!t||t.closest('dialog'))return;
+  const fid=S.current,n=fid&&(S.notes||{})[fid];if(!n||n.loading)return;
+  if(t.dataset.act==='noteadd'){const v=(($('#noteNew')||{}).value||'').trim();if(!v)return;S.noteDraft[fid]='';
+    saveNotes(fid,[{id:uid(),at:new Date().toISOString(),text:v},...n.mine]);return}
+  const id=t.dataset.notedel;if(S.noteDel!==id){S.noteDel=id;render();return}
+  S.noteDel=null;saveNotes(fid,n.mine.filter(x=>x.id!==id))});
 
 // pie of part-to-whole; slices start at 12 o'clock and run clockwise, separated by a 2px surface gap
 function pieSVG(segs,label){
@@ -3735,7 +3776,7 @@ async function boot(){
     db.collection('farms').onSnapshot(setSource('main','farms/'),onErr);
     // the consultant also sees every broker's customers (the Claude app keeps them in each broker's section)
     if(!S.hosted){const seen=new Set();
-      db.collection('brokers').onSnapshot(snap=>snap.docs.forEach(d=>{if(!d.exists||seen.has(d.id))return;seen.add(d.id);
+      db.collection('brokers').onSnapshot(snap=>snap.docs.forEach(d=>{if(d.exists)(S.brokerProfiles||(S.brokerProfiles={}))[d.id]=d.data();if(!d.exists||seen.has(d.id))return;seen.add(d.id);
         db.collection('brokers/'+d.id+'/farms').onSnapshot(setSource('b:'+d.id,`brokers/${d.id}/farms/`),onErr)}),onErr)}
   }else{
     S.current=S.uid;

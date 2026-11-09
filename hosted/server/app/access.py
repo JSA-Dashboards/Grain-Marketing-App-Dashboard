@@ -1,7 +1,7 @@
 """Who may read and write which documents. Enforced here on the server, not in the page.
 
   admin   reads and writes everything (Megan and JSA staff).
-  broker  reads shared market data; reads and writes only the farms assigned to them.
+  broker  reads shared market data; reads and writes only the farms assigned to them, and their own client notes.
           A farm a broker creates is theirs; its broker name is always theirs.
 Farmers (planned for the end of the year) would get their own role here.
 """
@@ -11,10 +11,15 @@ MARKET = 'market'
 FARMS = 'farms'
 
 
+def own_notes(user, coll):
+    """A person's private client notes: brokers/<their id>/notes/<farm id>."""
+    return coll == f"brokers/{user['id']}/notes"
+
+
 def can_read(user, coll, row):
     if user['role'] == 'admin':
         return True
-    if coll == MARKET:
+    if coll == MARKET or own_notes(user, coll):
         return True
     if coll == FARMS:
         return row is not None and row['broker_uid'] == user['id']
@@ -23,6 +28,8 @@ def can_read(user, coll, row):
 
 def can_write(user, coll, row):
     if user['role'] == 'admin':
+        return True
+    if own_notes(user, coll):
         return True
     if coll == FARMS:
         return row is None or row['broker_uid'] == user['id']   # a new farm, or one of theirs
