@@ -663,6 +663,14 @@ dialog{max-height:calc(100vh - 32px);overflow:auto}
 @media (max-width:900px){.elsel{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:520px){.elsel{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .elsel label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:600;color:var(--muted)}
+/* Tools: interest calculator */
+.tsel{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:900px){.tsel{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:520px){.tsel{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.itabwrap{max-height:520px;overflow:auto;margin-top:8px}
+table.itab thead th{position:sticky;top:0;background:var(--surface)}
+table.itab tfoot td{font-weight:700;background:var(--soft)}
+.ibar{display:inline-block;width:56px;height:6px;border-radius:3px;margin-right:8px;vertical-align:middle;background:linear-gradient(var(--grain),var(--grain)) 0 0/var(--w) 100% no-repeat,var(--soft)}
 .elhead{font:650 1.15rem var(--f-display);color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:4px;margin:22px 0 10px}
 .elyrs{display:grid;grid-template-columns:170px repeat(6,minmax(72px,1fr));gap:8px 12px;align-items:center;font-size:.88rem;min-width:640px}
 .elyrs>span:first-child,.elyrs .rl{color:var(--muted);font-weight:600}
@@ -1466,6 +1474,7 @@ const SECTIONS={
   quotes:{label:'Quotes',fn:f=>tabQuotes(f)},
   weather:{label:'Weather',fn:f=>tabWeather(f)},
   intel:{label:'Intel',fn:f=>tabIntel(f)},
+  tools:{label:'Tools',fn:f=>tabTools(f)},
   report:{label:'Client report',fn:f=>tabReport(f)}};
 // which section a tab lives in, so links like "Go to Production" land in the right place
 const sectionOfTab=t=>t==='insurance'?'insurance':t==='quotes'?'quotes':'marketing';
@@ -1474,7 +1483,8 @@ const ICONS={
   insurance:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   quotes:'<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
   weather:'<circle cx="8" cy="9" r="3"/><path d="M8 2v2M2 9h2M3.8 4.8l1.4 1.4M12.2 4.8l-1.4 1.4"/><path d="M9 20h9a4 4 0 0 0 0-8 5 5 0 0 0-9.6 1.5A3.3 3.3 0 0 0 9 20z"/>',
-  intel:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>'};
+  intel:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+  tools:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.5-.6-.6-2.5z"/>'};
 function homeScreen(f){
   const p=position(f,S.year),exp=p.reduce((a,r)=>a+r.expected,0),sold=p.reduce((a,r)=>a+r.sold,0);
   const dl=deadlinesFor(f)[0],ins=p.reduce((a,r)=>a+(r.revGuar||0),0);
@@ -1485,12 +1495,62 @@ function homeScreen(f){
     ['quotes','Quotes','Daily corn, soybean and wheat futures. Cash bids coming soon.',cfi&&cfi.price!=null?`Corn ${cfi.symbol?symLabel(cfi.symbol):''} <b>${usd(cfi.price,4)}</b>`:'Futures prices'],
     ['weather','Weather','7-day forecast, rain totals, and field and spray days.',(()=>{const k=wxKey(f);ensureWx(k);const w=k&&S.wx[k];if(!k)return'Add your ZIP code';if(!w)return'Forecast coming with the next update';
       const n=wxNow(w),d=wxDays(w),fd=d.filter(x=>x.field).length;return`${n?`<b>${n.temp}°</b> ${esc(n.short)} · `:''}${w.rain7!=null?w.rain7.toFixed(2)+' in rain this week · ':''}${fd} field days`})()],
-    ['intel','Intel','Market updates and insights from your advisor.',(()=>{const ps=intelFor(f),n=intelNewCount(f);return ps.length?`${n?`<b>${n} new</b> · `:''}${esc(ps[0].title)}`:'No updates yet'})()]];
+    ['intel','Intel','Market updates and insights from your advisor.',(()=>{const ps=intelFor(f),n=intelNewCount(f);return ps.length?`${n?`<b>${n} new</b> · `:''}${esc(ps[0].title)}`:'No updates yet'})()],
+    ['tools','Tools','Handy calculators for everyday farm decisions.','<b>Interest calculator</b> · more coming']];
   return`<div class="hometiles">${tiles.map(([k,t,d,stat])=>`<button class="htile" data-section="${k}">
       <svg viewBox="0 0 24 24" class="hicon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>
       <span class="htitle">${t}</span><span class="hdesc">${d}</span><span class="hstat">${stat}</span></button>`).join('')}</div>
   ${dl?`<p class="muted" style="margin-top:14px;font-size:.85rem">Next deadline: <b style="color:var(--ink)">${esc(dl.title)}</b> · ${fmtDate(dl.d)} (${daysUntil(dl.d)} days)</p>`:''}
   ${notesPanel(f)}`}
+
+/* ---------- Tools: small calculators for producers (not saved; they reset when the page reloads) ---------- */
+const TOOLS=[['interest','Interest calculator']];
+function tabTools(f){
+  const top=S.toolTop||'interest';
+  return`<section><div class="sechead"><div><h2>Tools</h2><div class="muted" style="font-size:.82rem;margin-top:2px">Quick calculators for everyday farm decisions.</div></div></div>
+  <div class="chips instop" role="tablist">${TOOLS.map(([k,l])=>`<button class="chip" role="tab" data-tooltop="${k}" aria-pressed="${k===top}">${l}</button>`).join('')}</div>
+  ${toolInterest()}</section>`}
+function intState(){if(!S.intc){const d=new Date();S.intc={amt:'250000',rate:'7.25',months:'12',type:'line',start:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,bu:''}}return S.intc}
+function toolInterest(){
+  const c=intState();
+  const inp=(k,lab,a)=>`<label>${lab}<input class="tinp" data-k="${k}" type="number" step="any" inputmode="decimal" value="${esc(String(c[k]??''))}"${a||''}></label>`;
+  return`<p class="muted" style="font-size:.85rem;margin:0 0 14px;max-width:85ch">You know the rate; this shows what it costs in dollars, day by day and month by month. Results update as you type.</p>
+  <div class="panel calc">
+    <div class="chips" style="margin:0 0 14px">${[['line','Operating line or note · interest paid at the end'],['amort','Term loan · equal monthly payments']].map(([k,l])=>`<button class="chip" data-inttype="${k}" aria-pressed="${c.type===k}">${l}</button>`).join('')}</div>
+    <div class="elsel tsel">
+      ${inp('amt','Amount borrowed ($)',' min="0"')}${inp('rate','Interest rate (% a year)',' min="0"')}${inp('months','Months',' min="1" max="360" step="1"')}
+      <label>First month<input class="tinp" data-k="start" type="month" value="${esc(c.start||'')}"></label>
+      ${inp('bu','Bushels (optional)',' min="0" placeholder="for cost per bushel"')}</div></div>
+  <div id="intOut" style="margin-top:20px">${intOut()}</div>`}
+// line: interest accrues daily (365-day year) on the full amount and is paid at the end; amort: monthly payments at 1/12 of the yearly rate
+function intCalc(c){
+  const P=num(c.amt),r=num(c.rate),n=Math.round(num(c.months)||0);
+  if(!(P>0)||r==null||r<0||!(n>=1))return null;
+  const N=Math.min(n,360),m=/^(\d{4})-(\d{2})$/.exec(c.start||''),d0=m?new Date(+m[1],+m[2]-1,1):new Date();
+  const i=r/100/12,pay=c.type==='amort'?(i?P*i/(1-Math.pow(1+i,-N)):P/N):null,rows=[];let bal=P,cum=0;
+  for(let k=0;k<N;k++){const dt=new Date(d0.getFullYear(),d0.getMonth()+k,1),days=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();let int,prin=0;
+    if(pay!=null){int=bal*i;prin=k===N-1?bal:Math.min(bal,pay-int);bal-=prin}else int=P*r/100*days/365;
+    cum+=int;rows.push({dt,days,int,cum,prin,pay:int+prin,bal:pay!=null?bal:P+cum})}
+  return{P,r,N,pay,rows,cum,perDay:P*r/100/365}}
+function intOut(){
+  const c=intState(),x=intCalc(c);
+  if(!x)return'<p class="muted" style="margin:0">Enter the amount borrowed, the rate and the number of months.</p>';
+  const up=intCalc({...c,rate:x.r+1}),bsh=num(c.bu),amort=x.pay!=null,mon=d=>d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  const k=(l,v,sub)=>`<div><span>${l}</span><b>${v}</b>${sub?`<em>${sub}</em>`:''}</div>`;
+  const kpis=`<div class="cckpi okpi">${k('Interest per day',usd(x.perDay),amort?'on the starting balance':'on the full amount')}
+    ${k('Interest per month',usd(x.cum/x.N),amort?'average; it shrinks as you pay down':'average; 31-day months cost a bit more')}
+    ${k(`Total interest · ${x.N} mo`,usd(x.cum,0),`${usd(x.P+x.cum,0)} paid back in all`)}
+    ${bsh>0?k('Interest per bushel',usd(x.cum/bsh,3),`${usd(x.cum/bsh/x.N,3)} a bushel each month`):k('Each 1% more costs',usd(up.cum-x.cum,0),`at ${(x.r+1).toFixed(2)}% the total is ${usd(up.cum,0)}`)}</div>`;
+  const rows=x.rows.map(r=>`<tr><td>${mon(r.dt)}</td>${amort?'':`<td class="n">${r.days}</td>`}<td class="n">${usd(r.int)}</td>${amort?`<td class="n">${usd(r.prin)}</td><td class="n">${usd(r.pay)}</td>`:''}
+    <td class="n"><span class="ibar" style="--w:${(r.cum/(x.cum||1)*100).toFixed(1)}%"></span>${usd(r.cum)}</td><td class="n">${usd(r.bal)}</td></tr>`).join('');
+  return`${kpis}
+    <div class="clab" style="margin-top:20px">Month by month</div>
+    <div class="tablewrap itabwrap"><table class="itab"><thead><tr><th>Month</th>${amort?'':'<th class="n">Days</th>'}<th class="n">Interest</th>${amort?'<th class="n">Principal</th><th class="n">Payment</th>':''}<th class="n">Interest so far</th><th class="n">${amort?'Balance left':'Owed if paid off'}</th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td>Total</td>${amort?'':`<td class="n">${x.rows.reduce((a,r)=>a+r.days,0)}</td>`}<td class="n">${usd(x.cum)}</td>${amort?`<td class="n">${usd(x.P)}</td><td class="n">${usd(x.P+x.cum)}</td>`:''}<td></td><td></td></tr></tfoot></table></div>
+    <p class="muted" style="font-size:.76rem;margin:10px 0 0;max-width:90ch">${amort?`Equal payments of <b>${usd(x.pay)}</b> a month; each month’s interest is the yearly rate ÷ 12 on the balance still owed.`:'Interest is figured daily on a 365-day year and paid with the principal at the end, the way most operating notes work. If the line is drawn down over the season, enter the average balance.'} A planning estimate; the lender’s statement is the official figure.</p>`}
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('tinp'))return;intState()[t.dataset.k]=t.value;const o=$('#intOut');if(o)o.innerHTML=intOut()});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-tooltop],[data-inttype]');if(!t||t.closest('dialog'))return;
+  if(t.dataset.tooltop)S.toolTop=t.dataset.tooltop;else intState().type=t.dataset.inttype;render()});
 
 /* ---------- client notes: private notes about a client, kept in each writer's own section ---------- */
 // brokers/<writer>/notes/<farm id>: clients can't read the brokers section; in the Claude app the consultant also reads every broker's
