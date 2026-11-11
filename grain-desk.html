@@ -788,6 +788,17 @@ function nextRoll(s){
 const canRoll=s=>!!nextRoll(s)&&(HEDGE_TYPES.includes(s.type)||remaining(s)>0);
 // the roll form, filled in for the next month; used from the contract list and the contract itself
 function rollVals(s){const nx=nextRoll(s);return{date:TODAY,from:s.futuresMonth||'',...(nx?{to:nx.to,spread:nx.spread??''}:{})}}
+// the delivery window that goes with a board month: from the crop's previous contract month through the month before
+// this one (corn Dec 26 -> Sep 1–Nov 30, 2026; Mar 27 -> Dec 1, 2026–Feb 28, 2027; soybeans Nov -> Sep–Oct, Jan -> Nov–Dec)
+function boardWindow(crop,month){
+  const codes=CROP_MONTHS[key(crop)],m=/^([a-z]{3})[a-z]*\.?\s+'?(\d{2})$/i.exec(String(month||'').trim());if(!codes||!m)return null;
+  const mi=MNAME.findIndex(x=>x.toLowerCase()===m[1].toLowerCase());if(mi<0)return null;
+  const Y=2000+ +m[2],idx=[...codes].map(c=>MCODE.indexOf(c)),prev=idx.filter(i=>i<mi).pop(),pi=prev??idx[idx.length-1]-12;
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return{s:iso(new Date(Y,pi,1)),e:iso(new Date(Y,mi,0)),label:`${MNAME[mi]} ${m[2]}`}}
+// when a roll moves the futures month, a delivery window that still matches the old month moves with it
+function rollDelivery(s,from,to){const a=boardWindow(s.crop,from),b=boardWindow(s.crop,to);
+  if(a&&b&&s.deliveryStart===a.s&&s.deliveryEnd===a.e){s.deliveryStart=b.s;s.deliveryEnd=b.e}}
 function rollNote(s){const nx=nextRoll(s);return nx&&nx.spread!=null?`<p class="muted" style="font-size:.82rem;margin:6px 0 0">Spread filled in from today's futures (${nx.to} minus ${nx.from}). Change it to the spread you actually got, and add any roll fee.</p>`:''}
 function flatPrice(s){const p=num(s.price),b=num(s.basis);
   if(s.type==='Cash sale'||s.type==='Forward contract')return p;
@@ -1056,7 +1067,7 @@ const FORMS={
     {k:'contractNo',label:v=>HEDGE_TYPES.includes(v.type)?'Account / ticket #':'Contract #',type:'text'},
     {k:'source',label:'Delivering from',type:'select',options:['Bin','Harvest'],hint:'Bin = stored grain. Harvest = hauled to town straight from the field.',show:hasSource},
     {k:'location',label:'Delivery location',type:'text',show:v=>DELIVERABLE.includes(v.type)},
-    {k:'deliveryStart',label:'Delivery opens',type:'date',show:v=>DELIVERABLE.includes(v.type)},
+    {k:'deliveryStart',label:'Delivery opens',type:'date',show:v=>DELIVERABLE.includes(v.type),hint:v=>{const w=boardWindow(v.crop,v.futuresMonth);return w&&v.deliveryStart===w.s&&v.deliveryEnd===w.e?`Filled in from the ${w.label} board month. Change the dates if the contract says otherwise.`:''}},
     {k:'deliveryEnd',label:'Delivery closes',type:'date',show:v=>DELIVERABLE.includes(v.type)},
     {k:'trackLoads',label:'Track individual loads against this contract',type:'check',hint:'Log scale tickets to see bushels delivered, balance left and settlement. Leave off to just mark the contract delivered.',show:v=>DELIVERABLE.includes(v.type)},
     {k:'status',label:'Status',type:'select',options:['Open','Delivered'],show:v=>DELIVERABLE.includes(v.type)&&!v.trackLoads},
@@ -1122,6 +1133,7 @@ function openForm(kind,id,opts={}){
   dlgCtx={kind,id,base:base?clone(base):null,vals:opts.vals||(base?clone(base):spec.blank()),confirmDel:false,title:opts.title,back:opts.back||null,note:opts.note||'',flags:opts.flags||[],
     onSave:opts.onSave||(kind==='sale'?saleSave(id):listSave(kind,id)),
     onDelete:opts.onDelete||(id&&LISTS[kind]&&kind!=='ins'&&kind!=='mkt'?()=>{const l=LISTS[kind];f[l]=f[l].filter(r=>r.id!==id);persist(S.current)}:null)};
+  {const v=dlgCtx.vals,w=kind==='sale'&&!id&&DELIVERABLE.includes(v.type)&&!v.deliveryStart&&!v.deliveryEnd?boardWindow(v.crop,v.futuresMonth):null;if(w){v.deliveryStart=w.s;v.deliveryEnd=w.e}}
   drawForm();if(!$('#dlg').open)$('#dlg').showModal()}
 function drawForm(){
   const {kind,id,vals}=dlgCtx;const spec=FORMS[kind];
@@ -1141,7 +1153,11 @@ function drawForm(){
   <div class="dlgfoot">${dlgCtx.onDelete?`<button type="button" class="danger" data-act="del">${dlgCtx.confirmDel?'Confirm delete':'Delete'}</button>`:''}<div class="sp"></div>
   <button type="button" data-act="cancel">Cancel</button><button class="primary" type="submit">Save</button></div>`}
 $('#dlgform').addEventListener('input',e=>{
-  const t=e.target;if(!t.name||!dlgCtx)return;dlgCtx.vals[t.name]=t.type==='checkbox'?t.checked:t.value;
+  const t=e.target;if(!t.name||!dlgCtx)return;const v=dlgCtx.vals,was=dlgCtx.kind==='sale'?boardWindow(v.crop,v.futuresMonth):null;v[t.name]=t.type==='checkbox'?t.checked:t.value;
+  // contracts: picking a board month fills the delivery window, unless dates were already typed that don't match the old month
+  if(dlgCtx.kind==='sale'&&['futuresMonth','crop'].includes(t.name)&&DELIVERABLE.includes(v.type)){const w=boardWindow(v.crop,v.futuresMonth);
+    const auto=(!v.deliveryStart&&!v.deliveryEnd)||(was&&v.deliveryStart===was.s&&v.deliveryEnd===was.e);
+    if(w&&auto&&(v.deliveryStart!==w.s||v.deliveryEnd!==w.e)){v.deliveryStart=w.s;v.deliveryEnd=w.e;const p=t.selectionStart;drawForm();const el=$('#f_'+t.name);if(el){el.focus();try{el.setSelectionRange(p,p)}catch(_){}}return}}
   if(t.tagName==='SELECT'||t.type==='checkbox'||t.name==='expiration'||t.name==='ppExpiration'||t.name==='mmExpiration'){drawForm();const el=$('#f_'+t.name);el&&el.focus()}});
 $('#dlgform').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;const act=a.dataset.act;
@@ -1171,7 +1187,7 @@ $('#dlgform').addEventListener('click',e=>{
   if(act==='load-del'){const id=a.dataset.id;if(detail.confirmLoad!==id){detail.confirmLoad=id;drawSale();return}
     s.loads=s.loads.filter(l=>l.id!==id);s.status=remaining(s)<=0?'Delivered':'Open';detail.confirmLoad=null;persist(S.current);drawSale()}
   if(act==='roll-add')openForm('roll',null,{title:`Record a roll · ${s.crop} ${typeName(s)}`,vals:rollVals(s),note:rollNote(s),back,
-    onSave:live((s,rec)=>{s.rolls=[...(s.rolls||[]),rec];if(rec.to)s.futuresMonth=rec.to})});
+    onSave:live((s,rec)=>{s.rolls=[...(s.rolls||[]),rec];if(rec.to){rollDelivery(s,s.futuresMonth,rec.to);s.futuresMonth=rec.to}})});
   if(act==='roll-del'){const id=a.dataset.id;if(detail.confirmRoll!==id){detail.confirmRoll=id;drawSale();return}
     const r=(s.rolls||[]).find(x=>x.id===id);s.rolls=(s.rolls||[]).filter(x=>x.id!==id);
     if(r&&r.from&&r.to&&s.futuresMonth===r.to)s.futuresMonth=r.from;detail.confirmRoll=null;persist(S.current);drawSale()}
@@ -1761,7 +1777,7 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   const f=S.farms[S.current],s=f&&f.sales.find(x=>x.id===t.dataset.rollnext);if(!s||!canRoll(s))return;
   openForm('roll',null,{title:`Roll to ${nextRoll(s).to} · ${s.crop} ${typeName(s)}`,vals:rollVals(s),note:rollNote(s),
     onSave:rec=>{const cur=S.farms[S.current]&&S.farms[S.current].sales.find(x=>x.id===s.id);if(!cur){toast('That contract was removed.',true);return}
-      cur.rolls=[...(cur.rolls||[]),rec];if(rec.to)cur.futuresMonth=rec.to;persist(S.current)}})},true);
+      cur.rolls=[...(cur.rolls||[]),rec];if(rec.to){rollDelivery(cur,cur.futuresMonth,rec.to);cur.futuresMonth=rec.to}persist(S.current)}})},true);
 document.addEventListener('keydown',e=>{if(e.target.matches&&e.target.matches('[data-deliver],[data-defer]')&&e.key==='Enter')e.stopPropagation()},true);
 // the Deferred checkbox: marks the contract's payment as deferred; the payment date is set in the contract itself
 document.addEventListener('change',e=>{const id=e.target.dataset&&e.target.dataset.defer;if(!id)return;
